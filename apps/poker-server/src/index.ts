@@ -126,7 +126,7 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
 
   return new Response(null, {
     status: 101,
-    webSocket: client,
+    webSocket: client || null,
   });
 }
 

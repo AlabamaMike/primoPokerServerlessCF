@@ -84,11 +84,16 @@ export class TableManager implements ITableManager {
       await this.startGame(table);
     }
 
-    return {
+    const result: JoinResult = {
       success: true,
       position,
-      tableState: table.gameState || undefined,
     };
+
+    if (table.gameState) {
+      result.tableState = table.gameState;
+    }
+
+    return result;
   }
 
   async leaveTable(tableId: string, playerId: string): Promise<void> {

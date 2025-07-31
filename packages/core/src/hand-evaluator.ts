@@ -53,39 +53,51 @@ export class Hand {
   }
 
   private checkRoyalFlush(cards: Card[]): HandEvaluation | null {
-    const straightFlush = this.checkStraightFlush(cards);
-    if (straightFlush && straightFlush.highCard === Rank.ACE) {
-      return {
-        ranking: HandRanking.ROYAL_FLUSH,
-        cards: straightFlush.cards,
-        highCard: Rank.ACE,
-        kickers: [],
-        description: 'Royal Flush',
-      };
+    // Check for A-K-Q-J-10 of the same suit directly
+    const suitGroups = this.groupBySuit(cards);
+    const royalRanks = [Rank.ACE, Rank.KING, Rank.QUEEN, Rank.JACK, Rank.TEN];
+    
+    for (const suit of Object.keys(suitGroups)) {
+      const suitCards = suitGroups[suit as Suit];
+      if (suitCards && suitCards.length >= 5) {
+        // Check if all royal ranks are present in this suit
+        const hasAllRoyalRanks = royalRanks.every(rank => 
+          suitCards.some(card => card.rank === rank)
+        );
+        
+        if (hasAllRoyalRanks) {
+          const royalCards = royalRanks.map(rank => 
+            suitCards.find(card => card.rank === rank)!
+          );
+          
+          return {
+            ranking: HandRanking.ROYAL_FLUSH,
+            cards: royalCards,
+            highCard: Rank.ACE,
+            kickers: [],
+            description: 'Royal Flush',
+          };
+        }
+      }
     }
     return null;
   }
 
   private checkStraightFlush(cards: Card[]): HandEvaluation | null {
-    const flush = this.checkFlush(cards);
-    const straight = this.checkStraight(cards);
-    
-    if (flush && straight) {
-      // Find 5 consecutive cards of the same suit
-      const suitGroups = this.groupBySuit(cards);
-      for (const suit of Object.keys(suitGroups)) {
-        const suitCards = suitGroups[suit as Suit];
-        if (suitCards && suitCards.length >= 5) {
-          const straightInSuit = this.findStraightInCards(suitCards);
-          if (straightInSuit) {
-            return {
-              ranking: HandRanking.STRAIGHT_FLUSH,
-              cards: straightInSuit,
-              highCard: straightInSuit[0].rank,
-              kickers: [],
-              description: `Straight Flush, ${straightInSuit[0].rank} high`,
-            };
-          }
+    // Find 5 consecutive cards of the same suit directly
+    const suitGroups = this.groupBySuit(cards);
+    for (const suit of Object.keys(suitGroups)) {
+      const suitCards = suitGroups[suit as Suit];
+      if (suitCards && suitCards.length >= 5) {
+        const straightInSuit = this.findStraightInCards(suitCards);
+        if (straightInSuit && straightInSuit[0]) {
+          return {
+            ranking: HandRanking.STRAIGHT_FLUSH,
+            cards: straightInSuit,
+            highCard: straightInSuit[0].rank,
+            kickers: [],
+            description: `Straight Flush, ${straightInSuit[0].rank} high`,
+          };
         }
       }
     }
@@ -145,13 +157,15 @@ export class Hand {
       const suitCards = suitGroups[suit as Suit];
       if (suitCards && suitCards.length >= 5) {
         const flushCards = CardUtils.sortCards(suitCards).slice(0, 5);
-        return {
-          ranking: HandRanking.FLUSH,
-          cards: flushCards,
-          highCard: flushCards[0].rank,
-          kickers: flushCards.slice(1).map(card => card.rank),
-          description: `Flush, ${flushCards[0].rank} high`,
-        };
+        if (flushCards[0]) {
+          return {
+            ranking: HandRanking.FLUSH,
+            cards: flushCards,
+            highCard: flushCards[0].rank,
+            kickers: flushCards.slice(1).map(card => card.rank),
+            description: `Flush, ${flushCards[0].rank} high`,
+          };
+        }
       }
     }
     return null;
@@ -159,7 +173,7 @@ export class Hand {
 
   private checkStraight(cards: Card[]): HandEvaluation | null {
     const straightCards = this.findStraightInCards(cards);
-    if (straightCards) {
+    if (straightCards && straightCards[0]) {
       return {
         ranking: HandRanking.STRAIGHT,
         cards: straightCards,
@@ -202,7 +216,7 @@ export class Hand {
       .map(rank => rank as Rank)
       .sort((a, b) => CardUtils.getRankValue(b) - CardUtils.getRankValue(a));
 
-    if (pairs.length >= 2) {
+    if (pairs.length >= 2 && pairs[0] && pairs[1]) {
       const highPair = rankGroups[pairs[0]]!;
       const lowPair = rankGroups[pairs[1]]!;
       const kicker = cards.find(card => 
@@ -246,6 +260,9 @@ export class Hand {
 
   private checkHighCard(cards: Card[]): HandEvaluation {
     const sortedCards = CardUtils.sortCards(cards).slice(0, 5);
+    if (!sortedCards[0]) {
+      throw new Error('Invalid cards provided for high card evaluation');
+    }
     return {
       ranking: HandRanking.HIGH_CARD,
       cards: sortedCards,
@@ -288,7 +305,7 @@ export class Hand {
       const consecutiveRanks = rankValues.slice(i, i + 5);
       const isConsecutive = consecutiveRanks.every(
         (rank, index, arr) => 
-          index === 0 || arr[index - 1].value === rank.value + 1
+          index === 0 || (arr[index - 1] && arr[index - 1]!.value === rank.value + 1)
       );
       
       if (isConsecutive) {

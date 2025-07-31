@@ -4,7 +4,8 @@
   "description": "Main Cloudflare Workers application for Primo Poker",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc && wrangler deploy --dry-run",
+    "build": "tsc --build",
+    "build:deploy": "tsc --build && wrangler deploy --dry-run",
     "clean": "rimraf dist",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

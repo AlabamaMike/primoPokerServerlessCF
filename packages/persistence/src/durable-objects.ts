@@ -1,5 +1,5 @@
-import { Table } from '@primo-poker/core';
-import { GameState, RandomUtils } from '@primo-poker/shared';
+import type { Table } from '@primo-poker/shared';
+import { GameState, RandomUtils, BetResult } from '@primo-poker/shared';
 
 // Durable Object for managing table state
 export class TableDurableObject implements DurableObject {
@@ -421,7 +421,7 @@ export class TableDurableObject implements DurableObject {
     amount?: number
   ): Promise<void> {
     const response = await this.processPlayerAction(playerId, action, amount);
-    const result = await response.json();
+    const result = await response.json() as BetResult;
     
     ws.send(JSON.stringify({
       type: 'action_result',
@@ -441,7 +441,7 @@ export class TableDurableObject implements DurableObject {
     message: string
   ): Promise<void> {
     const response = await this.processChatMessage(playerId, message);
-    const result = await response.json();
+    const result = await response.json() as { success: boolean; error?: string };
     
     if (result.success) {
       // Broadcast chat message to all connected players

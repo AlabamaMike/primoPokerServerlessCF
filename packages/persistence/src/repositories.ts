@@ -1,5 +1,5 @@
 import { Player, GameState, RandomUtils } from '@primo-poker/shared';
-import { Table } from '@primo-poker/core';
+import type { Table } from '@primo-poker/shared';
 
 // Repository interfaces
 export interface IPlayerRepository {

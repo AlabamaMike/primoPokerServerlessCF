@@ -24,7 +24,7 @@ interface WorkerEnv {
 }
 
 export class PokerAPIRoutes {
-  private router: ReturnType<typeof Router>;
+  private router: any; // Using any to avoid itty-router type issues
   private tableManager: TableManager;
   private authManager: AuthenticationManager;
 
@@ -230,7 +230,7 @@ export class PokerAPIRoutes {
     }
 
     try {
-      const body = await request.json();
+      const body = await request.json() as Record<string, any>;
       
       // Validate table configuration
       const config = {

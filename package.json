@@ -12,6 +12,7 @@
     "test": "npm run test --workspaces",
     "test:ci": "npm run test:ci --workspaces",
     "lint": "npm run lint --workspaces",
+    "lint-staged": "npm run lint --workspaces",
     "type-check": "npm run type-check --workspaces",
     "dev": "npm run dev -w @primo-poker/poker-server",
     "deploy": "npm run deploy -w @primo-poker/poker-server",

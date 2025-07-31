@@ -15,7 +15,6 @@
     "clean": "rimraf dist",
     "test": "jest",
     "test:ci": "jest --ci --coverage",
-    "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

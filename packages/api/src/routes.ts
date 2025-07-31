@@ -1,7 +1,6 @@
 import { IRequest, Router } from 'itty-router';
 import { 
   ApiResponse, 
-  TableConfig, 
   TableConfigSchema,
   ValidationUtils,
   RandomUtils 

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { Card, Suit, Rank } from '@primo-poker/shared'
 import { pokerGameClient, PokerMessage } from '@/lib/poker-websocket'
+import { evaluateHand, compareHands, parseCard, type HandResult } from '@/lib/hand-evaluator'
 
 export interface Player {
   id: string
@@ -22,6 +23,24 @@ export interface Player {
   isActive: boolean
   lastAction?: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all-in'
   timeRemaining?: number
+  handResult?: HandResult
+  isWinner?: boolean
+  winnings?: number
+}
+
+export interface HandHistoryEntry {
+  id: string
+  handNumber: number
+  timestamp: Date
+  pot: number
+  winner: {
+    name: string
+    handResult: HandResult
+    winnings: number
+  }
+  communityCards: Card[]
+  playerCount: number
+  keyActions: string[]
 }
 
 export interface GameState {
@@ -47,6 +66,12 @@ export interface GameState {
   maxPlayers: number
   currentUserId?: string
   
+  // Showdown & History
+  showdownVisible: boolean
+  handHistoryVisible: boolean
+  handHistory: HandHistoryEntry[]
+  currentHandNumber: number
+  
   // WebSocket methods
   connectToTable: (tableId: string) => Promise<void>
   disconnectFromTable: () => void
@@ -61,6 +86,8 @@ export interface GameState {
   setCurrentBet: (amount: number) => void
   setActivePlayer: (playerId?: string) => void
   setConnectionStatus: (status: GameState['connectionStatus']) => void
+  setShowdownVisible: (visible: boolean) => void
+  setHandHistoryVisible: (visible: boolean) => void
   
   // Game actions
   playerAction: (playerId: string, action: Player['lastAction'], amount?: number) => void
@@ -70,6 +97,8 @@ export interface GameState {
   nextPhase: () => void
   startNewGame: () => void
   resetHand: () => void
+  evaluateHandsAndShowdown: () => void
+  addToHandHistory: (entry: HandHistoryEntry) => void
 }
 
 // Mock data for development
@@ -189,6 +218,12 @@ export const useGameStore = create<GameState>()(
     smallBlind: 25,
     bigBlind: 50,
     maxPlayers: 9,
+    
+    // Showdown & History
+    showdownVisible: false,
+    handHistoryVisible: false,
+    handHistory: [],
+    currentHandNumber: 1,
     currentUserId: '1', // Default for demo
 
     // WebSocket methods
@@ -268,6 +303,97 @@ export const useGameStore = create<GameState>()(
     setActivePlayer: (playerId) => set({ activePlayerId: playerId }),
 
     setConnectionStatus: (status) => set({ connectionStatus: status }),
+
+    setShowdownVisible: (visible) => set({ showdownVisible: visible }),
+
+    setHandHistoryVisible: (visible) => set({ handHistoryVisible: visible }),
+
+    addToHandHistory: (entry) => set((state) => ({ 
+      handHistory: [entry, ...state.handHistory].slice(0, 50) // Keep last 50 hands
+    })),
+
+    evaluateHandsAndShowdown: () => {
+      const state = get()
+      if (state.communityCards.length !== 5) return
+      
+      const activePlayers = state.players.filter(p => !p.isFolded && p.holeCards?.length === 2)
+      if (activePlayers.length === 0) return
+
+      // Convert cards to hand evaluator format
+      const convertCard = (card: Card): import('@/lib/hand-evaluator').Card => ({
+        rank: card.rank as import('@/lib/hand-evaluator').Rank,
+        suit: card.suit.toLowerCase() as import('@/lib/hand-evaluator').Suit
+      })
+
+      // Evaluate each player's hand
+      const evaluatedPlayers = activePlayers.map(player => {
+        const holeCards = player.holeCards!.map(convertCard)
+        const communityCards = state.communityCards.map(convertCard)
+        const handResult = evaluateHand(holeCards, communityCards)
+        
+        return {
+          ...player,
+          handResult
+        }
+      })
+
+      // Find winners
+      let bestStrength = -1
+      evaluatedPlayers.forEach(player => {
+        if (player.handResult.strength > bestStrength) {
+          bestStrength = player.handResult.strength
+        }
+      })
+
+      const winners = evaluatedPlayers.filter(p => p.handResult.strength === bestStrength)
+      const winnings = Math.floor(state.pot / winners.length)
+
+      // Update players with results
+      const updatedPlayers = state.players.map(player => {
+        const evaluated = evaluatedPlayers.find(p => p.id === player.id)
+        if (!evaluated) return player
+
+        const isWinner = winners.some(w => w.id === player.id)
+        return {
+          ...player,
+          handResult: evaluated.handResult,
+          isWinner,
+          winnings: isWinner ? winnings : 0,
+          chips: isWinner ? player.chips + winnings : player.chips
+        }
+      })
+
+      // Add to hand history
+      if (winners.length > 0) {
+        const historyEntry: HandHistoryEntry = {
+          id: `hand-${state.currentHandNumber}`,
+          handNumber: state.currentHandNumber,
+          timestamp: new Date(),
+          pot: state.pot,
+          winner: {
+            name: winners[0].name,
+            handResult: winners[0].handResult,
+            winnings
+          },
+          communityCards: state.communityCards,
+          playerCount: activePlayers.length,
+          keyActions: [`${winners[0].name} wins with ${winners[0].handResult.handName}`]
+        }
+        
+        set((state) => ({ 
+          handHistory: [historyEntry, ...state.handHistory].slice(0, 50)
+        }))
+      }
+
+      // Update state
+      set({
+        players: updatedPlayers,
+        gamePhase: 'showdown',
+        showdownVisible: true,
+        pot: 0,
+        currentHandNumber: state.currentHandNumber + 1
+      })
+    },
 
     // Multiplayer action - sends to WebSocket
     multiplayerAction: async (action, amount) => {

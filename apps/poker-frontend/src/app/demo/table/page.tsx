@@ -4,9 +4,11 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import { PokerTable } from "@/components/poker/PokerTable"
 import { MultiplayerLobby } from "@/components/poker/MultiplayerLobby"
+import ShowdownDisplay from "@/components/poker/ShowdownDisplay"
+import HandHistory from "@/components/poker/HandHistory"
 import { Button } from "@/components/ui/button"
 import { useGameStore } from "@/stores/game-store"
-import { Play, RotateCcw, Users, TrendingUp, Wifi, WifiOff, Monitor } from "lucide-react"
+import { Play, RotateCcw, Users, TrendingUp, Wifi, WifiOff, Monitor, History, Trophy } from "lucide-react"
 
 export default function TableDemoPage() {
   const {
@@ -17,14 +19,27 @@ export default function TableDemoPage() {
     connectionStatus,
     players,
     pot,
+    communityCards,
+    showdownVisible,
+    handHistoryVisible,
+    handHistory,
     startNewGame,
     dealCommunityCards,
     nextPhase,
-    disconnectFromTable
+    disconnectFromTable,
+    evaluateHandsAndShowdown,
+    setShowdownVisible,
+    setHandHistoryVisible
   } = useGameStore()
 
   const [demoMode, setDemoMode] = React.useState<'single' | 'multiplayer'>('single')
   const [currentTableId, setCurrentTableId] = React.useState<string | null>(null)
+
+  // Convert shared Card type to hand-evaluator Card type
+  const convertCard = (card: { suit: any; rank: any }): import('@/lib/hand-evaluator').Card => ({
+    rank: card.rank as import('@/lib/hand-evaluator').Rank,
+    suit: card.suit.toLowerCase() as import('@/lib/hand-evaluator').Suit
+  })
 
   const handleStartDemo = () => {
     startNewGame()
@@ -152,6 +167,30 @@ export default function TableDemoPage() {
                       Next Phase
                     </Button>
                   )}
+                  
+                  {/* Showdown Button */}
+                  {isGameActive && communityCards.length === 5 && gamePhase !== 'showdown' && (
+                    <Button
+                      onClick={() => evaluateHandsAndShowdown()}
+                      variant="outline"
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700"
+                    >
+                      <Trophy className="w-4 h-4 mr-2" />
+                      Showdown
+                    </Button>
+                  )}
+                  
+                  {/* Hand History Button */}
+                  <Button
+                    onClick={() => setHandHistoryVisible(true)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-white"
+                  >
+                    <History className="w-4 h-4 mr-2" />
+                    History ({handHistory.length})
+                  </Button>
                 </div>
               )}
 
@@ -377,6 +416,39 @@ export default function TableDemoPage() {
           </div>
         </div>
       </div>
+
+      {/* Showdown Display */}
+      <ShowdownDisplay
+        players={players.filter(p => !p.isFolded && p.holeCards?.length === 2).map(p => ({
+          id: p.id,
+          name: p.name,
+          holeCards: (p.holeCards || []).map(convertCard),
+          handResult: p.handResult!,
+          isWinner: p.isWinner || false,
+          winnings: p.winnings || 0,
+          position: p.position
+        }))}
+        communityCards={communityCards.map(convertCard)}
+        totalPot={pot}
+        isVisible={showdownVisible}
+        onComplete={() => {
+          setShowdownVisible(false);
+          // Reset for next hand
+          setTimeout(() => {
+            startNewGame();
+          }, 1000);
+        }}
+      />
+
+      {/* Hand History */}
+      <HandHistory
+        hands={handHistory.map(h => ({
+          ...h,
+          communityCards: h.communityCards.map(convertCard)
+        }))}
+        isVisible={handHistoryVisible}
+        onClose={() => setHandHistoryVisible(false)}
+      />
     </div>
   )
 }

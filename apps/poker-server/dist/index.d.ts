@@ -1,0 +1,21 @@
+import { TableDurableObject } from '@primo-poker/persistence';
+interface Env {
+    DB: D1Database;
+    SESSION_STORE: KVNamespace;
+    HAND_HISTORY_BUCKET: R2Bucket;
+    TABLE_OBJECTS: DurableObjectNamespace;
+    TOURNAMENT_QUEUE: Queue;
+    ANALYTICS: AnalyticsEngineDataset;
+    JWT_SECRET: string;
+    DATABASE_ENCRYPTION_KEY: string;
+    ANTHROPIC_API_KEY?: string;
+    ENVIRONMENT: string;
+}
+declare const _default: {
+    fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+    queue(batch: MessageBatch<any>, env: Env): Promise<void>;
+    scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void>;
+};
+export default _default;
+export { TableDurableObject };
+//# sourceMappingURL=index.d.ts.map

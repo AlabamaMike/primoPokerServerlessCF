@@ -1,0 +1,33 @@
+{
+  "name": "@primo-poker/poker-server",
+  "version": "1.0.0",
+  "description": "Main Cloudflare Workers application for Primo Poker",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc && wrangler deploy --dry-run",
+    "clean": "rimraf dist",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "jest",
+    "test:ci": "jest --ci --coverage",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@primo-poker/shared": "^1.0.0",
+    "@primo-poker/core": "^1.0.0",
+    "@primo-poker/security": "^1.0.0",
+    "@primo-poker/persistence": "^1.0.0",
+    "@primo-poker/api": "^1.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "@types/jest": "^29.5.11",
+    "jest": "^29.7.0",
+    "miniflare": "^3.20240117.0",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.24.0"
+  }
+}

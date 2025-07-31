@@ -1,0 +1,67 @@
+name = "primo-poker-server"
+main = "dist/index.js"
+compatibility_date = "2024-01-17"
+compatibility_flags = ["nodejs_compat"]
+
+# Environment variables
+[vars]
+ENVIRONMENT = "development"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "primo-poker-db"
+database_id = "your-database-id-here"
+migrations_dir = "./migrations"
+
+# KV Namespace for sessions
+[[kv_namespaces]]
+binding = "SESSION_STORE"
+id = "your-kv-namespace-id-here"
+preview_id = "your-preview-kv-namespace-id-here"
+
+# R2 Bucket for hand history
+[[r2_buckets]]
+binding = "HAND_HISTORY_BUCKET"
+bucket_name = "primo-poker-hand-history"
+preview_bucket_name = "primo-poker-hand-history-preview"
+
+# Durable Objects
+[[durable_objects.bindings]]
+name = "TABLE_OBJECTS"
+class_name = "TableDurableObject"
+script_name = "primo-poker-server"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["TableDurableObject"]
+
+# Queue for tournament processing
+[[queues.producers]]
+queue = "tournament-queue"
+binding = "TOURNAMENT_QUEUE"
+
+[[queues.consumers]]
+queue = "tournament-queue"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "tournament-dlq"
+
+# Analytics Engine for metrics
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "primo-poker-metrics"
+
+# Secrets (set via wrangler secret put)
+# JWT_SECRET
+# DATABASE_ENCRYPTION_KEY
+# ANTHROPIC_API_KEY (for AI features)
+
+[build]
+command = "npm run build"
+cwd = "./"
+watch_dir = "src"
+
+[build.upload]
+format = "service-worker"

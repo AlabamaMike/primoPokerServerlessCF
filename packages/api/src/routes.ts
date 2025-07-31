@@ -224,13 +224,17 @@ export class PokerAPIRoutes {
       const result = await this.authManager.authenticate({
         username: body.username,
         password: body.password,
-      });
+      }, request.env?.DB);
 
       if (!result.success) {
         return this.errorResponse(result.error || 'Authentication failed', 401);
       }
 
-      return this.successResponse(result.tokens);
+      return this.successResponse({
+        user: result.user,
+        tokens: result.tokens,
+        message: 'Login successful'
+      });
     } catch (error) {
       return this.errorResponse('Invalid request body', 400);
     }

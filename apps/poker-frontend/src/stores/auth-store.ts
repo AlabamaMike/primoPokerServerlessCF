@@ -40,7 +40,7 @@ export const useAuthStore = create<AuthState>()(
           const response = await apiClient.login(username, password)
           
           if (response.success && response.data) {
-            const { tokens } = response.data
+            const { user, tokens } = response.data
             const accessToken = tokens.accessToken
             
             // Set token in API client
@@ -50,18 +50,13 @@ export const useAuthStore = create<AuthState>()(
             gameWebSocket.setToken(accessToken)
             tableWebSocket.setToken(accessToken)
             
-            // Get user profile
-            const profileResponse = await apiClient.getProfile()
-            
-            if (profileResponse.success && profileResponse.data) {
-              set({
-                user: profileResponse.data,
-                token: accessToken,
-                isAuthenticated: true,
-                isLoading: false,
-                error: null
-              })
-            }
+            set({
+              user: user,
+              token: accessToken,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            })
           }
         } catch (error) {
           set({

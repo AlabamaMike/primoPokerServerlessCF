@@ -91,8 +91,8 @@ export class D1PlayerRepository implements IPlayerRepository {
     const now = new Date().toISOString();
     
     const stmt = this.db.prepare(`
-      INSERT INTO players (id, username, email, chip_count, status, time_bank, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO players (id, username, email, chip_count, status, is_dealer, time_bank, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     await stmt.bind(
@@ -101,6 +101,7 @@ export class D1PlayerRepository implements IPlayerRepository {
       player.email,
       player.chipCount,
       player.status,
+      player.isDealer,
       player.timeBank,
       now,
       now

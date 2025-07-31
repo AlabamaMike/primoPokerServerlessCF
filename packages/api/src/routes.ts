@@ -3,10 +3,11 @@ import {
   ApiResponse, 
   TableConfigSchema,
   ValidationUtils,
-  RandomUtils 
+  RandomUtils,
+  PlayerStatus
 } from '@primo-poker/shared';
 import { TableManager } from '@primo-poker/core';
-import { AuthenticationManager, TokenPayload } from '@primo-poker/security';
+import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-poker/security';
 import { D1PlayerRepository, D1GameRepository } from '@primo-poker/persistence';
 
 // Extended request interface with authentication
@@ -37,6 +38,7 @@ export class PokerAPIRoutes {
 
   private setupRoutes(): void {
     // Authentication routes
+    this.router.post('/api/auth/register', this.handleRegister.bind(this));
     this.router.post('/api/auth/login', this.handleLogin.bind(this));
     this.router.post('/api/auth/refresh', this.handleRefreshToken.bind(this));
     this.router.post('/api/auth/logout', this.authenticateRequest.bind(this), this.handleLogout.bind(this));
@@ -64,6 +66,9 @@ export class PokerAPIRoutes {
 
     // Health check
     this.router.get('/api/health', this.handleHealthCheck.bind(this));
+
+    // CORS preflight handler - more specific patterns first
+    this.router.options('/api/*', this.handleOptionsRequest.bind(this));
 
     // Catch all
     this.router.all('*', this.handleNotFound.bind(this));
@@ -98,6 +103,111 @@ export class PokerAPIRoutes {
   }
 
   // Authentication handlers
+  private async handleRegister(request: AuthenticatedRequest): Promise<Response> {
+    console.log('Register request received:', request.method, request.url);
+    try {
+      const body = await request.json() as { username: string; email: string; password: string };
+      console.log('Register request body:', { username: body.username, email: body.email });
+      
+      if (!body.username || !body.email || !body.password) {
+        return this.errorResponse('Username, email, and password are required', 400);
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(body.email)) {
+        return this.errorResponse('Invalid email format', 400);
+      }
+
+      // Validate password strength
+      if (body.password.length < 6) {
+        return this.errorResponse('Password must be at least 6 characters long', 400);
+      }
+
+      // Check if user already exists
+      if (request.env?.DB) {
+        const playerRepo = new D1PlayerRepository(request.env.DB);
+        
+        // Check username
+        const existingByUsername = await playerRepo.findByUsername(body.username);
+        if (existingByUsername) {
+          return this.errorResponse('Username already exists', 409);
+        }
+
+        // Check email
+        const existingByEmail = await playerRepo.findByEmail(body.email);
+        if (existingByEmail) {
+          return this.errorResponse('Email already exists', 409);
+        }
+
+        // Hash the password
+        const { hash: passwordHash, salt: passwordSalt } = await PasswordManager.hashPassword(body.password);
+
+        // Create new player with password hash
+        const playerData = {
+          username: body.username,
+          email: body.email,
+          chipCount: 1000, // Starting chips
+          status: PlayerStatus.ACTIVE,
+          isDealer: false,
+          timeBank: 30000, // 30 seconds
+        };
+
+        // Create player using a direct database insert to include password fields
+        const playerId = RandomUtils.generateUUID();
+        const now = new Date().toISOString();
+        
+        const stmt = request.env.DB.prepare(`
+          INSERT INTO players (id, username, email, password_hash, password_salt, chip_count, status, is_dealer, time_bank, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        
+        await stmt.bind(
+          playerId,
+          body.username,
+          body.email,
+          passwordHash,
+          passwordSalt,
+          1000,
+          PlayerStatus.ACTIVE,
+          false,
+          30000,
+          now,
+          now
+        ).run();
+
+        // Initialize auth manager and generate tokens for the new user
+        if (request.env?.JWT_SECRET) {
+          this.authManager = new AuthenticationManager(request.env.JWT_SECRET);
+        }
+
+        // Generate tokens for the new user
+        const tokens = await this.authManager.createTokensForUser({
+          userId: playerId,
+          username: body.username,
+          email: body.email,
+          roles: ['player'],
+        });
+
+        return this.successResponse({
+          user: {
+            id: playerId,
+            username: body.username,
+            email: body.email,
+            chipCount: 1000,
+          },
+          tokens: tokens,
+          message: 'Registration successful'
+        });
+      }
+
+      return this.errorResponse('Database not available', 500);
+    } catch (error) {
+      console.error('Registration error:', error);
+      return this.errorResponse(`Registration failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 400);
+    }
+  }
+
   private async handleLogin(request: AuthenticatedRequest): Promise<Response> {
     try {
       const body = await request.json() as { username: string; password: string };
@@ -411,12 +521,30 @@ export class PokerAPIRoutes {
     });
   }
 
+  // CORS preflight handler
+  private async handleOptionsRequest(request: AuthenticatedRequest): Promise<Response> {
+    console.log('OPTIONS request received for:', request.url);
+    return new Response(null, {
+      status: 204,
+      headers: this.getCorsHeaders(),
+    });
+  }
+
   // 404 handler
   private async handleNotFound(request: AuthenticatedRequest): Promise<Response> {
     return this.errorResponse('Endpoint not found', 404);
   }
 
   // Utility methods
+  private getCorsHeaders(): Record<string, string> {
+    return {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    };
+  }
+
   private successResponse<T>(data: T): Response {
     const response: ApiResponse<T> = {
       success: true,
@@ -425,7 +553,10 @@ export class PokerAPIRoutes {
     };
 
     return new Response(JSON.stringify(response), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...this.getCorsHeaders(),
+      },
     });
   }
 
@@ -441,7 +572,10 @@ export class PokerAPIRoutes {
 
     return new Response(JSON.stringify(response), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...this.getCorsHeaders(),
+      },
     });
   }
 }

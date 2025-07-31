@@ -35,6 +35,8 @@ export class ApiClient {
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`
     
+    console.log('API Request:', { url, method: options.method, baseUrl: this.baseUrl, endpoint })
+    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -65,14 +67,22 @@ export class ApiClient {
 
   // Authentication endpoints
   async login(username: string, password: string) {
-    return this.request<{ token: string, refreshToken: string }>('/api/auth/login', {
+    return this.request<{ 
+      user: any;
+      tokens: { accessToken: string; refreshToken: string };
+      message: string;
+    }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
   }
 
   async register(username: string, email: string, password: string) {
-    return this.request<{ token: string, refreshToken: string }>('/api/auth/register', {
+    return this.request<{ 
+      user: any;
+      tokens: { accessToken: string; refreshToken: string };
+      message: string;
+    }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, email, password }),
     })
@@ -96,7 +106,7 @@ export class ApiClient {
 
   // Player endpoints
   async getProfile() {
-    return this.request<any>('/api/players/profile')
+    return this.request<any>('/api/players/me')
   }
 
   // Tournament endpoints

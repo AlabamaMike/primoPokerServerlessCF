@@ -40,14 +40,15 @@ export const useAuthStore = create<AuthState>()(
           const response = await apiClient.login(username, password)
           
           if (response.success && response.data) {
-            const { token } = response.data
+            const { tokens } = response.data
+            const accessToken = tokens.accessToken
             
             // Set token in API client
-            apiClient.setToken(token)
+            apiClient.setToken(accessToken)
             
             // Set token for WebSocket connections
-            gameWebSocket.setToken(token)
-            tableWebSocket.setToken(token)
+            gameWebSocket.setToken(accessToken)
+            tableWebSocket.setToken(accessToken)
             
             // Get user profile
             const profileResponse = await apiClient.getProfile()
@@ -55,7 +56,7 @@ export const useAuthStore = create<AuthState>()(
             if (profileResponse.success && profileResponse.data) {
               set({
                 user: profileResponse.data,
-                token,
+                token: accessToken,
                 isAuthenticated: true,
                 isLoading: false,
                 error: null
@@ -78,14 +79,15 @@ export const useAuthStore = create<AuthState>()(
           const response = await apiClient.register(username, email, password)
           
           if (response.success && response.data) {
-            const { token } = response.data
+            const { tokens } = response.data
+            const accessToken = tokens.accessToken
             
             // Set token in API client
-            apiClient.setToken(token)
+            apiClient.setToken(accessToken)
             
             // Set token for WebSocket connections
-            gameWebSocket.setToken(token)
-            tableWebSocket.setToken(token)
+            gameWebSocket.setToken(accessToken)
+            tableWebSocket.setToken(accessToken)
             
             // Get user profile
             const profileResponse = await apiClient.getProfile()
@@ -93,7 +95,7 @@ export const useAuthStore = create<AuthState>()(
             if (profileResponse.success && profileResponse.data) {
               set({
                 user: profileResponse.data,
-                token,
+                token: accessToken,
                 isAuthenticated: true,
                 isLoading: false,
                 error: null

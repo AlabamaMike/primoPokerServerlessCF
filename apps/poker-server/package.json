@@ -15,11 +15,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@primo-poker/shared": "^1.0.0",
+    "@primo-poker/api": "^1.0.0",
     "@primo-poker/core": "^1.0.0",
-    "@primo-poker/security": "^1.0.0",
     "@primo-poker/persistence": "^1.0.0",
-    "@primo-poker/api": "^1.0.0"
+    "@primo-poker/security": "^1.0.0",
+    "@primo-poker/shared": "^1.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",
@@ -29,6 +29,6 @@
     "rimraf": "^5.0.5",
     "ts-jest": "^29.1.1",
     "typescript": "^5.3.3",
-    "wrangler": "^3.24.0"
+    "wrangler": "^4.27.0"
   }
 }

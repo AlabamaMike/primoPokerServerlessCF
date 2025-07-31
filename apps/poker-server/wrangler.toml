@@ -11,14 +11,14 @@ ENVIRONMENT = "development"
 [[d1_databases]]
 binding = "DB"
 database_name = "primo-poker-db"
-database_id = "your-database-id-here"
+database_id = "c112bb87-1024-4bf1-b698-193913831358"
 migrations_dir = "./migrations"
 
 # KV Namespace for sessions
 [[kv_namespaces]]
 binding = "SESSION_STORE"
-id = "your-kv-namespace-id-here"
-preview_id = "your-preview-kv-namespace-id-here"
+id = "6ef4c203e65f429082df51bbec8bb19e"
+preview_id = "d7b0477a22d94639806c8533d46682a9"
 
 # R2 Bucket for hand history
 [[r2_buckets]]
@@ -62,6 +62,3 @@ dataset = "primo-poker-metrics"
 command = "npm run build"
 cwd = "./"
 watch_dir = "src"
-
-[build.upload]
-format = "service-worker"

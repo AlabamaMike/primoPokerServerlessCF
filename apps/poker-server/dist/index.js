@@ -92,7 +92,7 @@ async function handleWebSocketUpgrade(request, env) {
     await wsManager.handleConnection(server, request);
     return new Response(null, {
         status: 101,
-        webSocket: client,
+        webSocket: client || null,
     });
 }
 // Tournament message processing

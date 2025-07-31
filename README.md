@@ -1,6 +1,15 @@
-# Primo Poker - Serverless Poker Room Server
+# 🃏 Primo Poker - Professional Serverless Poker Platform
 
-A comprehensive serverless poker room server built using Cloudflare's ecosystem (Workers, Durable Objects, D1, R2, and Queues) following Clean Architecture and Domain-Driven Design principles.
+> **Current Status: Phase 2B Complete** ✅  
+> Real-time multiplayer poker platform with professional UI and WebSocket integration
+
+A comprehensive serverless poker platform built on Cloudflare Workers with interactive frontend, real-time multiplayer capabilities, and modern web technologies.
+
+## 🚀 Live Demo
+**Frontend Demo**: [http://localhost:3001/demo/table](http://localhost:3001/demo/table)
+- **Single Player Mode**: Interactive poker simulation with AI players
+- **Multiplayer Mode**: Real-time WebSocket lobby and table joining
+- **Features**: Live game phases, betting actions, and synchronized state
 
 ## 🏗️ Architecture Overview
 

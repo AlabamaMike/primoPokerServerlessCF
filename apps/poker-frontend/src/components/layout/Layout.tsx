@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/stores/auth-store"
-import { LogOut, User, Settings } from "lucide-react"
+import { LogOut, User, Settings, Play, Home } from "lucide-react"
 
 interface LayoutProps {
   children: React.ReactNode
@@ -19,10 +20,28 @@ export const Layout: React.FC<LayoutProps> = ({ children, className }) => {
       {/* Header */}
       <header className="bg-black/30 backdrop-blur-sm border-b border-green-600/30">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center space-x-3">
-            <div className="text-2xl">🃏</div>
-            <h1 className="text-xl font-bold text-white">Primo Poker</h1>
+          {/* Logo & Navigation */}
+          <div className="flex items-center space-x-6">
+            <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+              <div className="text-2xl">🃏</div>
+              <h1 className="text-xl font-bold text-white">Primo Poker</h1>
+            </Link>
+            
+            {/* Navigation Links */}
+            <nav className="hidden md:flex items-center space-x-4">
+              <Link href="/">
+                <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
+                  <Home className="w-4 h-4 mr-2" />
+                  Home
+                </Button>
+              </Link>
+              <Link href="/demo/table">
+                <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
+                  <Play className="w-4 h-4 mr-2" />
+                  Live Demo
+                </Button>
+              </Link>
+            </nav>
           </div>
 
           {/* User info and navigation */}

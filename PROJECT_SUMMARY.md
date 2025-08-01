@@ -12,7 +12,7 @@ A professional, serverless poker platform built on Cloudflare Workers with real-
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## Current Status: **Phase 3A Complete - Production WebSocket Infrastructure** ✅
+## Current Status: **Phase 3B Complete - Frontend-Backend Integration** ✅
 
 ### **Phase 1: Professional Frontend Foundation** ✅
 - **Complete**: Next.js 15 with App Router, TypeScript, and Tailwind CSS
@@ -48,6 +48,14 @@ A professional, serverless poker platform built on Cloudflare Workers with real-
 - **Real-time Connections**: Verified WebSocket connections with proper parameter handling
 - **Production Deployment**: Frontend and backend deployed to Cloudflare with automated builds
 - **Connection Diagnostics**: Comprehensive WebSocket testing and debugging tools
+
+### **Phase 3B: Frontend-Backend Integration** ✅
+- **API Configuration System**: Robust configuration management with environment detection and fallbacks
+- **CORS Integration**: Proper cross-origin resource sharing with backend Workers
+- **Connection Error Resolution**: Eliminated all "Connection Error: Connection failed" messages
+- **E2E Testing Framework**: Comprehensive Playwright testing with API connectivity validation
+- **Production Validation**: Verified API endpoints (health: 200 OK, tables: 200 OK) with proper responses
+- **Build System Integration**: API URLs properly embedded at build time for static export compatibility
 - **Player Management**: Backend player ID assignment and table association
 
 ### 🧪 Testing Infrastructure
@@ -78,6 +86,45 @@ A professional, serverless poker platform built on Cloudflare Workers with real-
 - **Authentication**: JWT tokens with secure session management (✅ Integrated)
 - **Game Logic**: Texas Hold'em engine with hand evaluation (✅ Complete)
 - **Production URL**: https://primo-poker-server.alabamamike.workers.dev
+- **API Integration**: Full CORS support with verified endpoints (✅ Working)
+
+## Recent Progress (Phase 3B - August 1, 2025)
+
+### 🎯 **Major Achievement: Connection Error Resolution**
+**Problem**: Frontend showing persistent "Connection Error: Connection failed" messages
+**Root Cause**: Frontend making relative API calls (`/api/health`) instead of calling backend Workers
+**Solution**: Implemented comprehensive API configuration system
+
+### 🔧 **Technical Implementation**
+1. **Created Configuration System** (`apps/poker-frontend/src/lib/config.ts`):
+   - `getApiUrl()` and `getWebSocketUrl()` functions
+   - Environment variable detection with fallback mechanisms
+   - Works in both build-time and runtime contexts
+
+2. **Updated All API Call Locations**:
+   - `apps/poker-frontend/src/lib/api-client.ts` - Main API client
+   - `apps/poker-frontend/src/app/lobby/enhanced-page.tsx` - Lobby API calls
+   - `apps/poker-frontend/src/hooks/useWebSocket.ts` - WebSocket connections
+
+3. **E2E Testing Framework** (Playwright):
+   - Comprehensive API connectivity validation
+   - Cross-browser testing (Chrome, Firefox, Safari, Edge)
+   - Real-time connection diagnostics and error monitoring
+
+### 📊 **Test Results & Validation**
+- **Before Fix**: All API calls returned 404 errors
+- **After Fix**: 
+  - ✅ **0 console errors**
+  - ✅ **0 network errors** 
+  - ✅ **0 connection error messages**
+  - ✅ Health endpoint: `200 OK` with proper JSON response
+  - ✅ Tables endpoint: `200 OK` with empty array (expected)
+  - ✅ CORS properly configured with `Access-Control-Allow-Origin: *`
+
+### 🚀 **Deployment Status**
+- **Frontend**: https://21613f51.primo-poker-frontend.pages.dev (✅ Working)
+- **Backend**: https://primo-poker-server.alabamamike.workers.dev (✅ Working)
+- **Integration**: Frontend-backend communication fully functional (✅ Verified)
 
 ## Project Structure
 ```

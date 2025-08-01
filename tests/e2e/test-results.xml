@@ -1,0 +1,28 @@
+<testsuites id="" name="" tests="1" failures="0" skipped="0" errors="0" time="15.218824">
+<testsuite name="auth-flow.spec.ts" timestamp="2025-08-01T20:47:57.600Z" hostname="chromium" tests="1" failures="0" skipped="0" time="3.104" errors="0">
+<testcase name="Authentication Flow Tests › should check if API endpoints are reachable from frontend context" classname="auth-flow.spec.ts" time="3.104">
+<system-out>
+<![CDATA[=== TESTING API ACCESSIBILITY FROM FRONTEND ===
+=== API TEST RESULTS FROM BROWSER ===
+{
+  "health": {
+    "status": 200,
+    "ok": true,
+    "text": "{\"success\":true,\"data\":{\"status\":\"healthy\",\"timestamp\":\"2025-08-01T20:48:06.740Z\"},\"timestamp\":\"2025-08-01T20:48:06.740Z\"}"
+  },
+  "tables": {
+    "status": 200,
+    "ok": true,
+    "text": "{\"success\":true,\"data\":[],\"timestamp\":\"2025-08-01T20:48:06.838Z\"}"
+  },
+  "authMe": {
+    "status": 404,
+    "ok": false,
+    "text": "{\"success\":false,\"error\":{\"code\":\"404\",\"message\":\"Endpoint not found\"},\"timestamp\":\"2025-08-01T20:48:06.915Z\"}"
+  }
+}
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>

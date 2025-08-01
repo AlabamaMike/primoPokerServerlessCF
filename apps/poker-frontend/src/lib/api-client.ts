@@ -1,6 +1,11 @@
 import { ApiResponse } from '@primo-poker/shared'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
+import { getApiUrl } from './config'
+
+// Use fallback if environment variable is not available
+const API_BASE_URL = getApiUrl()
+
+console.log('API_BASE_URL configured as:', API_BASE_URL)
 
 export class ApiClient {
   private baseUrl: string

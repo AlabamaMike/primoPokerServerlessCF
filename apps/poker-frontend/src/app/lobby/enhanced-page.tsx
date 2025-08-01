@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { getApiUrl } from '@/lib/config'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Select, 
@@ -265,7 +266,9 @@ export default function LobbyPage() {
           return
         }
 
-        const response = await fetch('/api/lobby/tables')
+        const apiUrl = getApiUrl()
+        console.log('Enhanced lobby - API URL:', apiUrl)
+        const response = await fetch(`${apiUrl}/api/tables`)
         if (response.ok) {
           const tablesData = await response.json()
           setTables(tablesData)
@@ -337,7 +340,8 @@ export default function LobbyPage() {
   // Join table handler
   const handleJoinTable = async (tableId: string, password?: string) => {
     try {
-      const response = await fetch('/api/lobby/join', {
+      const apiUrl = getApiUrl()
+      const response = await fetch(`${apiUrl}/api/tables/${tableId}/join`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -368,7 +372,8 @@ export default function LobbyPage() {
   // Create table handler
   const handleCreateTable = async (config: LobbyTableConfig) => {
     try {
-      const response = await fetch('/api/lobby/create', {
+      const apiUrl = getApiUrl()
+      const response = await fetch(`${apiUrl}/api/tables`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

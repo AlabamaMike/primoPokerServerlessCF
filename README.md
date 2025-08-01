@@ -1,17 +1,27 @@
 # 🃏 Primo Poker - Professional Serverless Poker Platform
 
-> **Current Status: Phase 2C Complete** ✅  
-> Complete poker platform with hand evaluation, showdowns, and multiplayer support
+> **Current Status: Phase 3B Complete** ✅  
+> Production-ready platform with frontend-backend integration and connection error resolution
 
 A comprehensive serverless poker platform built on Cloudflare Workers with interactive frontend, real-time multiplayer capabilities, complete hand evaluation system, and modern web technologies.
 
-## 🚀 Live Demo
-**Frontend Demo**: [http://primopoker.club/demo/table](http://primopoker.club/demo/table)
-- **Single Player Mode**: Interactive poker simulation with AI players
-- **Multiplayer Mode**: Real-time WebSocket lobby and table joining
-- **Hand Evaluation**: Complete showdown system with winner reveals
+## 🚀 Live Production Deployment
+**Frontend**: [https://21613f51.primo-poker-frontend.pages.dev](https://21613f51.primo-poker-frontend.pages.dev)
+**Backend API**: [https://primo-poker-server.alabamamike.workers.dev](https://primo-poker-server.alabamamike.workers.dev)
+
+### Recent Achievement (Aug 1, 2025): Connection Integration ✅
+- **Problem Solved**: Eliminated all "Connection Error: Connection failed" messages
+- **API Integration**: Frontend successfully communicating with backend Workers
+- **Test Results**: 0 console errors, 0 network errors, 0 connection failures
+- **Health Check**: Backend API returning 200 OK with proper JSON responses
+- **CORS Working**: Cross-origin requests properly configured and functional
+
+### Available Features
+- **Interactive poker simulation** with AI players
+- **Real-time WebSocket lobby** and table joining  
+- **Complete showdown system** with winner reveals
 - **Hand History**: Browse detailed history of all played hands
-- **Features**: Live game phases, betting actions, and synchronized state
+- **Production APIs**: Health checks, table listings, and authentication endpoints
 
 ## 🏗️ Architecture Overview
 

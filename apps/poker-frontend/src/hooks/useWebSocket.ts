@@ -7,6 +7,7 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGameStore } from '@/stores/game-store'
 import { WebSocketClient } from '@/lib/websocket-client'
+import { getWebSocketUrl } from '@/lib/config'
 
 // WebSocket connection hook
 export function useWebSocketConnection() {
@@ -22,7 +23,8 @@ export function useWebSocketConnection() {
     }
 
     try {
-      const wsUrl = process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 'ws://localhost:8787'
+      const wsUrl = getWebSocketUrl()
+      console.log('WebSocket connecting to:', wsUrl)
       
       if (!clientRef.current) {
         clientRef.current = new WebSocketClient(wsUrl)

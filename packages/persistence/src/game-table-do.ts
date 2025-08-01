@@ -1,32 +1,22 @@
 /**
- * Enhanced GameTable Durable Object - Phase 3B.2
+ * GameTable Durable Object - Server-Authoritative Multiplayer Poker Table
  * 
- * This enhanced version includes:
- * - Advanced betting engine integration
- * - Card dealing and deck management
- * - Complete game flow automation
- * - Real-time state broadcasting
+ * This Durable Object manages the complete game state for a single poker table,
+ * ensuring all game logic is server-side and secure.
  */
 
 import { 
-  GamePlayer, 
+  Player, 
   TableConfig, 
   GameState, 
   GamePhase, 
+  PlayerAction, 
   PlayerStatus,
   Card,
   Suit,
   Rank
 } from '@primo-poker/shared'
-
-import {
-  BettingEngine,
-  BettingAction,
-  BettingRules,
-  SidePot,
-  DeckManager,
-  GameDeck
-} from '@primo-poker/core'
+import { PokerGame, BettingEngine, DeckManager } from '@primo-poker/core'
 
 export interface PlayerConnection {
   websocket: WebSocket
@@ -36,93 +26,67 @@ export interface PlayerConnection {
   lastHeartbeat: number
 }
 
-export interface SimpleGamePlayer extends GamePlayer {
+export interface GameTablePlayer extends Player {
   // Additional runtime properties for table management
-  seat: number
-  holeCards: Card[]
-  isConnected: boolean
-  lastSeen: number
+  isFolded: boolean
+  currentBet: number
+  hasActed: boolean
+  chips: number // Runtime chip count separate from persistent chipCount
+  holeCards: Card[] // Player's hole cards
 }
 
-export interface SimpleGameState {
+export interface GameTableState {
   tableId: string
-  phase: GamePhase
-  players: Map<string, SimpleGamePlayer>
+  config: TableConfig
+  players: Map<string, GameTablePlayer>
   connections: Map<string, PlayerConnection>
+  gameState: GameState | null
+  game: GameState | null  // Current active game state (same as gameState for compatibility)
   spectators: Set<string>
-  
-  // Pot and betting
-  pot: number
-  sidePots: SidePot[]
-  currentBet: number
-  currentPlayer: string | null
-  
-  // Positions
-  dealerPosition: number
-  smallBlindPosition: number
-  bigBlindPosition: number
-  
-  // Cards and deck
-  communityCards: Card[]
-  deck: GameDeck
-  
-  // Game settings
-  handNumber: number
-  smallBlind: number
-  bigBlind: number
-  maxPlayers: number
-  
-  // Engines
-  bettingEngine: BettingEngine
-  
-  // State management
-  isActive: boolean
+  createdAt: number
   lastActivity: number
-  actionTimeout: number
+  handNumber: number
 }
 
 export class GameTableDurableObject {
-  private state: SimpleGameState
+  private state: GameTableState
   private heartbeatInterval: number | null = null
+  private deck: Card[] = []
+  private bettingEngine: BettingEngine
+  private deckManager: DeckManager
 
   constructor(state: DurableObjectState, env: any) {
-    // Initialize enhanced table state
+    // Initialize table state
     this.state = {
       tableId: crypto.randomUUID(),
-      phase: GamePhase.WAITING,
+      config: {
+        id: crypto.randomUUID(),
+        name: 'Poker Table',
+        gameType: 'texas_holdem' as any,
+        bettingStructure: 'no_limit' as any,
+        gameFormat: 'cash' as any,
+        maxPlayers: 9,
+        minBuyIn: 1000,
+        maxBuyIn: 10000,
+        smallBlind: 10,
+        bigBlind: 20,
+        ante: 0,
+        timeBank: 30,
+        isPrivate: false
+      },
       players: new Map(),
       connections: new Map(),
+      gameState: null,
+      game: null,
       spectators: new Set(),
-      
-      // Pot and betting
-      pot: 0,
-      sidePots: [],
-      currentBet: 0,
-      currentPlayer: null,
-      
-      // Positions
-      dealerPosition: 0,
-      smallBlindPosition: 1,
-      bigBlindPosition: 2,
-      
-      // Cards and deck
-      communityCards: [],
-      deck: new DeckManager(),
-      
-      // Game settings
-      handNumber: 0,
-      smallBlind: 10,
-      bigBlind: 20,
-      maxPlayers: 9,
-      
-      // Engines
-      bettingEngine: new BettingEngine(10, 20),
-      
-      // State management
-      isActive: false,
+      createdAt: Date.now(),
       lastActivity: Date.now(),
-      actionTimeout: 30000 // 30 seconds
+      handNumber: 0
     }
+
+    // Initialize game engines
+    this.bettingEngine = new BettingEngine()
+    this.deckManager = new DeckManager()
 
     // Start heartbeat monitoring
     this.startHeartbeatMonitoring()
@@ -184,12 +148,6 @@ export class GameTableDurableObject {
       if (connection.websocket === websocket) {
         connection.isConnected = false
         
-        // Mark player as disconnected
-        const player = this.state.players.get(playerId)
-        if (player) {
-          player.isConnected = false
-        }
-        
         // Give player 30 seconds to reconnect before removing from game
         setTimeout(() => {
           if (!connection.isConnected) {
@@ -208,10 +166,10 @@ export class GameTableDurableObject {
    * Handle player joining the table
    */
   private async handleJoinTable(websocket: WebSocket, payload: any): Promise<void> {
-    const { playerId, username, chipCount = 2000 } = payload
+    const { playerId, username, chipCount } = payload
 
     // Validate player can join
-    if (this.state.players.size >= 9) {
+    if (this.state.players.size >= this.state.config.maxPlayers) {
       this.sendError(websocket, 'Table is full')
       return
     }
@@ -222,28 +180,25 @@ export class GameTableDurableObject {
     }
 
     // Add player to table
-    const player: SimpleGamePlayer = {
-      // GamePlayer base fields
+    const player: GameTablePlayer = {
       id: playerId,
       username,
-      email: `${username}@temp.com`, // Temporary email for game state
-      chipCount: chipCount,
-      status: PlayerStatus.WAITING,
+      email: '', // Not needed for table play
+      chipCount: chipCount || this.state.config.minBuyIn,
+      chips: chipCount || this.state.config.minBuyIn, // Runtime chips
+      status: PlayerStatus.ACTIVE,
       isDealer: false,
-      timeBank: 30,
-      
-      // Runtime game fields
-      chips: chipCount,
+      timeBank: this.state.config.timeBank,
+      position: {
+        seat: this.findNextAvailableSeat(),
+        isButton: false,
+        isSmallBlind: false,
+        isBigBlind: false
+      },
+      isFolded: false,
       currentBet: 0,
       hasActed: false,
-      isFolded: false,
-      isAllIn: false,
-      
-      // Table-specific fields
-      seat: this.findNextAvailableSeat(),
-      holeCards: [],
-      isConnected: true,
-      lastSeen: Date.now()
+      holeCards: [] // Will be dealt when game starts
     }
 
     this.state.players.set(playerId, player)
@@ -258,22 +213,23 @@ export class GameTableDurableObject {
     }
     
     this.state.connections.set(playerId, connection)
+    this.state.lastActivity = Date.now()
 
-    console.log(`Player ${username} joined table at seat ${player.seat}. Players: ${this.state.players.size}`)
+    console.log(`Player ${username} joined table. Players: ${this.state.players.size}`)
 
     // Send join confirmation
     this.sendMessage(websocket, {
       type: 'join_table_success',
       data: {
         tableId: this.state.tableId,
-        seat: player.seat,
+        position: player.position,
         chipCount: player.chips
       }
     })
 
     // Start game if we have enough players and no game in progress
-    if (this.state.players.size >= 2 && this.state.phase === GamePhase.WAITING) {
-      await this.startNewHand()
+    if (this.state.players.size >= 2 && !this.state.game) {
+      await this.startNewGame()
     }
 
     await this.broadcastTableState()
@@ -304,7 +260,7 @@ export class GameTableDurableObject {
   private async handlePlayerAction(websocket: WebSocket, payload: any): Promise<void> {
     const { playerId, action, amount } = payload
 
-    if (this.state.phase === GamePhase.WAITING || this.state.phase === GamePhase.FINISHED) {
+    if (!this.state.game) {
       this.sendError(websocket, 'No game in progress')
       return
     }
@@ -314,17 +270,12 @@ export class GameTableDurableObject {
       return
     }
 
-    if (this.state.currentPlayer !== playerId) {
-      this.sendError(websocket, 'Not your turn')
-      return
-    }
-
     try {
-      // Process action
-      const result = await this.processPlayerAction(playerId, action, amount)
+      // Validate and process action through game engine
+      const actionResult = await this.processPlayerAction(playerId, action, amount)
       
-      if (!result.success) {
-        this.sendError(websocket, result.error || 'Invalid action')
+      if (!actionResult.success) {
+        this.sendError(websocket, actionResult.error || 'Invalid action')
         return
       }
 
@@ -341,8 +292,12 @@ export class GameTableDurableObject {
       // Broadcast action to all players
       await this.broadcastPlayerAction(playerId, action, amount)
 
-      // Check if hand/betting round is complete
-      await this.checkHandCompletion()
+      // Check if hand is complete
+      if (this.state.game.phase === GamePhase.SHOWDOWN) {
+        await this.handleShowdown()
+      } else if (this.state.game.phase === GamePhase.FINISHED) {
+        await this.startNewGame()
+      }
 
       await this.broadcastTableState()
       
@@ -388,12 +343,6 @@ export class GameTableDurableObject {
     if (connection) {
       connection.lastHeartbeat = Date.now()
       connection.isConnected = true
-
-      // Update player connection status
-      const player = this.state.players.get(playerId)
-      if (player) {
-        player.isConnected = true
-      }
     }
 
     this.sendMessage(websocket, {
@@ -409,30 +358,40 @@ export class GameTableDurableObject {
     const { playerId, message } = payload
     const player = this.state.players.get(playerId)
     
-    if (!player && !this.state.spectators.has(playerId)) {
-      this.sendError(websocket, 'Not at table')
+    if (!player) {
+      this.sendError(websocket, 'Player not at table')
       return
     }
 
-    // Basic message validation
-    if (!message || message.length > 200) {
-      this.sendError(websocket, 'Invalid message')
+    // Basic message moderation (extend as needed)
+    if (message.length > 200) {
+      this.sendError(websocket, 'Message too long')
       return
     }
 
     // Broadcast chat message to all players
-    await this.broadcastChatMessage(playerId, player?.username || 'Spectator', message)
+    await this.broadcastChatMessage(playerId, player.username, message)
   }
 
   /**
-   * Process player action
+   * Process player action through game engine
    */
   private async processPlayerAction(playerId: string, action: string, amount?: number): Promise<{success: boolean, error?: string}> {
+    if (!this.state.gameState) {
+      return { success: false, error: 'No game in progress' }
+    }
+
     const player = this.state.players.get(playerId)
     if (!player) {
       return { success: false, error: 'Player not found' }
     }
 
+    // Validate it's the player's turn
+    if (this.state.gameState.activePlayerId !== playerId) {
+      return { success: false, error: 'Not your turn' }
+    }
+
+    // Process action based on type
     switch (action) {
       case 'fold':
         player.isFolded = true
@@ -440,20 +399,19 @@ export class GameTableDurableObject {
         break
         
       case 'check':
-        if (this.state.currentBet > player.currentBet) {
+        if (this.state.gameState.currentBet > player.currentBet) {
           return { success: false, error: 'Cannot check, must call or fold' }
         }
         player.hasActed = true
         break
         
       case 'call':
-        const callAmount = this.state.currentBet - player.currentBet
+        const callAmount = this.state.gameState.currentBet - player.currentBet
         if (player.chips < callAmount) {
           return { success: false, error: 'Insufficient chips to call' }
         }
         player.chips -= callAmount
-        player.currentBet = this.state.currentBet
-        this.state.pot += callAmount
+        player.currentBet = this.state.gameState.currentBet
         player.hasActed = true
         break
         
@@ -464,7 +422,7 @@ export class GameTableDurableObject {
         }
         
         const totalBet = player.currentBet + amount
-        if (totalBet <= this.state.currentBet) {
+        if (totalBet <= this.state.gameState.currentBet) {
           return { success: false, error: 'Bet must be higher than current bet' }
         }
         
@@ -474,8 +432,7 @@ export class GameTableDurableObject {
         
         player.chips -= amount
         player.currentBet = totalBet
-        this.state.currentBet = totalBet
-        this.state.pot += amount
+        this.state.gameState.currentBet = totalBet
         player.hasActed = true
         
         // Reset other players' hasActed flag for the raise
@@ -490,6 +447,9 @@ export class GameTableDurableObject {
         return { success: false, error: 'Unknown action' }
     }
 
+    // Update pot
+    this.state.gameState.pot = this.calculatePot()
+
     // Advance to next player
     this.advanceToNextPlayer()
     
@@ -497,11 +457,11 @@ export class GameTableDurableObject {
   }
 
   /**
-   * Find next available seat
+   * Find next available seat position
    */
   private findNextAvailableSeat(): number {
-    for (let i = 0; i < 9; i++) {
-      const seatTaken = Array.from(this.state.players.values()).some(p => p.seat === i)
+    for (let i = 0; i < this.state.config.maxPlayers; i++) {
+      const seatTaken = Array.from(this.state.players.values()).some(p => p.position?.seat === i)
       if (!seatTaken) {
         return i
       }
@@ -517,79 +477,73 @@ export class GameTableDurableObject {
     this.state.connections.delete(playerId)
     this.state.spectators.delete(playerId)
     
-    console.log(`Player ${playerId} removed from table. Players: ${this.state.players.size}`)
-
-    // If not enough players, end current hand
-    if (this.state.players.size < 2 && this.state.phase !== GamePhase.WAITING) {
-      this.state.phase = GamePhase.WAITING
-      this.state.currentPlayer = null
+    // If game in progress and player was active, handle fold
+    if (this.state.game && this.state.game.phase !== GamePhase.FINISHED) {
+      const player = this.state.players.get(playerId)
+      if (player && !player.isFolded) {
+        player.isFolded = true
+        this.advanceToNextPlayer()
+      }
     }
+
+    console.log(`Player ${playerId} removed from table. Players: ${this.state.players.size}`)
   }
 
   /**
-   * Start a new hand
+   * Start a new poker game
    */
-  private async startNewHand(): Promise<void> {
+  private async startNewGame(): Promise<void> {
     if (this.state.players.size < 2) {
-      console.log('Not enough players to start hand')
+      console.log('Not enough players to start game')
       return
     }
 
-    // Reset game state
-    this.state.phase = GamePhase.PRE_FLOP
-    this.state.pot = 0
-    this.state.currentBet = this.state.bigBlind
-    this.state.communityCards = []
-    this.state.handNumber++
+    // Create new game state
+    const playerArray = Array.from(this.state.players.values())
+    if (playerArray.length < 2) return
+    
+    const dealerIndex = Math.floor(Math.random() * playerArray.length)
+    const dealer = playerArray[dealerIndex]!
+    const smallBlindIndex = (dealerIndex + 1) % playerArray.length
+    const bigBlindIndex = (dealerIndex + 2) % playerArray.length
+    const smallBlind = playerArray[smallBlindIndex]!
+    const bigBlind = playerArray[bigBlindIndex]!
+    
+    this.state.game = {
+      tableId: this.state.tableId,
+      gameId: crypto.randomUUID(),
+      phase: GamePhase.PRE_FLOP,
+      pot: 0,
+      sidePots: [],
+      communityCards: [],
+      currentBet: this.state.config.bigBlind,
+      minRaise: this.state.config.bigBlind,
+      activePlayerId: bigBlind.id, // Big blind acts first pre-flop
+      dealerId: dealer.id,
+      smallBlindId: smallBlind.id,
+      bigBlindId: bigBlind.id,
+      handNumber: ++this.state.handNumber,
+      timestamp: new Date()
+    }
+    
+    // Keep gameState in sync
+    this.state.gameState = this.state.game
 
     // Reset player states
     for (const player of this.state.players.values()) {
       player.isFolded = false
       player.currentBet = 0
       player.hasActed = false
-      player.holeCards = [] // TODO: Deal actual cards
     }
 
-    // Post blinds (simplified)
-    const players = Array.from(this.state.players.values())
-    if (players.length >= 2) {
-      // Small blind
-      const sbPlayer = players[0]
-      if (sbPlayer) {
-        sbPlayer.chips -= this.state.smallBlind
-        sbPlayer.currentBet = this.state.smallBlind
-        this.state.pot += this.state.smallBlind
-      }
-
-      // Big blind
-      const bbPlayer = players[1]
-      if (bbPlayer) {
-        bbPlayer.chips -= this.state.bigBlind
-        bbPlayer.currentBet = this.state.bigBlind
-        this.state.pot += this.state.bigBlind
-      }
-
-      // First to act is after big blind
-      const nextPlayer = players.length > 2 ? players[2] : players[0]
-      if (nextPlayer) {
-        this.state.currentPlayer = nextPlayer.id
-      }
-    }
-
-    console.log(`Started new hand #${this.state.handNumber} with ${this.state.players.size} players`)
+    console.log(`Started new game with ${this.state.players.size} players`)
     
     await this.broadcastMessage({
-      type: 'hand_started',
+      type: 'game_started',
       data: {
-        handNumber: this.state.handNumber,
-        smallBlind: this.state.smallBlind,
-        bigBlind: this.state.bigBlind,
-        players: Array.from(this.state.players.values()).map(p => ({
-          id: p.id,
-          username: p.username,
-          chips: p.chips,
-          seat: p.seat
-        }))
+        players: Array.from(this.state.players.values()),
+        smallBlind: this.state.config.smallBlind,
+        bigBlind: this.state.config.bigBlind
       }
     })
   }
@@ -598,40 +552,37 @@ export class GameTableDurableObject {
    * Advance to next active player
    */
   private advanceToNextPlayer(): void {
-    const activePlayers = Array.from(this.state.players.values())
-      .filter(p => !p.isFolded && p.isConnected)
-      .sort((a, b) => a.seat - b.seat)
+    if (!this.state.game) return
 
+    const activePlayers = Array.from(this.state.players.values()).filter(p => !p.isFolded)
+    
     if (activePlayers.length <= 1) {
       // Only one player left, end hand
-      this.state.phase = GamePhase.FINISHED
-      this.state.currentPlayer = null
+      this.state.game.phase = GamePhase.FINISHED
       return
     }
 
     // Check if betting round is complete
-    const playersNeedingAction = activePlayers.filter(p => 
-      !p.hasActed || p.currentBet < this.state.currentBet
-    )
+    const playersNeedingAction = activePlayers.filter(p => !p.hasActed || p.currentBet < this.state.game!.currentBet)
     
     if (playersNeedingAction.length === 0) {
       // Betting round complete, advance to next phase
       this.advanceGamePhase()
     } else {
       // Find next player who needs to act
-      const currentPlayerIndex = activePlayers.findIndex(p => p.id === this.state.currentPlayer)
-      let nextIndex = (currentPlayerIndex + 1) % activePlayers.length
+      const currentPlayerId = this.state.game.activePlayerId
+      const playerArray = Array.from(this.state.players.values())
+      const currentIndex = playerArray.findIndex(p => p.id === currentPlayerId)
       
-      // Find next player who needs to act
-      let attempts = 0
-      while (attempts < activePlayers.length) {
-        const nextPlayer = activePlayers[nextIndex]
-        if (nextPlayer && (!nextPlayer.hasActed || nextPlayer.currentBet < this.state.currentBet)) {
-          this.state.currentPlayer = nextPlayer.id
-          break
+      if (currentIndex >= 0) {
+        for (let i = 1; i < playerArray.length; i++) {
+          const nextIndex = (currentIndex + i) % playerArray.length
+          const nextPlayer = playerArray[nextIndex]
+          if (nextPlayer && !nextPlayer.isFolded && (!nextPlayer.hasActed || nextPlayer.currentBet < this.state.game.currentBet)) {
+            this.state.game.activePlayerId = nextPlayer.id
+            break
+          }
         }
-        nextIndex = (nextIndex + 1) % activePlayers.length
-        attempts++
       }
     }
   }
@@ -640,24 +591,20 @@ export class GameTableDurableObject {
    * Advance game to next phase
    */
   private advanceGamePhase(): void {
-    switch (this.state.phase) {
+    if (!this.state.game) return
+
+    switch (this.state.game.phase) {
       case GamePhase.PRE_FLOP:
-        this.state.phase = GamePhase.FLOP
-        // TODO: Deal flop cards
+        this.state.game.phase = GamePhase.FLOP
         break
       case GamePhase.FLOP:
-        this.state.phase = GamePhase.TURN
-        // TODO: Deal turn card
+        this.state.game.phase = GamePhase.TURN
         break
       case GamePhase.TURN:
-        this.state.phase = GamePhase.RIVER
-        // TODO: Deal river card
+        this.state.game.phase = GamePhase.RIVER
         break
       case GamePhase.RIVER:
-        this.state.phase = GamePhase.SHOWDOWN
-        break
-      case GamePhase.SHOWDOWN:
-        this.state.phase = GamePhase.FINISHED
+        this.state.game.phase = GamePhase.SHOWDOWN
         break
     }
 
@@ -668,36 +615,26 @@ export class GameTableDurableObject {
       }
     }
 
-    this.state.currentBet = 0
-
-    // Set first to act
-    const activePlayers = Array.from(this.state.players.values())
-      .filter(p => !p.isFolded && p.isConnected)
-      .sort((a, b) => a.seat - b.seat)
-    
-    if (activePlayers.length > 0 && activePlayers[0]) {
-      this.state.currentPlayer = activePlayers[0].id
-    }
+    this.state.game.currentBet = 0
   }
 
   /**
-   * Check if hand is complete
+   * Handle showdown phase
    */
-  private async checkHandCompletion(): Promise<void> {
+  private async handleShowdown(): Promise<void> {
+    if (!this.state.game) return
+
     const activePlayers = Array.from(this.state.players.values()).filter(p => !p.isFolded)
     
-    if (activePlayers.length <= 1) {
-      // Only one player left, they win
-      this.state.phase = GamePhase.FINISHED
-      if (activePlayers.length === 1 && activePlayers[0]) {
-        activePlayers[0].chips += this.state.pot
-      }
-      
-      // Start new hand after delay
-      setTimeout(() => {
-        this.startNewHand()
-      }, 3000)
-    }
+    // Use existing hand evaluator to determine winners
+    // This would integrate with our hand evaluation system
+    
+    console.log(`Showdown with ${activePlayers.length} players`)
+    
+    // For now, simulate winner determination
+    // TODO: Integrate with actual hand evaluator
+    
+    this.state.game.phase = GamePhase.FINISHED
   }
 
   /**
@@ -712,12 +649,6 @@ export class GameTableDurableObject {
         if (now - connection.lastHeartbeat > timeout) {
           console.log(`Player ${playerId} timed out`)
           connection.isConnected = false
-          
-          const player = this.state.players.get(playerId)
-          if (player) {
-            player.isConnected = false
-          }
-          
           this.removePlayerFromTable(playerId)
         }
       }
@@ -746,26 +677,21 @@ export class GameTableDurableObject {
    * Broadcast current table state to all players
    */
   private async broadcastTableState(): Promise<void> {
+    const gameState = this.state.game ? {
+      phase: this.state.game.phase,
+      currentPlayer: this.state.game.activePlayerId,
+      currentBet: this.state.game.currentBet,
+      pot: this.calculatePot(),
+      communityCards: this.state.game.communityCards || []
+    } : null
+
     await this.broadcastMessage({
       type: 'table_state_update',
       data: {
         tableId: this.state.tableId,
-        phase: this.state.phase,
-        pot: this.state.pot,
-        currentBet: this.state.currentBet,
-        currentPlayer: this.state.currentPlayer,
-        communityCards: this.state.communityCards,
-        handNumber: this.state.handNumber,
-        players: Array.from(this.state.players.values()).map(p => ({
-          id: p.id,
-          username: p.username,
-          chips: p.chips,
-          seat: p.seat,
-          isFolded: p.isFolded,
-          currentBet: p.currentBet,
-          isConnected: p.isConnected
-        })),
+        players: Array.from(this.state.players.values()),
         spectatorCount: this.state.spectators.size,
+        gameState,
         timestamp: Date.now()
       }
     })
@@ -803,6 +729,17 @@ export class GameTableDurableObject {
         timestamp: Date.now()
       }
     })
+  }
+
+  /**
+   * Calculate total pot from all player bets
+   */
+  private calculatePot(): number {
+    let total = 0
+    for (const player of this.state.players.values()) {
+      total += player.currentBet
+    }
+    return total
   }
 
   /**

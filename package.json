@@ -11,6 +11,11 @@
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "test:ci": "npm run test:ci --workspaces",
+    "test:unit": "jest --config jest.config.phase-3b2.js tests/unit",
+    "test:integration": "jest --config jest.config.phase-3b2.js tests/integration",
+    "test:e2e": "node test-enhanced-multiplayer.js",
+    "test:phase-3b2": "node run-phase-3b2-tests.js",
+    "validate-tests": "node validate-test-setup.js",
     "lint": "eslint \"packages/*/src/**/*.ts\" \"apps/*/src/**/*.ts\"",
     "lint-staged": "npm run lint",
     "type-check": "npm run type-check --workspaces",
@@ -25,6 +30,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250731.0",
+    "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
@@ -34,9 +40,11 @@
     "eslint-config-prettier": "^9.1.2",
     "eslint-plugin-prettier": "^5.5.3",
     "husky": "^8.0.3",
+    "jest": "^30.0.0",
     "lint-staged": "^15.2.0",
     "prettier": "^3.2.4",
     "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.0",
     "typescript": "^5.3.3"
   },
   "lint-staged": {

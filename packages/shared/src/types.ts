@@ -92,6 +92,10 @@ export enum PlayerStatus {
   AWAY = 'away',
   DISCONNECTED = 'disconnected',
   ELIMINATED = 'eliminated',
+  FOLDED = 'folded',
+  ALL_IN = 'all_in',
+  WAITING = 'waiting',
+  PLAYING = 'playing',
 }
 
 // Zod schemas for runtime validation
@@ -147,6 +151,16 @@ export const PlayerSchema = z.object({
   timeBank: z.number().int().nonnegative().default(30),
   lastAction: z.date().optional(),
 });
+
+// Extended player interface for runtime game state
+export interface GamePlayer extends z.infer<typeof PlayerSchema> {
+  chips: number // Runtime chip count (can differ from chipCount)
+  currentBet: number // Current bet in this round
+  hasActed: boolean // Has acted in current betting round
+  isFolded: boolean // Has folded this hand
+  isAllIn: boolean // Is all-in this hand
+  cards?: Card[] // Hole cards (server-side only)
+}
 
 export const GameStateSchema = z.object({
   tableId: z.string().uuid(),

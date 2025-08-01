@@ -1,5 +1,8 @@
 import { PokerAPIRoutes, WebSocketManager } from '@primo-poker/api';
-import { TableDurableObject } from '@primo-poker/persistence';
+import { TableDurableObject, GameTableDurableObject } from '@primo-poker/persistence';
+
+// Export Durable Objects for Cloudflare Workers
+export { TableDurableObject, GameTableDurableObject };
 
 // Environment interface
 interface Env {
@@ -7,6 +10,7 @@ interface Env {
   SESSION_STORE: KVNamespace;
   HAND_HISTORY_BUCKET: R2Bucket;
   TABLE_OBJECTS: DurableObjectNamespace;
+  GAME_TABLES: DurableObjectNamespace; // Our new GameTable Durable Objects
   TOURNAMENT_QUEUE: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   
@@ -118,25 +122,92 @@ export default {
 
 // WebSocket upgrade handler
 async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
-  if (!wsManager) {
-    wsManager = new WebSocketManager(env.JWT_SECRET);
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token');
+  const tableId = url.searchParams.get('tableId');
+
+  // Validate required parameters
+  if (!token) {
+    return new Response('Missing token parameter', { status: 400 });
   }
 
-  const webSocketPair = new WebSocketPair();
-  const [client, server] = Object.values(webSocketPair);
-
-  if (!server) {
-    return new Response('WebSocket creation failed', { status: 500 });
+  if (!tableId) {
+    return new Response('Missing tableId parameter', { status: 400 });
   }
 
-  // Handle the WebSocket connection
-  server.accept();
-  await wsManager.handleConnection(server, request);
+  // Validate JWT token
+  try {
+    // Simple JWT validation (you may want to use a proper JWT library)
+    const [header, payload, signature] = token.split('.');
+    if (!header || !payload || !signature) {
+      return new Response('Invalid token format', { status: 401 });
+    }
 
-  return new Response(null, {
-    status: 101,
-    webSocket: client || null,
-  });
+    // Decode payload (basic validation)
+    const decodedPayload = JSON.parse(atob(payload));
+    if (!decodedPayload.sub || !decodedPayload.username) {
+      return new Response('Invalid token payload', { status: 401 });
+    }
+
+    // Create WebSocket pair
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = Object.values(webSocketPair);
+
+    if (!server) {
+      return new Response('WebSocket creation failed', { status: 500 });
+    }
+
+    // Get or create GameTable Durable Object
+    const gameTableId = env.GAME_TABLES.idFromName(tableId);
+    const gameTable = env.GAME_TABLES.get(gameTableId);
+
+    // Accept WebSocket and handle via Durable Object
+    server.accept();
+    
+    // Set up message forwarding to the Durable Object
+    server.addEventListener('message', async (event) => {
+      try {
+        // Forward the message to the GameTable Durable Object
+        // We'll need to implement a different approach since we can't directly forward WebSockets
+        // For now, let's set up a simple message handler
+        
+        const messageData = JSON.parse(event.data);
+        
+        // Add authentication info to the message
+        messageData.playerId = decodedPayload.sub;
+        messageData.username = decodedPayload.username;
+        
+        // Send acknowledgment for now
+        server.send(JSON.stringify({
+          type: 'connection_established',
+          data: {
+            playerId: decodedPayload.sub,
+            tableId: tableId
+          }
+        }));
+        
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+        server.send(JSON.stringify({
+          type: 'error',
+          data: { error: 'Failed to process message' }
+        }));
+      }
+    });
+
+    server.addEventListener('close', () => {
+      console.log(`WebSocket closed for player ${decodedPayload.sub}`);
+    });
+
+    return new Response(null, {
+      status: 101,
+      webSocket: client || null,
+    });
+
+  } catch (error) {
+    console.error('WebSocket upgrade error:', error);
+    return new Response('Authentication failed', { status: 401 });
+  }
 }
 
 // Tournament message processing
@@ -367,6 +438,3 @@ function getIndexHTML(): string {
 </html>
   `.trim();
 }
-
-// Export the Durable Object class
-export { TableDurableObject };

@@ -32,9 +32,19 @@ name = "TABLE_OBJECTS"
 class_name = "TableDurableObject"
 script_name = "primo-poker-server"
 
+# New GameTable Durable Object for multiplayer games
+[[durable_objects.bindings]]
+name = "GAME_TABLES"
+class_name = "GameTableDurableObject"
+script_name = "primo-poker-server"
+
 [[migrations]]
 tag = "v1"
 new_classes = ["TableDurableObject"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["GameTableDurableObject"]
 
 # Queue for tournament processing
 [[queues.producers]]

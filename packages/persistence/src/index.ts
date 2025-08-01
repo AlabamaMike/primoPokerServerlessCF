@@ -1,5 +1,6 @@
 export * from './repositories';
 export * from './durable-objects';
+export * from './simple-game-table-do';
 
 // Re-export key interfaces and classes
 export type {

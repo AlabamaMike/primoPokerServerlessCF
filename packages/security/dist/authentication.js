@@ -138,12 +138,24 @@ export class AuthenticationManager {
         if (!db) {
             return { success: false, error: 'Database not available' };
         }
+        // Input validation for extra security (defense in depth)
+        if (!credentials.username || typeof credentials.username !== 'string') {
+            return { success: false, error: 'Invalid username format' };
+        }
+        if (!credentials.password || typeof credentials.password !== 'string') {
+            return { success: false, error: 'Invalid password format' };
+        }
+        // Basic length limits to prevent excessive resource usage
+        if (credentials.username.length > 255 || credentials.password.length > 1000) {
+            return { success: false, error: 'Credentials too long' };
+        }
         try {
             // Import PasswordManager locally to avoid circular dependency
             const { PasswordManager } = await import('./index');
-            // Look up user by username
-            const stmt = db.prepare('SELECT * FROM players WHERE username = ?');
-            const result = await stmt.bind(credentials.username).first();
+            // Look up user by username OR email (support both login methods)
+            // Using parameterized query - SAFE from SQL injection
+            const stmt = db.prepare('SELECT * FROM players WHERE username = ? OR email = ?');
+            const result = await stmt.bind(credentials.username, credentials.username).first();
             if (!result) {
                 return { success: false, error: 'User not found' };
             }

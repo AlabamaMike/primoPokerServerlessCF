@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  output: 'export',
+  // Remove output: 'export' to allow dynamic routes
   trailingSlash: true,
   images: {
     unoptimized: true

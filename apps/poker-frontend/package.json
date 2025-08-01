@@ -10,6 +10,7 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test": "jest",
+    "test:ci": "jest --ci --coverage --passWithNoTests --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "deploy": "npx @cloudflare/next-on-pages"

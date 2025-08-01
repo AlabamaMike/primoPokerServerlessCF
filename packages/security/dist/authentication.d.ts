@@ -25,9 +25,10 @@ export declare class AuthenticationManager {
     authenticate(credentials: {
         username: string;
         password: string;
-    }): Promise<{
+    }, db?: any): Promise<{
         success: boolean;
         tokens?: JWTTokens;
+        user?: any;
         error?: string;
     }>;
     verifyAccessToken(token: string): Promise<{
@@ -42,6 +43,12 @@ export declare class AuthenticationManager {
     }>;
     revokeSession(userId: string, sessionId: string): Promise<void>;
     revokeAllSessions(userId: string): Promise<void>;
+    createTokensForUser(user: {
+        userId: string;
+        username: string;
+        email: string;
+        roles?: string[];
+    }): Promise<JWTTokens>;
     private generateTokens;
     private validateCredentials;
 }

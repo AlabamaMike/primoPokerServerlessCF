@@ -7,6 +7,7 @@ export declare class PokerAPIRoutes {
     private setupRoutes;
     getRouter(): ReturnType<typeof Router>;
     private authenticateRequest;
+    private handleRegister;
     private handleLogin;
     private handleRefreshToken;
     private handleLogout;
@@ -24,7 +25,9 @@ export declare class PokerAPIRoutes {
     private handleCreateTournament;
     private handleRegisterTournament;
     private handleHealthCheck;
+    private handleOptionsRequest;
     private handleNotFound;
+    private getCorsHeaders;
     private successResponse;
     private errorResponse;
 }

@@ -30,10 +30,10 @@ export class D1PlayerRepository {
         const id = RandomUtils.generateUUID();
         const now = new Date().toISOString();
         const stmt = this.db.prepare(`
-      INSERT INTO players (id, username, email, chip_count, status, time_bank, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO players (id, username, email, chip_count, status, is_dealer, time_bank, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-        await stmt.bind(id, player.username, player.email, player.chipCount, player.status, player.timeBank, now, now).run();
+        await stmt.bind(id, player.username, player.email, player.chipCount, player.status, player.isDealer, player.timeBank, now, now).run();
         return { ...player, id };
     }
     async update(id, updates) {

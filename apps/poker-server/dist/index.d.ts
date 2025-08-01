@@ -1,9 +1,11 @@
-import { TableDurableObject } from '@primo-poker/persistence';
+import { TableDurableObject, GameTableDurableObject } from '@primo-poker/persistence';
+export { TableDurableObject, GameTableDurableObject };
 interface Env {
     DB: D1Database;
     SESSION_STORE: KVNamespace;
     HAND_HISTORY_BUCKET: R2Bucket;
     TABLE_OBJECTS: DurableObjectNamespace;
+    GAME_TABLES: DurableObjectNamespace;
     TOURNAMENT_QUEUE: Queue;
     ANALYTICS: AnalyticsEngineDataset;
     JWT_SECRET: string;
@@ -17,5 +19,4 @@ declare const _default: {
     scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void>;
 };
 export default _default;
-export { TableDurableObject };
 //# sourceMappingURL=index.d.ts.map

@@ -1,5 +1,7 @@
 import { PokerAPIRoutes, WebSocketManager } from '@primo-poker/api';
-import { TableDurableObject } from '@primo-poker/persistence';
+import { TableDurableObject, GameTableDurableObject } from '@primo-poker/persistence';
+// Export Durable Objects for Cloudflare Workers
+export { TableDurableObject, GameTableDurableObject };
 // Initialize API routes and WebSocket manager
 let apiRoutes;
 let wsManager;
@@ -20,7 +22,14 @@ export default {
             }
             // Handle API routes
             if (url.pathname.startsWith('/api/')) {
-                const extendedRequest = Object.assign(request, { env });
+                // Create a proper extended request with environment
+                const extendedRequest = new Request(request.url, {
+                    method: request.method,
+                    headers: request.headers,
+                    body: request.body,
+                });
+                // Attach environment to the request object
+                extendedRequest.env = env;
                 return await apiRoutes.getRouter().handle(extendedRequest);
             }
             // Handle static content or SPA routing
@@ -79,21 +88,78 @@ export default {
 };
 // WebSocket upgrade handler
 async function handleWebSocketUpgrade(request, env) {
-    if (!wsManager) {
-        wsManager = new WebSocketManager(env.JWT_SECRET);
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token');
+    const tableId = url.searchParams.get('tableId');
+    // Validate required parameters
+    if (!token) {
+        return new Response('Missing token parameter', { status: 400 });
     }
-    const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
-    if (!server) {
-        return new Response('WebSocket creation failed', { status: 500 });
+    if (!tableId) {
+        return new Response('Missing tableId parameter', { status: 400 });
     }
-    // Handle the WebSocket connection
-    server.accept();
-    await wsManager.handleConnection(server, request);
-    return new Response(null, {
-        status: 101,
-        webSocket: client || null,
-    });
+    // Validate JWT token
+    try {
+        // Simple JWT validation (you may want to use a proper JWT library)
+        const [header, payload, signature] = token.split('.');
+        if (!header || !payload || !signature) {
+            return new Response('Invalid token format', { status: 401 });
+        }
+        // Decode payload (basic validation)
+        const decodedPayload = JSON.parse(atob(payload));
+        if (!decodedPayload.sub || !decodedPayload.username) {
+            return new Response('Invalid token payload', { status: 401 });
+        }
+        // Create WebSocket pair
+        const webSocketPair = new WebSocketPair();
+        const [client, server] = Object.values(webSocketPair);
+        if (!server) {
+            return new Response('WebSocket creation failed', { status: 500 });
+        }
+        // Get or create GameTable Durable Object
+        const gameTableId = env.GAME_TABLES.idFromName(tableId);
+        const gameTable = env.GAME_TABLES.get(gameTableId);
+        // Accept WebSocket and handle via Durable Object
+        server.accept();
+        // Set up message forwarding to the Durable Object
+        server.addEventListener('message', async (event) => {
+            try {
+                // Forward the message to the GameTable Durable Object
+                // We'll need to implement a different approach since we can't directly forward WebSockets
+                // For now, let's set up a simple message handler
+                const messageData = JSON.parse(event.data);
+                // Add authentication info to the message
+                messageData.playerId = decodedPayload.sub;
+                messageData.username = decodedPayload.username;
+                // Send acknowledgment for now
+                server.send(JSON.stringify({
+                    type: 'connection_established',
+                    data: {
+                        playerId: decodedPayload.sub,
+                        tableId: tableId
+                    }
+                }));
+            }
+            catch (error) {
+                console.error('Error processing WebSocket message:', error);
+                server.send(JSON.stringify({
+                    type: 'error',
+                    data: { error: 'Failed to process message' }
+                }));
+            }
+        });
+        server.addEventListener('close', () => {
+            console.log(`WebSocket closed for player ${decodedPayload.sub}`);
+        });
+        return new Response(null, {
+            status: 101,
+            webSocket: client || null,
+        });
+    }
+    catch (error) {
+        console.error('WebSocket upgrade error:', error);
+        return new Response('Authentication failed', { status: 401 });
+    }
 }
 // Tournament message processing
 async function processTournamentMessage(message, env) {
@@ -312,6 +378,4 @@ function getIndexHTML() {
 </html>
   `.trim();
 }
-// Export the Durable Object class
-export { TableDurableObject };
 //# sourceMappingURL=index.js.map

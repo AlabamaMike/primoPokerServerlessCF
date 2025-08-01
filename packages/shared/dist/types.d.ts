@@ -80,7 +80,11 @@ export declare enum PlayerStatus {
     SITTING_OUT = "sitting_out",
     AWAY = "away",
     DISCONNECTED = "disconnected",
-    ELIMINATED = "eliminated"
+    ELIMINATED = "eliminated",
+    FOLDED = "folded",
+    ALL_IN = "all_in",
+    WAITING = "waiting",
+    PLAYING = "playing"
 }
 export declare const CardSchema: z.ZodObject<{
     suit: z.ZodNativeEnum<typeof Suit>;
@@ -236,6 +240,14 @@ export declare const PlayerSchema: z.ZodObject<{
     isDealer?: boolean | undefined;
     lastAction?: Date | undefined;
 }>;
+export interface GamePlayer extends z.infer<typeof PlayerSchema> {
+    chips: number;
+    currentBet: number;
+    hasActed: boolean;
+    isFolded: boolean;
+    isAllIn: boolean;
+    cards?: Card[];
+}
 export declare const GameStateSchema: z.ZodObject<{
     tableId: z.ZodString;
     gameId: z.ZodString;
@@ -383,6 +395,85 @@ export interface Table {
     createdAt: Date;
     lastActivity: Date;
     isActive: boolean;
+}
+export interface TableFilters {
+    gameType?: 'cash' | 'tournament' | 'sit-n-go';
+    minStakes?: number;
+    maxStakes?: number;
+    minPlayers?: number;
+    maxPlayers?: number;
+    hasSeatsAvailable?: boolean;
+    isPrivate?: boolean;
+    searchTerm?: string;
+}
+export interface TableListing {
+    tableId: string;
+    name: string;
+    gameType: 'cash' | 'tournament' | 'sit-n-go';
+    stakes: {
+        smallBlind: number;
+        bigBlind: number;
+    };
+    currentPlayers: number;
+    maxPlayers: number;
+    isPrivate: boolean;
+    requiresPassword: boolean;
+    avgPot: number;
+    handsPerHour: number;
+    waitingList: number;
+    playerList: PublicPlayerInfo[];
+    createdAt: number;
+    lastActivity: number;
+    status: 'waiting' | 'active' | 'finishing';
+}
+export interface PublicPlayerInfo {
+    playerId: string;
+    username: string;
+    chipCount: number;
+    isActive: boolean;
+    avatarUrl?: string;
+    countryCode?: string;
+}
+export interface LobbyTableConfig {
+    name: string;
+    gameType: 'cash' | 'tournament' | 'sit-n-go';
+    maxPlayers: number;
+    stakes: {
+        smallBlind: number;
+        bigBlind: number;
+    };
+    isPrivate: boolean;
+    password?: string;
+    buyInMin?: number;
+    buyInMax?: number;
+    timeLimit?: number;
+    autoStart?: boolean;
+}
+export interface LobbyJoinResult {
+    success: boolean;
+    tableId?: string;
+    seatNumber?: number;
+    chipCount?: number;
+    error?: string;
+    waitingListPosition?: number;
+}
+export interface ReservationResult {
+    success: boolean;
+    reservationId?: string;
+    expiresAt?: number;
+    error?: string;
+}
+export interface TableStats {
+    totalHands: number;
+    avgPotSize: number;
+    handsPerHour: number;
+    playerTurnover: number;
+    biggestPot: number;
+    currentStreaks: {
+        playerId: string;
+        type: 'winning' | 'losing';
+        count: number;
+    }[];
 }
 export interface ApiResponse<T = unknown> {
     success: boolean;

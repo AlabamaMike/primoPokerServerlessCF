@@ -92,6 +92,10 @@ export var PlayerStatus;
     PlayerStatus["AWAY"] = "away";
     PlayerStatus["DISCONNECTED"] = "disconnected";
     PlayerStatus["ELIMINATED"] = "eliminated";
+    PlayerStatus["FOLDED"] = "folded";
+    PlayerStatus["ALL_IN"] = "all_in";
+    PlayerStatus["WAITING"] = "waiting";
+    PlayerStatus["PLAYING"] = "playing";
 })(PlayerStatus || (PlayerStatus = {}));
 // Zod schemas for runtime validation
 export const CardSchema = z.object({

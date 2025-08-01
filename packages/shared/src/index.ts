@@ -15,6 +15,16 @@ export {
   PlayerStatus,
 } from './types';
 
+export type {
+  TableFilters,
+  TableListing,
+  PublicPlayerInfo,
+  LobbyTableConfig,
+  LobbyJoinResult,
+  ReservationResult,
+  TableStats,
+} from './types';
+
 export {
   CardUtils,
   PokerMath,

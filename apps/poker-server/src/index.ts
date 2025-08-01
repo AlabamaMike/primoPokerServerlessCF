@@ -44,7 +44,16 @@ export default {
 
       // Handle API routes
       if (url.pathname.startsWith('/api/')) {
-        const extendedRequest = Object.assign(request, { env });
+        // Create a proper extended request with environment
+        const extendedRequest = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body: request.body,
+        });
+        
+        // Attach environment to the request object
+        (extendedRequest as any).env = env;
+        
         return await apiRoutes.getRouter().handle(extendedRequest);
       }
 

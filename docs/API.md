@@ -5,7 +5,36 @@ This document provides comprehensive API documentation for the Primo Poker serve
 ## Base URL
 
 - **Development**: `http://localhost:8787`
-- **Production**: `https://api.primo-poker.com`
+- **Production**: `https://primo-poker-server.alabamamike.workers.dev`
+
+## WebSocket Connection
+
+**WebSocket URL**: `wss://primo-poker-server.alabamamike.workers.dev/websocket`
+
+### Connection Parameters
+
+WebSocket connections require authentication and table identification:
+
+```javascript
+const wsUrl = `wss://primo-poker-server.alabamamike.workers.dev/websocket?token=${jwtToken}&tableId=${tableId}`
+```
+
+**Required Parameters:**
+- `token`: Valid JWT authentication token
+- `tableId`: Target table identifier (use "lobby" for general connection)
+
+### Connection Status
+
+Successfully connected clients receive a connection confirmation:
+
+```json
+{
+  "type": "connection_established",
+  "data": {
+    "playerId": "uuid-string",
+    "tableId": "lobby"
+  }
+}
 
 ## Authentication
 

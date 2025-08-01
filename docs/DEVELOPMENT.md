@@ -2,6 +2,20 @@
 
 This guide provides comprehensive information for developers working on the Primo Poker serverless platform.
 
+## Current Status: Production Ready ✅
+
+### Live Deployments
+- **Frontend**: https://6e77d385.primo-poker-frontend.pages.dev
+- **Backend**: https://primo-poker-server.alabamamike.workers.dev  
+- **WebSocket Test**: https://6e77d385.primo-poker-frontend.pages.dev/websocket-test
+
+### Working Features
+- ✅ JWT Authentication with backend integration
+- ✅ Real-time WebSocket connections 
+- ✅ Player management and table association
+- ✅ Production deployment pipeline
+- ✅ Comprehensive connection diagnostics
+
 ## Development Environment Setup
 
 ### Prerequisites

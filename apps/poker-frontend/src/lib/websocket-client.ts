@@ -10,12 +10,14 @@ export class WebSocketClient {
   private ws: WebSocket | null = null
   private url: string
   private token: string | null = null
+  private tableId: string | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000
   private eventHandlers: Map<string, WebSocketEventHandler[]> = new Map()
   private messageQueue: WebSocketMessage[] = []
   private isConnected = false
+  private heartbeatInterval: NodeJS.Timeout | null = null
 
   constructor(url: string) {
     this.url = url
@@ -25,11 +27,15 @@ export class WebSocketClient {
     this.token = token
   }
 
+  setTableId(tableId: string) {
+    this.tableId = tableId
+  }
+
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = this.token 
-          ? `${this.url}?token=${this.token}`
+        const wsUrl = this.token && this.tableId
+          ? `${this.url}?token=${this.token}&tableId=${this.tableId}`
           : this.url
 
         this.ws = new WebSocket(wsUrl)
@@ -38,6 +44,9 @@ export class WebSocketClient {
           console.log('WebSocket connected')
           this.isConnected = true
           this.reconnectAttempts = 0
+          
+          // Start heartbeat
+          this.startHeartbeat()
           
           // Send queued messages
           this.messageQueue.forEach(message => {
@@ -58,11 +67,13 @@ export class WebSocketClient {
         }
 
         this.ws.onclose = (event) => {
-          console.log('WebSocket disconnected:', event.code, event.reason)
+          console.log('WebSocket closed:', event.code, event.reason)
           this.isConnected = false
+          this.stopHeartbeat()
           
-          if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.scheduleReconnect()
+          // Attempt reconnection if not a normal closure
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.attemptReconnect()
           }
         }
 
@@ -77,24 +88,53 @@ export class WebSocketClient {
     })
   }
 
-  private scheduleReconnect() {
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts)
+  private startHeartbeat() {
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isConnected) {
+        this.send('ping', {})
+      }
+    }, 30000) // Ping every 30 seconds
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval)
+      this.heartbeatInterval = null
+    }
+  }
+
+  private attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('Max reconnection attempts reached')
+      return
+    }
+
     this.reconnectAttempts++
-    
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`)
+    const delay = this.reconnectDelay * this.reconnectAttempts
+
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`)
     
     setTimeout(() => {
-      this.connect().catch(console.error)
+      this.connect().catch((error) => {
+        console.error('Reconnection failed:', error)
+      })
     }, delay)
   }
 
   private handleMessage(message: WebSocketMessage) {
+    // Handle special messages
+    if (message.type === 'pong') {
+      // Heartbeat response, no action needed
+      return
+    }
+
+    // Notify handlers
     const handlers = this.eventHandlers.get(message.type) || []
     handlers.forEach(handler => {
       try {
         handler(message)
       } catch (error) {
-        console.error('Error in WebSocket event handler:', error)
+        console.error(`Error in ${message.type} handler:`, error)
       }
     })
   }
@@ -109,7 +149,7 @@ export class WebSocketClient {
     if (this.isConnected && this.ws) {
       this.ws.send(JSON.stringify(message))
     } else {
-      // Queue message for when connection is restored
+      // Queue message for later sending
       this.messageQueue.push(message)
     }
   }
@@ -132,11 +172,13 @@ export class WebSocketClient {
   }
 
   disconnect() {
+    this.stopHeartbeat()
     if (this.ws) {
-      this.ws.close(1000, 'Client disconnect')
+      this.ws.close(1000, 'Normal closure')
       this.ws = null
     }
     this.isConnected = false
+    this.eventHandlers.clear()
     this.messageQueue = []
   }
 
@@ -145,8 +187,26 @@ export class WebSocketClient {
   }
 }
 
-// WebSocket URLs for different environments
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://primo-poker-server.alabamamike.workers.dev'
+// Create singleton instances - only on client side to avoid SSR issues
+let gameWebSocketInstance: WebSocketClient | null = null
+let tableWebSocketInstance: WebSocketClient | null = null
 
-export const gameWebSocket = new WebSocketClient(`${WS_BASE_URL}/ws/game`)
-export const tableWebSocket = new WebSocketClient(`${WS_BASE_URL}/ws/table`)
+export const gameWebSocket = (() => {
+  if (typeof window === 'undefined') return null
+  if (!gameWebSocketInstance) {
+    gameWebSocketInstance = new WebSocketClient(
+      process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 'ws://localhost:8787'
+    )
+  }
+  return gameWebSocketInstance
+})()
+
+export const tableWebSocket = (() => {
+  if (typeof window === 'undefined') return null
+  if (!tableWebSocketInstance) {
+    tableWebSocketInstance = new WebSocketClient(
+      process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 'ws://localhost:8787'
+    )
+  }
+  return tableWebSocketInstance
+})()

@@ -1,12 +1,12 @@
 {
-  "name": "Claude Code Environment",
+  "name": "Claude Code Environment - Primo Poker",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     }
   },
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && chmod +x .devcontainer/check-api-key.sh",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && chmod +x .devcontainer/check-api-key.sh && .devcontainer/setup-playwright.sh",
   "postStartCommand": ".devcontainer/check-api-key.sh",
   "remoteEnv": {
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
@@ -14,7 +14,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "github.copilot"
+        "github.copilot",
+        "ms-playwright.playwright"
       ]
     }
   }

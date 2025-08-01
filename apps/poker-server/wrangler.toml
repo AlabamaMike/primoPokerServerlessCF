@@ -6,6 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
+JWT_SECRET = "your-super-secret-jwt-key-for-development-only-change-in-production"
 
 # D1 Database
 [[d1_databases]]

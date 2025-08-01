@@ -1,26 +1,52 @@
-<testsuites id="" name="" tests="1" failures="0" skipped="0" errors="0" time="15.218824">
-<testsuite name="auth-flow.spec.ts" timestamp="2025-08-01T20:47:57.600Z" hostname="chromium" tests="1" failures="0" skipped="0" time="3.104" errors="0">
-<testcase name="Authentication Flow Tests › should check if API endpoints are reachable from frontend context" classname="auth-flow.spec.ts" time="3.104">
+<testsuites id="" name="" tests="1" failures="1" skipped="0" errors="0" time="32.502972">
+<testsuite name="live-integration-test.spec.ts" timestamp="2025-08-01T22:58:52.129Z" hostname="chromium" tests="1" failures="1" skipped="0" time="31.499" errors="0">
+<testcase name="Live Backend Integration › should connect to live backend and test API endpoints" classname="live-integration-test.spec.ts" time="31.499">
+<failure message="live-integration-test.spec.ts:4:7 should connect to live backend and test API endpoints" type="FAILURE">
+<![CDATA[  [chromium] › live-integration-test.spec.ts:4:7 › Live Backend Integration › should connect to live backend and test API endpoints 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: page.fill: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('input[name="email"]')
+
+
+      52 |       const testEmail = `test${timestamp}@example.com`;
+      53 |       
+    > 54 |       await page.fill('input[name="email"]', testEmail);
+         |                  ^
+      55 |       await page.fill('input[name="username"]', `testuser${timestamp}`);
+      56 |       await page.fill('input[name="password"]', 'testpass123');
+      57 |       
+        at /workspaces/primoPokerServerlessCF/tests/e2e/tests/live-integration-test.spec.ts:54:18
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/error-context.md
+]]>
+</failure>
 <system-out>
-<![CDATA[=== TESTING API ACCESSIBILITY FROM FRONTEND ===
-=== API TEST RESULTS FROM BROWSER ===
-{
-  "health": {
-    "status": 200,
-    "ok": true,
-    "text": "{\"success\":true,\"data\":{\"status\":\"healthy\",\"timestamp\":\"2025-08-01T20:48:06.740Z\"},\"timestamp\":\"2025-08-01T20:48:06.740Z\"}"
-  },
-  "tables": {
-    "status": 200,
-    "ok": true,
-    "text": "{\"success\":true,\"data\":[],\"timestamp\":\"2025-08-01T20:48:06.838Z\"}"
-  },
-  "authMe": {
-    "status": 404,
-    "ok": false,
-    "text": "{\"success\":false,\"error\":{\"code\":\"404\",\"message\":\"Endpoint not found\"},\"timestamp\":\"2025-08-01T20:48:06.915Z\"}"
-  }
+<![CDATA[=== TESTING LIVE BACKEND INTEGRATION ===
+✅ Step 1: Lobby loaded
+Connection Status: {
+  hasLiveConnection: [33mtrue[39m,
+  hasDemo: [33mtrue[39m,
+  contentPreview: [32m'Poker LobbyFind your perfect table and start playing!Live Updates ActiveDemo Mode - Login for full features🔍All GamesCash GameTournamentSit & GoSort by PlayersSort by StakesSort by Activity➕ Create T'[39m
 }
+✅ Live backend connection established
+✅ Registration page loaded correctly
+
+[[ATTACHMENT|test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/test-failed-1.png]]
+
+[[ATTACHMENT|test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/error-context.md]]
 ]]>
 </system-out>
 </testcase>

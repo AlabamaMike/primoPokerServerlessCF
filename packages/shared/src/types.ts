@@ -268,6 +268,56 @@ export interface TournamentFinishedEvent extends DomainEvent {
   };
 }
 
+// Wallet and Buy-in Management
+export interface PlayerWallet {
+  playerId: string;
+  balance: number;
+  currency: string;
+  frozen: number; // Amount locked in active games
+  lastUpdated: Date;
+}
+
+export interface BuyInOptions {
+  tableId: string;
+  minBuyIn: number;
+  maxBuyIn: number;
+  recommendedBuyIn: number;
+  currency: string;
+  smallBlind: number;
+  bigBlind: number;
+}
+
+export interface BuyInRequest {
+  tableId: string;
+  playerId: string;
+  amount: number;
+  seatNumber?: number; // Optional preferred seat
+}
+
+export interface BuyInResponse {
+  success: boolean;
+  error?: string;
+  seatNumber?: number;
+  chipCount?: number;
+  walletBalance?: number;
+}
+
+export interface SeatSelection {
+  seatNumber: number;
+  isOccupied: boolean;
+  playerId?: string;
+  playerName?: string;
+  chipCount?: number;
+  isActive?: boolean;
+}
+
+export interface TableSeats {
+  tableId: string;
+  maxSeats: number;
+  seats: SeatSelection[];
+  availableSeats: number[];
+}
+
 // Table interface
 export interface Table {
   id: string;
@@ -278,6 +328,7 @@ export interface Table {
   createdAt: Date;
   lastActivity: Date;
   isActive: boolean;
+  buyInOptions: BuyInOptions;
 }
 
 // Lobby management interfaces for Phase 3B.3
@@ -466,4 +517,30 @@ export class PlayerNotFoundError extends PokerError {
     super('PLAYER_NOT_FOUND', `Player ${playerId} not found`, { playerId });
     this.name = 'PlayerNotFoundError';
   }
+}
+
+// Wallet and Buy-in types
+export interface PlayerWallet {
+  playerId: string;
+  balance: number;
+  currency: string;
+  frozen: number;
+  lastUpdated: Date;
+}
+
+
+export interface SeatSelection {
+  seatNumber: number;
+  isOccupied: boolean;
+  playerId?: string;
+  playerName?: string;
+  chipCount?: number;
+  isActive?: boolean;
+}
+
+export interface TableSeats {
+  tableId: string;
+  maxSeats: number;
+  seats: SeatSelection[];
+  availableSeats: number[];
 }

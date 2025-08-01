@@ -386,6 +386,49 @@ export interface TournamentFinishedEvent extends DomainEvent {
         prizePool: number;
     };
 }
+export interface PlayerWallet {
+    playerId: string;
+    balance: number;
+    currency: string;
+    frozen: number;
+    lastUpdated: Date;
+}
+export interface BuyInOptions {
+    tableId: string;
+    minBuyIn: number;
+    maxBuyIn: number;
+    recommendedBuyIn: number;
+    currency: string;
+    smallBlind: number;
+    bigBlind: number;
+}
+export interface BuyInRequest {
+    tableId: string;
+    playerId: string;
+    amount: number;
+    seatNumber?: number;
+}
+export interface BuyInResponse {
+    success: boolean;
+    error?: string;
+    seatNumber?: number;
+    chipCount?: number;
+    walletBalance?: number;
+}
+export interface SeatSelection {
+    seatNumber: number;
+    isOccupied: boolean;
+    playerId?: string;
+    playerName?: string;
+    chipCount?: number;
+    isActive?: boolean;
+}
+export interface TableSeats {
+    tableId: string;
+    maxSeats: number;
+    seats: SeatSelection[];
+    availableSeats: number[];
+}
 export interface Table {
     id: string;
     config: TableConfig;
@@ -395,6 +438,7 @@ export interface Table {
     createdAt: Date;
     lastActivity: Date;
     isActive: boolean;
+    buyInOptions: BuyInOptions;
 }
 export interface TableFilters {
     gameType?: 'cash' | 'tournament' | 'sit-n-go';
@@ -538,5 +582,26 @@ export declare class TableFullError extends PokerError {
 }
 export declare class PlayerNotFoundError extends PokerError {
     constructor(playerId: string);
+}
+export interface PlayerWallet {
+    playerId: string;
+    balance: number;
+    currency: string;
+    frozen: number;
+    lastUpdated: Date;
+}
+export interface SeatSelection {
+    seatNumber: number;
+    isOccupied: boolean;
+    playerId?: string;
+    playerName?: string;
+    chipCount?: number;
+    isActive?: boolean;
+}
+export interface TableSeats {
+    tableId: string;
+    maxSeats: number;
+    seats: SeatSelection[];
+    availableSeats: number[];
 }
 //# sourceMappingURL=types.d.ts.map

@@ -3,6 +3,7 @@ export declare class PokerAPIRoutes {
     private router;
     private tableManager;
     private authManager;
+    private walletManager;
     constructor();
     private setupRoutes;
     getRouter(): ReturnType<typeof Router>;
@@ -29,6 +30,11 @@ export declare class PokerAPIRoutes {
     private handleNotFound;
     private getCorsHeaders;
     private successResponse;
+    private handleGetWallet;
+    private handleBuyIn;
+    private handleCashOut;
+    private handleGetTransactions;
+    private handleGetTableSeats;
     private errorResponse;
 }
 //# sourceMappingURL=routes.d.ts.map

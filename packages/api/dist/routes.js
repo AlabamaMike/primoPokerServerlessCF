@@ -2,15 +2,17 @@ import { Router } from 'itty-router';
 import { TableConfigSchema, ValidationUtils, RandomUtils, PlayerStatus } from '@primo-poker/shared';
 import { TableManager } from '@primo-poker/core';
 import { AuthenticationManager, PasswordManager } from '@primo-poker/security';
-import { D1PlayerRepository, D1GameRepository } from '@primo-poker/persistence';
+import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 export class PokerAPIRoutes {
     router; // Using any to avoid itty-router type issues
     tableManager;
     authManager;
+    walletManager;
     constructor() {
         this.router = Router();
         this.tableManager = new TableManager();
         this.authManager = new AuthenticationManager(''); // Will be set from env
+        this.walletManager = new WalletManager();
         this.setupRoutes();
     }
     setupRoutes() {
@@ -22,10 +24,16 @@ export class PokerAPIRoutes {
         // Player routes
         this.router.get('/api/players/me', this.authenticateRequest.bind(this), this.handleGetProfile.bind(this));
         this.router.put('/api/players/me', this.authenticateRequest.bind(this), this.handleUpdateProfile.bind(this));
+        // Wallet routes
+        this.router.get('/api/wallet', this.authenticateRequest.bind(this), this.handleGetWallet.bind(this));
+        this.router.post('/api/wallet/buyin', this.authenticateRequest.bind(this), this.handleBuyIn.bind(this));
+        this.router.post('/api/wallet/cashout', this.authenticateRequest.bind(this), this.handleCashOut.bind(this));
+        this.router.get('/api/wallet/transactions', this.authenticateRequest.bind(this), this.handleGetTransactions.bind(this));
         // Table routes
         this.router.get('/api/tables', this.handleGetTables.bind(this));
         this.router.post('/api/tables', this.authenticateRequest.bind(this), this.handleCreateTable.bind(this));
         this.router.get('/api/tables/:tableId', this.handleGetTable.bind(this));
+        this.router.get('/api/tables/:tableId/seats', this.handleGetTableSeats.bind(this));
         this.router.post('/api/tables/:tableId/join', this.authenticateRequest.bind(this), this.handleJoinTable.bind(this));
         this.router.post('/api/tables/:tableId/leave', this.authenticateRequest.bind(this), this.handleLeaveTable.bind(this));
         this.router.post('/api/tables/:tableId/action', this.authenticateRequest.bind(this), this.handlePlayerAction.bind(this));
@@ -448,6 +456,106 @@ export class PokerAPIRoutes {
                 ...this.getCorsHeaders(),
             },
         });
+    }
+    // Wallet handlers
+    async handleGetWallet(request) {
+        try {
+            if (!request.user?.userId) {
+                return this.errorResponse('User not authenticated', 401);
+            }
+            const wallet = await this.walletManager.getWallet(request.user.userId);
+            return this.successResponse(wallet);
+        }
+        catch (error) {
+            console.error('Get wallet error:', error);
+            return this.errorResponse('Failed to get wallet information');
+        }
+    }
+    async handleBuyIn(request) {
+        try {
+            if (!request.user?.userId) {
+                return this.errorResponse('User not authenticated', 401);
+            }
+            const buyInRequest = await request.json();
+            // Validate request
+            if (!buyInRequest.tableId || !buyInRequest.amount || buyInRequest.amount <= 0) {
+                return this.errorResponse('Invalid buy-in request', 400);
+            }
+            buyInRequest.playerId = request.user.userId;
+            const result = await this.walletManager.processBuyIn(buyInRequest);
+            return this.successResponse(result);
+        }
+        catch (error) {
+            console.error('Buy-in error:', error);
+            return this.errorResponse('Failed to process buy-in');
+        }
+    }
+    async handleCashOut(request) {
+        try {
+            if (!request.user?.userId) {
+                return this.errorResponse('User not authenticated', 401);
+            }
+            const body = await request.json();
+            if (!body.tableId || !body.chipAmount || body.chipAmount <= 0) {
+                return this.errorResponse('Invalid cash-out request', 400);
+            }
+            await this.walletManager.processCashOut(request.user.userId, body.tableId, body.chipAmount);
+            const wallet = await this.walletManager.getWallet(request.user.userId);
+            return this.successResponse({
+                success: true,
+                newBalance: wallet.balance,
+                cashedOut: body.chipAmount
+            });
+        }
+        catch (error) {
+            console.error('Cash-out error:', error);
+            return this.errorResponse('Failed to process cash-out');
+        }
+    }
+    async handleGetTransactions(request) {
+        try {
+            if (!request.user?.userId) {
+                return this.errorResponse('User not authenticated', 401);
+            }
+            const url = new URL(request.url);
+            const limit = parseInt(url.searchParams.get('limit') || '50');
+            const transactions = await this.walletManager.getTransactionHistory(request.user.userId, limit);
+            return this.successResponse(transactions);
+        }
+        catch (error) {
+            console.error('Get transactions error:', error);
+            return this.errorResponse('Failed to get transaction history');
+        }
+    }
+    async handleGetTableSeats(request) {
+        try {
+            const tableId = request.params?.tableId;
+            if (!tableId) {
+                return this.errorResponse('Table ID is required', 400);
+            }
+            // Mock seat data for now - in production this would come from the table DO
+            const seats = Array.from({ length: 9 }, (_, i) => ({
+                seatNumber: i + 1,
+                isOccupied: Math.random() < 0.3,
+                playerId: Math.random() < 0.3 ? `player-${i}` : undefined,
+                playerName: Math.random() < 0.3 ? `Player${i + 1}` : undefined,
+                chipCount: Math.random() < 0.3 ? Math.floor(Math.random() * 2000) + 200 : undefined,
+                isActive: Math.random() < 0.8
+            }));
+            const availableSeats = seats
+                .filter(seat => !seat.isOccupied)
+                .map(seat => seat.seatNumber);
+            return this.successResponse({
+                tableId,
+                maxSeats: 9,
+                seats,
+                availableSeats
+            });
+        }
+        catch (error) {
+            console.error('Get table seats error:', error);
+            return this.errorResponse('Failed to get table seat information');
+        }
     }
     errorResponse(message, status = 500) {
         const response = {

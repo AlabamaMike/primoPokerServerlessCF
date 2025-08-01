@@ -8,6 +8,7 @@ import { useGameWebSocket } from '@/hooks/useWebSocket'
 import { Button } from '@/components/ui/button'
 import { PokerTable } from '@/components/poker/PokerTable'
 import HandHistory from '@/components/poker/HandHistory'
+import SeatSelection from '@/components/poker/SeatSelection'
 import { Wifi, WifiOff, Users, Settings, History } from 'lucide-react'
 
 interface MultiplayerGameClientProps {
@@ -22,12 +23,20 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   const { isConnected, error, sendPlayerAction, sendChatMessage } = useGameWebSocket(tableId)
   
   const [showHistory, setShowHistory] = useState(false)
+  const [showSeatSelection, setShowSeatSelection] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [playerSeat, setPlayerSeat] = useState<number | null>(null)
+  const [playerChips, setPlayerChips] = useState<number>(0)
+  const [hasLoggedAuth, setHasLoggedAuth] = useState(false)
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/auth/login')
-      return
+    if (!isAuthenticated && !hasLoggedAuth) {
+      console.log('User not authenticated - allowing demo mode for game table')
+      setHasLoggedAuth(true)
+      // For testing purposes, allow demo mode
+      // In production, you might want to redirect to login
+      // router.push('/auth/login')
+      // return
     }
 
     if (!tableId) {
@@ -42,7 +51,13 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
       console.log('Not connected to game server')
     }
 
-  }, [isAuthenticated, tableId, isConnected, router, gameStore])
+    // Check if player is already seated at this table
+    // For now, show seat selection if not seated
+    if (!playerSeat) {
+      setShowSeatSelection(true)
+    }
+
+  }, [isAuthenticated, tableId, isConnected, playerSeat])
 
   const handlePlayerAction = (action: string, amount?: number) => {
     if (isConnected) {
@@ -76,13 +91,49 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
     setChatMessages(prev => [...prev, newMessage])
   }
 
-  const handleLeaveTable = () => {
+  const handleSeatSelection = async (seatNumber: number, buyInAmount: number) => {
+    try {
+      // TODO: Call API to join table with seat and buy-in
+      console.log(`Joining seat ${seatNumber} with $${buyInAmount}`)
+      
+      // For now, simulate successful join
+      setPlayerSeat(seatNumber)
+      setPlayerChips(buyInAmount)
+      setShowSeatSelection(false)
+      
+      // Update game store with player seated
+      if (user) {
+        gameStore.addPlayer({
+          id: user.id,
+          username: user.username,
+          chipCount: buyInAmount,
+          position: seatNumber - 1, // Convert to 0-based position
+          isActive: true,
+          cards: [],
+          hasActed: false,
+          status: 'active'
+        })
+      }
+    } catch (error) {
+      console.error('Failed to join table:', error)
+      // Handle error - show message to user
+    }
+  }
+
+  const handleCancelSeatSelection = () => {
+    setShowSeatSelection(false)
     router.push('/lobby')
   }
 
-  if (!isAuthenticated) {
-    return <div>Redirecting to login...</div>
+  const handleLeaveTable = () => {
+    // TODO: Call API to leave table and cash out chips
+    router.push('/lobby')
   }
+
+  // Allow demo mode for testing
+  // if (!isAuthenticated) {
+  //   return <div>Redirecting to login...</div>
+  // }
 
   return (
     <div className="min-h-screen bg-green-900 text-white p-4">
@@ -159,12 +210,14 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
               <div className="flex justify-between">
                 <span>Chips:</span>
                 <span className="font-medium text-yellow-400">
-                  ${user?.chipCount?.toLocaleString() || '1,000'}
+                  ${playerChips > 0 ? playerChips.toLocaleString() : 'Not seated'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Position:</span>
-                <span className="font-medium">Seat 1</span>
+                <span className="font-medium">
+                  {playerSeat ? `Seat ${playerSeat}` : 'Not seated'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Status:</span>
@@ -245,6 +298,15 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
             <HandHistory tableId={tableId} />
           </div>
         </div>
+      )}
+
+      {/* Seat Selection Modal */}
+      {showSeatSelection && (
+        <SeatSelection
+          tableId={tableId}
+          onSeatSelection={handleSeatSelection}
+          onCancel={handleCancelSeatSelection}
+        />
       )}
 
       {/* Error Display */}

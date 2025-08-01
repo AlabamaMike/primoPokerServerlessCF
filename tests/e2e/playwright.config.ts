@@ -22,7 +22,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.BASE_URL || 'https://1167cb53.primo-poker-frontend.pages.dev',
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
     
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -80,13 +80,22 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm run dev',
+      port: 8787,
+      cwd: '../../',
+      reuseExistingServer: !process.env.CI,
+      env: {
+        NODE_ENV: 'test',
+      }
+    },
+    {
+      command: 'npm run dev',
       port: 3000,
       cwd: '../../apps/poker-frontend',
       reuseExistingServer: !process.env.CI,
       env: {
         NODE_ENV: 'test',
-        NEXT_PUBLIC_API_URL: 'https://primo-poker-server.alabamamike.workers.dev',
-        NEXT_PUBLIC_WS_URL: 'wss://primo-poker-server.alabamamike.workers.dev',
+        NEXT_PUBLIC_API_URL: 'http://localhost:8787',
+        NEXT_PUBLIC_WS_URL: 'ws://localhost:8787',
       }
     }
   ],

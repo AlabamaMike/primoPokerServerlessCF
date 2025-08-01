@@ -107,12 +107,21 @@ export class TableDurableObject {
                 createdAt: new Date(),
                 lastActivity: new Date(),
                 isActive: true,
+                buyInOptions: {
+                    tableId: config.id,
+                    minBuyIn: config.minBuyIn || 100,
+                    maxBuyIn: config.maxBuyIn || 1000,
+                    recommendedBuyIn: config.recommendedBuyIn || 500,
+                    currency: 'USD',
+                    smallBlind: config.smallBlind || 1,
+                    bigBlind: config.bigBlind || 2,
+                },
             };
             // Persist to storage
             await this.state.storage.put('table', this.table);
             return new Response(JSON.stringify({
                 success: true,
-                tableId: this.table.id
+                tableId: this.table?.id
             }), {
                 headers: { 'Content-Type': 'application/json' }
             });

@@ -13,6 +13,15 @@ export class TableManager {
             createdAt: new Date(),
             lastActivity: new Date(),
             isActive: true,
+            buyInOptions: {
+                tableId: config.id,
+                minBuyIn: config.minBuyIn,
+                maxBuyIn: config.maxBuyIn,
+                recommendedBuyIn: Math.floor((config.minBuyIn + config.maxBuyIn) / 2),
+                currency: 'USD',
+                smallBlind: config.smallBlind,
+                bigBlind: config.bigBlind,
+            },
         };
         this.tables.set(config.id, table);
         return table;

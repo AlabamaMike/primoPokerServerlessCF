@@ -21,6 +21,7 @@ interface Env {
   
   // Environment variables
   ENVIRONMENT: string;
+  NODE_ENV?: string;
 }
 
 // Initialize API routes and WebSocket manager

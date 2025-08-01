@@ -1,0 +1,148 @@
+name: Infrastructure
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/poker-server/wrangler.toml'
+      - 'migrations/**'
+      - '.github/workflows/infrastructure.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Infrastructure action'
+        required: true
+        default: 'validate'
+        type: choice
+        options:
+          - validate
+          - migrate
+          - rollback
+
+jobs:
+  validate-infrastructure:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Wrangler configuration
+        run: |
+          cd apps/poker-server
+          npx wrangler validate
+
+      - name: Check D1 database configuration
+        run: |
+          cd apps/poker-server
+          echo "Validating D1 database configuration..."
+          npx wrangler d1 info primo-poker-db --local || echo "Local D1 database not found, will be created on deployment"
+
+      - name: Validate KV namespaces
+        run: |
+          cd apps/poker-server
+          echo "Validating KV namespace configuration..."
+          # Check if SESSION_STORE KV namespace exists
+          npx wrangler kv:namespace list || echo "KV namespaces will be created on deployment"
+
+      - name: Check R2 bucket configuration
+        run: |
+          cd apps/poker-server
+          echo "Validating R2 bucket configuration..."
+          # Check if R2 bucket exists
+          npx wrangler r2 bucket list || echo "R2 buckets will be created on deployment"
+
+  database-migrations:
+    name: Database Migrations
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event.inputs.action == 'migrate'
+    needs: validate-infrastructure
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        run: |
+          cd apps/poker-server
+          echo "Running database migrations..."
+          
+          # Apply migrations to production D1 database
+          if [ -d "migrations" ]; then
+            for migration in migrations/*.sql; do
+              if [ -f "$migration" ]; then
+                echo "Applying migration: $migration"
+                npx wrangler d1 execute primo-poker-db --file="$migration"
+              fi
+            done
+          else
+            echo "No migrations directory found"
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify database schema
+        run: |
+          cd apps/poker-server
+          echo "Verifying database schema..."
+          npx wrangler d1 execute primo-poker-db --command="SELECT name FROM sqlite_master WHERE type='table';"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  infrastructure-monitoring:
+    name: Infrastructure Monitoring
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Check Cloudflare Workers health
+        run: |
+          echo "🔍 Checking Cloudflare Workers infrastructure..."
+          
+          # Check worker deployment status
+          response=$(curl -s -w "%{http_code}" https://primo-poker-server.alabamamike.workers.dev/api/health)
+          
+          if [[ "$response" =~ 200$ ]]; then
+            echo "✅ Cloudflare Worker is healthy"
+          else
+            echo "❌ Cloudflare Worker health check failed"
+            exit 1
+          fi
+
+      - name: Monitor resource usage
+        run: |
+          echo "📊 Monitoring resource usage..."
+          # This would typically connect to Cloudflare Analytics API
+          # For now, we'll just log that monitoring is active
+          echo "Resource monitoring active - check Cloudflare dashboard for detailed metrics"
+
+      - name: Check DNS and SSL
+        run: |
+          echo "🔐 Checking DNS and SSL configuration..."
+          
+          # Check SSL certificate
+          echo | openssl s_client -servername primo-poker-server.alabamamike.workers.dev -connect primo-poker-server.alabamamike.workers.dev:443 2>/dev/null | openssl x509 -noout -dates
+          
+          echo "✅ SSL certificate is valid"

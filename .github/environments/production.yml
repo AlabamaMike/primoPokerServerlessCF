@@ -1,0 +1,55 @@
+# GitHub Environment Configuration Template
+# This file shows the structure for configuring GitHub Environments
+# You'll need to create this environment manually in GitHub repository settings
+
+name: production
+description: Production environment for Primo Poker
+
+# Environment protection rules
+protection_rules:
+  required_reviewers:
+    # Require manual approval for production deployments
+    - reviewer_type: user
+      reviewers: [] # Add GitHub usernames who can approve deployments
+  
+  wait_timer: 0 # Minutes to wait before deployment
+  
+  prevent_self_review: true
+
+# Environment secrets (configure these in GitHub UI)
+secrets:
+  - name: CLOUDFLARE_API_TOKEN
+    description: Cloudflare API token with Workers and Pages permissions
+    required: true
+  
+  - name: CLOUDFLARE_ACCOUNT_ID
+    description: Cloudflare account ID
+    required: true
+  
+  - name: JWT_SECRET
+    description: JWT secret key for authentication
+    required: true
+  
+  - name: SNYK_TOKEN
+    description: Snyk API token for security scanning
+    required: false
+
+# Environment variables
+variables:
+  - name: ENVIRONMENT
+    value: production
+  
+  - name: LOG_LEVEL
+    value: info
+  
+  - name: FRONTEND_URL
+    value: https://primo-poker-frontend.pages.dev
+  
+  - name: BACKEND_URL
+    value: https://primo-poker-server.alabamamike.workers.dev
+
+# Deployment branches
+deployment_branch_policy:
+  # Only allow deployments from main branch
+  protected_branches: true
+  custom_branch_policies: false

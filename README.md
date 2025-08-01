@@ -6,7 +6,7 @@
 A comprehensive serverless poker platform built on Cloudflare Workers with interactive frontend, real-time multiplayer capabilities, complete hand evaluation system, and modern web technologies.
 
 ## 🚀 Live Demo
-**Frontend Demo**: [http://localhost:3001/demo/table](http://localhost:3001/demo/table)
+**Frontend Demo**: [http://primopoker.club/demo/table](http://primopoker.club/demo/table)
 - **Single Player Mode**: Interactive poker simulation with AI players
 - **Multiplayer Mode**: Real-time WebSocket lobby and table joining
 - **Hand Evaluation**: Complete showdown system with winner reveals

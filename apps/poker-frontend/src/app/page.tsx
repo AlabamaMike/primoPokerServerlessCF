@@ -1,5 +1,5 @@
 /**
- * Home Page - Phase 3: Backend Integration
+ * Home Page - Production Ready
  * Entry point that redirects based on authentication status
  */
 'use client'

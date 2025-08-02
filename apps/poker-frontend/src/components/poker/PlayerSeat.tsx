@@ -13,6 +13,8 @@ interface PlayerSeatProps {
   isCurrentUser?: boolean
   isActive?: boolean
   className?: string
+  isSpectating?: boolean
+  onSeatClick?: (position: number) => void
 }
 
 export const PlayerSeat: React.FC<PlayerSeatProps> = ({
@@ -20,16 +22,40 @@ export const PlayerSeat: React.FC<PlayerSeatProps> = ({
   position,
   isCurrentUser = false,
   isActive = false,
-  className
+  className,
+  isSpectating = false,
+  onSeatClick
 }) => {
   if (!player) {
     // Empty seat
+    if (isSpectating && onSeatClick) {
+      return (
+        <motion.button
+          onClick={() => onSeatClick(position)}
+          className={cn(
+            "relative w-24 h-32 flex flex-col items-center justify-center",
+            "border-2 border-dashed border-green-500/50 rounded-lg",
+            "text-green-400 text-sm hover:border-green-400 hover:bg-green-500/10 transition-all",
+            "cursor-pointer group",
+            className
+          )}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <div className="text-xs font-semibold group-hover:text-green-300">Open Seat</div>
+          <div className="text-xs opacity-60">#{position + 1}</div>
+          <div className="text-xs mt-1 opacity-80">Click to Join</div>
+        </motion.button>
+      )
+    }
+    
+    // Regular empty seat (non-spectating)
     return (
       <div
         className={cn(
           "relative w-24 h-32 flex flex-col items-center justify-center",
           "border-2 border-dashed border-gray-500/30 rounded-lg",
-          "text-gray-500 text-sm hover:border-gray-400/50 transition-colors",
+          "text-gray-500 text-sm",
           className
         )}
       >

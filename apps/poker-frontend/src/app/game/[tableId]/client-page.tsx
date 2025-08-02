@@ -7,6 +7,7 @@ import { useGameStore } from '@/stores/game-store'
 import { useGameWebSocket } from '@/hooks/useWebSocket'
 import { PokerTable } from '@/components/poker/PokerTable'
 import { JoinTableModal } from '@/components/JoinTableModal'
+import { GetChipsModal } from '@/components/GetChipsModal'
 
 interface MultiplayerGameClientProps {
   tableId: string
@@ -35,6 +36,8 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   
   const [showHistory, setShowHistory] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
+  const [showGetChipsModal, setShowGetChipsModal] = useState(false)
+  const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null)
   const [loadingTable, setLoadingTable] = useState(true)
   const [playerSeat, setPlayerSeat] = useState<number | null>(null)
@@ -77,15 +80,9 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   useEffect(() => {
     gameStore.setConnectionStatus(isConnected ? 'connected' : 'disconnected')
     
-    // If connected and not seated, show join modal
+    // If connected and not seated, default to spectator mode
     if (isConnected && !loadingTable && !playerSeat && tableInfo) {
-      // Check URL params for spectate mode
-      const urlParams = new URLSearchParams(window.location.search)
-      if (urlParams.get('spectate') === 'true') {
-        setIsSpectating(true)
-      } else {
-        setShowJoinModal(true)
-      }
+      setIsSpectating(true)
     }
   }, [isConnected, loadingTable, playerSeat, tableInfo])
 
@@ -124,6 +121,35 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   const handleLeaveTable = () => {
     // TODO: Implement leave table functionality
     router.push('/lobby')
+  }
+
+  const handleSeatClick = (position: number) => {
+    console.log(`Seat ${position + 1} clicked`)
+    setSelectedSeat(position)
+    setShowGetChipsModal(true)
+  }
+
+  const handleGetChips = async (buyInAmount: number) => {
+    if (selectedSeat === null) return
+    
+    try {
+      console.log(`Getting ${buyInAmount} chips for seat ${selectedSeat + 1}`)
+      
+      if (isConnected && joinTable) {
+        // Join the table with the specified buy-in
+        joinTable(selectedSeat, buyInAmount)
+        
+        // Update local state
+        setPlayerSeat(selectedSeat)
+        setIsSpectating(false)
+        setShowGetChipsModal(false)
+        setSelectedSeat(null)
+      } else {
+        console.error('Cannot join table: WebSocket not connected')
+      }
+    } catch (error) {
+      console.error('Failed to get chips and join table:', error)
+    }
   }
 
   // Loading state
@@ -218,6 +244,8 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
             onPlayerAction={handlePlayerAction}
             onChatMessage={handleChatMessage}
             isConnected={isConnected}
+            isSpectating={isSpectating}
+            onSeatClick={handleSeatClick}
           />
           
           {/* Player Controls */}
@@ -267,6 +295,22 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
             username: p.username || p.playerName || 'Unknown',
             chipCount: p.chipCount || 0
           })) || []}
+        />
+      )}
+
+      {/* Get Chips Modal */}
+      {showGetChipsModal && tableInfo && selectedSeat !== null && (
+        <GetChipsModal
+          isOpen={showGetChipsModal}
+          onClose={() => {
+            setShowGetChipsModal(false)
+            setSelectedSeat(null)
+          }}
+          onGetChips={handleGetChips}
+          seatNumber={selectedSeat}
+          minBuyIn={tableInfo.config.minBuyIn}
+          maxBuyIn={tableInfo.config.maxBuyIn}
+          playerBalance={10000} // TODO: Get from wallet/bankroll system
         />
       )}
 

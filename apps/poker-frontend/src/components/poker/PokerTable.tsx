@@ -17,6 +17,8 @@ interface PokerTableProps {
   onPlayerAction?: (action: string, amount?: number) => void
   onChatMessage?: (message: string) => void
   isConnected?: boolean
+  isSpectating?: boolean
+  onSeatClick?: (position: number) => void
 }
 
 // Position coordinates for seats around an oval table (9-max)
@@ -38,7 +40,9 @@ export const PokerTable: React.FC<PokerTableProps> = ({
   currentUserId: propUserId,
   onPlayerAction: propOnPlayerAction,
   onChatMessage,
-  isConnected: propIsConnected
+  isConnected: propIsConnected,
+  isSpectating = false,
+  onSeatClick
 }) => {
   const {
     players,
@@ -126,6 +130,8 @@ export const PokerTable: React.FC<PokerTableProps> = ({
               position={index}
               isCurrentUser={player?.id === currentUserId}
               isActive={player?.id === activePlayerId}
+              isSpectating={isSpectating}
+              onSeatClick={onSeatClick}
             />
           </div>
         ))}

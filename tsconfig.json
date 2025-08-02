@@ -22,7 +22,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "composite": false,
+    "composite": true,
     "incremental": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

@@ -1,5 +1,5 @@
 /**
- * Home Page - Production Ready
+ * Home Page - Live Production Deployment
  * Entry point that redirects based on authentication status
  */
 'use client'

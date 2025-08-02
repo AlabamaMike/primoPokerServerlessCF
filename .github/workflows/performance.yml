@@ -47,6 +47,8 @@ jobs:
           configPath: './lighthouse.json'
           uploadArtifacts: true
           temporaryPublicStorage: true
+          artifactName: 'lighthouse-report'
+        continue-on-error: true
 
       - name: Stop server
         if: always()

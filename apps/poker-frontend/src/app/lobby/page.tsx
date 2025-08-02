@@ -433,30 +433,47 @@ export default function LobbyPage() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
       const authToken = localStorage.getItem('auth_token')
       
+      // Map frontend config to backend TableConfig format
+      const tableConfig = {
+        name: config.name,
+        gameType: 'texas_holdem', // Always Texas Hold'em for now
+        bettingStructure: 'no_limit', // Always No Limit for now
+        gameFormat: config.gameType === 'cash' ? 'cash' : config.gameType === 'tournament' ? 'tournament' : 'sit_n_go',
+        maxPlayers: config.maxPlayers,
+        minBuyIn: config.minBuyIn || config.stakes.bigBlind * 20,
+        maxBuyIn: config.maxBuyIn || config.stakes.bigBlind * 200,
+        smallBlind: config.stakes.smallBlind,
+        bigBlind: config.stakes.bigBlind,
+        ante: 0,
+        timeBank: 30,
+        isPrivate: config.isPrivate || false,
+        password: config.password
+      }
+      
+      console.log('Creating table with config:', tableConfig)
+      
       const response = await fetch(`${apiUrl}/api/tables`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(authToken && { 'Authorization': `Bearer ${authToken}` })
         },
-        body: JSON.stringify({ config })
+        body: JSON.stringify(tableConfig)
       })
 
       const result = await response.json()
+      console.log('Create table response:', result)
       
-      if (result.success && result.data?.id) {
+      if (result.success && result.data?.tableId) {
         setCreateTableOpen(false)
         // Redirect to the new table
-        window.location.href = `/game/${result.data.id}/`
+        window.location.href = `/game/${result.data.tableId}/`
       } else {
         alert(result.error?.message || result.error || 'Failed to create table')
       }
     } catch (error) {
       console.error('Failed to create table:', error)
-      // For demo, create a mock table
-      const newTableId = `demo-table-${Date.now()}`
-      setCreateTableOpen(false)
-      window.location.href = `/game/${newTableId}/`
+      alert('Failed to create table. Please try again.')
     }
   }
 
@@ -851,10 +868,19 @@ function CreateTableModal({ onClose, onCreateTable }: CreateTableModalProps) {
     maxPlayers: 9,
     stakes: { smallBlind: 1, bigBlind: 2 },
     isPrivate: false,
-    minBuyIn: 100,
-    maxBuyIn: 1000,
+    minBuyIn: 40,
+    maxBuyIn: 200,
     speed: 'regular'
   })
+
+  // Update min/max buy-in when blinds change
+  useEffect(() => {
+    setConfig(prev => ({
+      ...prev,
+      minBuyIn: prev.stakes.bigBlind * 20,
+      maxBuyIn: prev.stakes.bigBlind * 100
+    }))
+  }, [config.stakes.bigBlind])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -923,6 +949,33 @@ function CreateTableModal({ onClose, onCreateTable }: CreateTableModalProps) {
                 step="0.01"
                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#3d3d3d] rounded text-white focus:outline-none focus:ring-2 focus:ring-[#4CAF50]"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Min Buy-in
+              </label>
+              <input
+                type="number"
+                value={config.minBuyIn}
+                readOnly
+                className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#3d3d3d] rounded text-gray-400 cursor-not-allowed"
+              />
+              <p className="text-xs text-gray-500 mt-1">20x Big Blind</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Max Buy-in
+              </label>
+              <input
+                type="number"
+                value={config.maxBuyIn}
+                readOnly
+                className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#3d3d3d] rounded text-gray-400 cursor-not-allowed"
+              />
+              <p className="text-xs text-gray-500 mt-1">100x Big Blind</p>
             </div>
           </div>
 

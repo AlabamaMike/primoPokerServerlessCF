@@ -158,6 +158,8 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
   let decodedPayload: any;
   
   try {
+    console.log('WebSocket upgrade request received for table:', tableId);
+    
     // Initialize authentication manager
     const authManager = new (await import('@primo-poker/security')).AuthenticationManager(env.JWT_SECRET);
     
@@ -165,47 +167,37 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     const verifyResult = await authManager.verifyAccessToken(token);
     
     if (!verifyResult.valid || !verifyResult.payload) {
+      console.error('Token verification failed:', verifyResult.error);
       return new Response(verifyResult.error || 'Invalid token', { status: 401 });
     }
     
     decodedPayload = verifyResult.payload;
-
-    // Create WebSocket pair
-    const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
-
-    if (!server) {
-      return new Response('WebSocket creation failed', { status: 500 });
-    }
+    console.log('Token verified for user:', decodedPayload.userId);
 
     // Get or create GameTable Durable Object
     const gameTableId = env.GAME_TABLES.idFromName(tableId);
     const gameTable = env.GAME_TABLES.get(gameTableId);
 
-    // Forward WebSocket connection to the GameTable Durable Object
-    // We need to create a request with the WebSocket and authentication info
-    const websocketRequest = new Request(`http://dummy/websocket`, {
+    // Forward WebSocket upgrade request to the GameTable Durable Object
+    // We need to preserve the WebSocket upgrade headers and add authentication info
+    const websocketRequest = new Request(request.url, {
+      method: 'GET',
       headers: {
+        ...Object.fromEntries(request.headers.entries()),
         'X-Player-ID': decodedPayload.userId,
         'X-Username': decodedPayload.username,
         'X-Table-ID': tableId,
         'X-Roles': decodedPayload.roles?.join(',') || 'player',
-        'Upgrade': 'websocket'
+        'Upgrade': 'websocket',
+        'Connection': 'Upgrade'
       }
     });
 
-    // Forward to Durable Object - the DO will handle accepting the WebSocket
+    // Forward to Durable Object - it will handle the WebSocket upgrade
     const response = await gameTable.fetch(websocketRequest);
     
-    if (response.webSocket) {
-      // The Durable Object handled the WebSocket, return it
-      return new Response(null, {
-        status: 101,
-        webSocket: response.webSocket,
-      });
-    } else {
-      return new Response('WebSocket handling failed', { status: 500 });
-    }
+    // Return the response from the Durable Object
+    return response;
 
   } catch (error) {
     console.error('WebSocket upgrade error:', error);

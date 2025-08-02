@@ -17,6 +17,8 @@ export class WebSocketClient {
   private eventHandlers: Map<string, WebSocketEventHandler[]> = new Map()
   private messageQueue: WebSocketMessage[] = []
   private isConnected = false
+  private isConnecting = false
+  private connectionPromise: Promise<void> | null = null
   private heartbeatInterval: NodeJS.Timeout | null = null
 
   constructor(url: string) {
@@ -32,7 +34,19 @@ export class WebSocketClient {
   }
 
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    // If already connected, return immediately
+    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve()
+    }
+    
+    // If connection is in progress, return the existing promise
+    if (this.isConnecting && this.connectionPromise) {
+      return this.connectionPromise
+    }
+    
+    // Start new connection
+    this.isConnecting = true
+    this.connectionPromise = new Promise((resolve, reject) => {
       try {
         const wsUrl = this.token && this.tableId
           ? `${this.url}?token=${this.token}&tableId=${this.tableId}`
@@ -51,6 +65,7 @@ export class WebSocketClient {
         this.ws.onopen = () => {
           console.log('WebSocket connected')
           this.isConnected = true
+          this.isConnecting = false
           this.reconnectAttempts = 0
           
           // Start heartbeat
@@ -93,13 +108,17 @@ export class WebSocketClient {
             token: this.token ? 'present' : 'missing',
             tableId: this.tableId
           })
+          this.isConnecting = false
           reject(error)
         }
 
       } catch (error) {
+        this.isConnecting = false
         reject(error)
       }
     })
+    
+    return this.connectionPromise
   }
 
   private startHeartbeat() {
@@ -192,6 +211,8 @@ export class WebSocketClient {
       this.ws = null
     }
     this.isConnected = false
+    this.isConnecting = false
+    this.connectionPromise = null
     this.eventHandlers.clear()
     this.messageQueue = []
   }

@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@primo-poker/shared": "^1.0.0",
-    "jose": "^5.2.0"
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",

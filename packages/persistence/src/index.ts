@@ -1,6 +1,6 @@
 export * from './repositories';
 export * from './durable-objects';
-export * from './simple-game-table-do';
+export * from './game-table-do';
 export * from './table-registry-do';
 export * from './lobby-manager';
 export * from './secure-rng-do';
@@ -26,7 +26,7 @@ export {
 } from './repositories';
 
 export { TableDurableObject } from './durable-objects';
-export { GameTableDurableObject } from './simple-game-table-do';
+export { GameTableDurableObject } from './game-table-do';
 export { TableRegistryDurableObject } from './table-registry-do';
 export { LobbyManager } from './lobby-manager';
 export { WalletManager } from './wallet-manager';

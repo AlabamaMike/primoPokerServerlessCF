@@ -39,6 +39,9 @@ interface PublicPlayerInfo {
   isActive: boolean
   avatarUrl?: string
   countryCode?: string
+  position?: {
+    seat: number
+  }
 }
 
 interface TableFilters {
@@ -328,6 +331,15 @@ export default function LobbyPage() {
             errorMessage = result.error
           }
           
+          // Check for token expiration
+          if (errorMessage.includes('exp') || errorMessage.includes('expired') || errorMessage.includes('timestamp check failed')) {
+            alert('Your session has expired. Please log in again.')
+            // Clear auth and redirect to login
+            localStorage.removeItem('auth_token')
+            window.location.href = '/auth/login'
+            return
+          }
+          
           alert(errorMessage)
           return
         }
@@ -527,12 +539,18 @@ export default function LobbyPage() {
               setJoinModalOpen(false)
               setSelectedTable(null)
             }}
-            onJoin={(buyIn) => handleJoinTable(selectedTable.tableId, buyIn)}
+            onJoin={(buyIn, seat) => handleJoinTable(selectedTable.tableId, buyIn)}
             tableName={selectedTable.name}
             minBuyIn={40}
             maxBuyIn={200}
             smallBlind={selectedTable.stakes.smallBlind}
             bigBlind={selectedTable.stakes.bigBlind}
+            maxPlayers={selectedTable.maxPlayers}
+            currentPlayers={selectedTable.playerList.map(p => ({
+              seat: p.position?.seat || 0,
+              username: p.username,
+              chipCount: p.chipCount
+            }))}
           />
         )}
       </div>

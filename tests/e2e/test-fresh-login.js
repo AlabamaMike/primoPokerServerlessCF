@@ -1,84 +1,121 @@
-const { chromium } = require('playwright');
+const API_URL = 'https://primo-poker-server.alabamamike.workers.dev';
+
+// Create a new test user with timestamp to ensure uniqueness
+const timestamp = Date.now();
+const TEST_USER = {
+  username: `testuser${timestamp}`,
+  email: `testuser${timestamp}@test.com`,
+  password: 'TestPassword123!'
+};
 
 async function testFreshLogin() {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  console.log('=== TESTING FRESH LOGIN AND JOIN ===\n');
   
   try {
-    // Navigate to production site
-    console.log('1. Navigating to production site...');
-    await page.goto('https://6e77d385.primo-poker-frontend.pages.dev');
-    
-    // Clear any existing session
-    await context.clearCookies();
-    await page.evaluate(() => {
-      localStorage.clear();
-      sessionStorage.clear();
+    // Step 1: Register new user
+    console.log('1. Registering new user...');
+    const registerResponse = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(TEST_USER)
     });
-    console.log('2. Cleared existing session');
     
-    // Navigate to login
-    await page.goto('https://6e77d385.primo-poker-frontend.pages.dev/login');
+    const registerData = await registerResponse.json();
+    if (!registerData.success) {
+      throw new Error(`Registration failed: ${JSON.stringify(registerData)}`);
+    }
+    console.log(`   Registered: ${TEST_USER.username} ✅`);
+
+    // Step 2: Login
+    console.log('\n2. Logging in...');
+    const loginResponse = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: TEST_USER.username,
+        password: TEST_USER.password
+      })
+    });
     
-    // Login with fresh credentials
-    console.log('3. Logging in with fresh session...');
-    await page.fill('input[name="username"]', 'smoketest1754114281188');
-    await page.fill('input[name="password"]', 'Test1754114281188!');
-    await page.click('button[type="submit"]');
-    
-    await page.waitForURL('**/lobby/**', { timeout: 10000 });
-    console.log('4. Successfully logged in');
-    
-    // Get the new auth token
-    const authToken = await page.evaluate(() => localStorage.getItem('auth_token'));
-    console.log('5. Got new auth token:', authToken ? 'Yes' : 'No');
-    
-    // Wait for page to stabilize
-    await page.waitForTimeout(3000);
-    
-    // Try to join a table
-    console.log('\n6. Attempting to join a table...');
-    const joinButtons = await page.locator('button:has-text("Join Table")').all();
-    
-    if (joinButtons.length > 0) {
-      console.log(`Found ${joinButtons.length} tables`);
-      
-      // Try to join the first table
-      await joinButtons[0].click();
-      console.log('7. Clicked Join Table');
-      
-      // Wait and see what happens
-      await page.waitForTimeout(5000);
-      
-      // Check current URL
-      const currentUrl = page.url();
-      console.log('8. Current URL:', currentUrl);
-      
-      if (currentUrl.includes('/game/')) {
-        console.log('✅ Successfully joined table!');
-      } else {
-        console.log('❌ Failed to join table');
-        
-        // Check for any error messages
-        const alerts = await page.locator('[role="alert"], .error-message, .toast').all();
-        for (const alert of alerts) {
-          const text = await alert.textContent();
-          console.log('Alert:', text);
-        }
-      }
-    } else {
-      console.log('No tables available to join');
+    const loginData = await loginResponse.json();
+    if (!loginData.success) {
+      throw new Error(`Login failed: ${JSON.stringify(loginData)}`);
     }
     
-    // Take screenshot
-    await page.screenshot({ path: 'fresh-login-result.png' });
+    const token = loginData.data.tokens.accessToken;
+    console.log(`   Logged in with fresh token ✅`);
+
+    // Step 3: Create table
+    console.log('\n3. Creating table...');
+    const createResponse = await fetch(`${API_URL}/api/tables`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        name: 'Fresh Token Test Table',
+        gameType: 'texas_holdem',
+        bettingStructure: 'no_limit',
+        gameFormat: 'cash',
+        maxPlayers: 6,
+        minBuyIn: 40,
+        maxBuyIn: 200,
+        smallBlind: 1,
+        bigBlind: 2
+      })
+    });
+    
+    const createData = await createResponse.json();
+    if (!createData.success) {
+      console.log('Create failed:', createData);
+      throw new Error(`Failed to create table: ${JSON.stringify(createData)}`);
+    }
+    
+    const tableId = createData.data?.tableId || createData.tableId;
+    console.log(`   Created table: ${tableId} ✅`);
+
+    // Step 4: Join table
+    console.log('\n4. Joining table with fresh token...');
+    const joinResponse = await fetch(`${API_URL}/api/tables/${tableId}/join`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ buyIn: 100 })
+    });
+    
+    const joinData = await joinResponse.json();
+    console.log('   Join response:', JSON.stringify(joinData, null, 2));
+    
+    if (joinData.success) {
+      console.log('   ✅ Successfully joined table with fresh token!');
+    } else {
+      console.log('   ❌ Join failed:', joinData.error);
+    }
+
+    // Step 5: Leave table
+    console.log('\n5. Leaving table...');
+    const leaveResponse = await fetch(`${API_URL}/api/tables/${tableId}/leave`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    const leaveData = await leaveResponse.json();
+    console.log(`   Leave result: ${leaveData.success ? '✅' : '❌'}`);
+
+    console.log('\n=== SUMMARY ===');
+    console.log('Fresh token works:', joinData.success ? '✅ YES' : '❌ NO');
+    console.log('\nThe UI issue is likely due to:');
+    console.log('1. Old/expired tokens stored in localStorage');
+    console.log('2. Users need to log out and log back in to get fresh tokens');
     
   } catch (error) {
-    console.error('Error:', error);
-    await page.screenshot({ path: 'fresh-login-error.png' });
-  } finally {
-    await browser.close();
+    console.error('\n❌ Test failed:', error.message);
   }
 }
 

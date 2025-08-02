@@ -177,7 +177,9 @@ export class GameTableDurableObject {
     // Set up message handling
     server.addEventListener('message', async (event) => {
       try {
+        console.log('📨 WebSocket message event received:', event.data)
         const data = JSON.parse(event.data);
+        console.log('📋 Parsed WebSocket data:', data)
         await this.webSocketMessage(server, JSON.stringify(data));
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
@@ -201,10 +203,11 @@ export class GameTableDurableObject {
    */
   async webSocketMessage(websocket: WebSocket, message: string): Promise<void> {
     try {
+      console.log('🔍 Raw WebSocket message received:', message)
       const data = JSON.parse(message)
       const { type, payload } = data
 
-      console.log(`GameTable received message: ${type}`, payload)
+      console.log(`🎯 GameTable received message: ${type}`, payload)
 
       switch (type) {
         case 'connection_established':

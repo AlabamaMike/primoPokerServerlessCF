@@ -149,7 +149,7 @@ export default function LobbyPage() {
       try {
         setLoading(true)
         
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
         
         // Test API connectivity
         const healthResponse = await fetch(`${apiUrl}/api/health`)
@@ -199,7 +199,7 @@ export default function LobbyPage() {
 
     const pollTables = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
         const response = await fetch(`${apiUrl}/api/tables`)
         
         if (response.ok) {
@@ -278,7 +278,7 @@ export default function LobbyPage() {
     try {
       // If user is authenticated, try API call
       if (isAuthenticated && user) {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
         const response = await fetch(`${apiUrl}/api/tables/${tableId}/join`, {
           method: 'POST',
           headers: {
@@ -318,7 +318,7 @@ export default function LobbyPage() {
   // Create table handler
   const handleCreateTable = async (config: LobbyTableConfig) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
       const response = await fetch(`${apiUrl}/api/tables`, {
         method: 'POST',
         headers: {

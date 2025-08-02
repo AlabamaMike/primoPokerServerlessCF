@@ -606,7 +606,7 @@ export class GameTableDurableObject {
     }
 
     // Advance to next player
-    this.advanceToNextPlayer()
+    await this.advanceToNextPlayer()
     
     return { success: true }
   }
@@ -650,6 +650,8 @@ export class GameTableDurableObject {
       return
     }
 
+    console.log(`🃏 Starting new hand #${this.state.handNumber + 1}`)
+
     // Reset game state
     this.state.phase = GamePhase.PRE_FLOP
     this.state.pot = 0
@@ -657,12 +659,21 @@ export class GameTableDurableObject {
     this.state.communityCards = []
     this.state.handNumber++
 
-    // Reset player states
+    // Create and shuffle new deck
+    this.state.deck = new DeckManager()
+    this.state.deck.shuffle()
+
+    // Reset player states and deal hole cards
     for (const player of this.state.players.values()) {
       player.isFolded = false
       player.currentBet = 0
       player.hasActed = false
-      player.holeCards = [] // TODO: Deal actual cards
+      
+      // Deal 2 hole cards to each player
+      player.holeCards = [
+        this.state.deck.deal(),
+        this.state.deck.deal()
+      ]
     }
 
     // Post blinds (simplified)
@@ -712,7 +723,7 @@ export class GameTableDurableObject {
   /**
    * Advance to next active player
    */
-  private advanceToNextPlayer(): void {
+  private async advanceToNextPlayer(): Promise<void> {
     const activePlayers = Array.from(this.state.players.values())
       .filter(p => !p.isFolded && p.isConnected)
       .sort((a, b) => a.seat - b.seat)
@@ -731,7 +742,7 @@ export class GameTableDurableObject {
     
     if (playersNeedingAction.length === 0) {
       // Betting round complete, advance to next phase
-      this.advanceGamePhase()
+      await this.advanceGamePhase()
     } else {
       // Find next player who needs to act
       const currentPlayerIndex = activePlayers.findIndex(p => p.id === this.state.currentPlayer)
@@ -754,45 +765,64 @@ export class GameTableDurableObject {
   /**
    * Advance game to next phase
    */
-  private advanceGamePhase(): void {
+  private async advanceGamePhase(): Promise<void> {
+    console.log(`🎯 Advancing from ${this.state.phase} to next phase`)
+    
     switch (this.state.phase) {
       case GamePhase.PRE_FLOP:
         this.state.phase = GamePhase.FLOP
-        // TODO: Deal flop cards
+        // Deal flop (3 cards)
+        this.state.communityCards = [
+          this.state.deck.deal(),
+          this.state.deck.deal(),
+          this.state.deck.deal()
+        ]
+        console.log('🃏 Dealt flop:', this.state.communityCards)
         break
       case GamePhase.FLOP:
         this.state.phase = GamePhase.TURN
-        // TODO: Deal turn card
+        // Deal turn (1 card)
+        this.state.communityCards.push(this.state.deck.deal())
+        console.log('🃏 Dealt turn:', this.state.communityCards[3])
         break
       case GamePhase.TURN:
         this.state.phase = GamePhase.RIVER
-        // TODO: Deal river card
+        // Deal river (1 card)
+        this.state.communityCards.push(this.state.deck.deal())
+        console.log('🃏 Dealt river:', this.state.communityCards[4])
         break
       case GamePhase.RIVER:
         this.state.phase = GamePhase.SHOWDOWN
+        this.evaluateShowdown()
         break
       case GamePhase.SHOWDOWN:
         this.state.phase = GamePhase.FINISHED
+        this.awardPot()
         break
     }
 
-    // Reset player actions for new betting round
-    for (const player of this.state.players.values()) {
-      if (!player.isFolded) {
-        player.hasActed = false
+    // Reset player actions for new betting round (except during showdown/finished)
+    if (this.state.phase !== GamePhase.SHOWDOWN && this.state.phase !== GamePhase.FINISHED) {
+      for (const player of this.state.players.values()) {
+        if (!player.isFolded) {
+          player.hasActed = false
+        }
+      }
+
+      this.state.currentBet = 0
+
+      // Set first to act
+      const activePlayers = Array.from(this.state.players.values())
+        .filter(p => !p.isFolded && p.isConnected)
+        .sort((a, b) => a.seat - b.seat)
+      
+      if (activePlayers.length > 0 && activePlayers[0]) {
+        this.state.currentPlayer = activePlayers[0].id
       }
     }
 
-    this.state.currentBet = 0
-
-    // Set first to act
-    const activePlayers = Array.from(this.state.players.values())
-      .filter(p => !p.isFolded && p.isConnected)
-      .sort((a, b) => a.seat - b.seat)
-    
-    if (activePlayers.length > 0 && activePlayers[0]) {
-      this.state.currentPlayer = activePlayers[0].id
-    }
+    // Broadcast the phase change and new state
+    await this.broadcastTableState()
   }
 
   /**
@@ -802,17 +832,104 @@ export class GameTableDurableObject {
     const activePlayers = Array.from(this.state.players.values()).filter(p => !p.isFolded)
     
     if (activePlayers.length <= 1) {
-      // Only one player left, they win
+      // Only one player left, they win by default
+      console.log('🏆 Hand won by fold - only one player remaining')
       this.state.phase = GamePhase.FINISHED
+      
       if (activePlayers.length === 1 && activePlayers[0]) {
-        activePlayers[0].chips += this.state.pot
+        const winner = activePlayers[0]
+        winner.chips += this.state.pot
+        console.log(`💰 ${winner.username} wins ${this.state.pot} chips by fold`)
+        
+        await this.broadcastMessage({
+          type: 'hand_winner',
+          data: {
+            winnerId: winner.id,
+            winnerName: winner.username,
+            winAmount: this.state.pot,
+            winType: 'fold',
+            handNumber: this.state.handNumber
+          }
+        })
       }
+      
+      this.state.pot = 0
       
       // Start new hand after delay
       setTimeout(() => {
         this.startNewHand()
       }, 3000)
     }
+  }
+
+  /**
+   * Evaluate showdown and determine winner(s)
+   */
+  private evaluateShowdown(): void {
+    console.log('🎰 Evaluating showdown')
+    
+    const activePlayers = Array.from(this.state.players.values()).filter(p => !p.isFolded)
+    
+    if (activePlayers.length === 0) {
+      console.log('⚠️ No active players in showdown')
+      return
+    }
+
+    // For now, simplified winner selection (first player wins)
+    // TODO: Implement proper hand evaluation using HandEvaluator
+    const winner = activePlayers[0]
+    
+    if (!winner) {
+      console.log('⚠️ No winner found in showdown')
+      return
+    }
+    
+    console.log(`🏆 Showdown winner: ${winner.username}`)
+    
+    // Store winner info for pot distribution
+    this.state.currentPlayer = winner.id
+  }
+
+  /**
+   * Award pot to winner(s)
+   */
+  private awardPot(): void {
+    const winnerId = this.state.currentPlayer
+    if (!winnerId) {
+      console.log('⚠️ No winner identified for pot distribution')
+      return
+    }
+
+    const winner = this.state.players.get(winnerId)
+    if (!winner) {
+      console.log('⚠️ Winner not found in players map')
+      return
+    }
+
+    console.log(`💰 Awarding ${this.state.pot} chips to ${winner.username}`)
+    
+    winner.chips += this.state.pot
+    
+    this.broadcastMessage({
+      type: 'hand_winner',
+      data: {
+        winnerId: winner.id,
+        winnerName: winner.username,
+        winAmount: this.state.pot,
+        winType: 'showdown',
+        handNumber: this.state.handNumber,
+        winningCards: winner.holeCards,
+        communityCards: this.state.communityCards
+      }
+    })
+
+    this.state.pot = 0
+    this.state.currentPlayer = null
+    
+    // Start new hand after delay
+    setTimeout(() => {
+      this.startNewHand()
+    }, 5000)
   }
 
   /**

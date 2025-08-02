@@ -96,6 +96,8 @@ export interface GameState {
   dealCommunityCards: (phase: 'flop' | 'turn' | 'river') => void
   nextPhase: () => void
   startNewGame: () => void
+  startNewHand: (handNumber: number, smallBlind: number, bigBlind: number) => void
+  announceWinner: (winnerId: string, winnerName: string, winAmount: number, winType: string) => void
   resetHand: () => void
   evaluateHandsAndShowdown: () => void
   addToHandHistory: (entry: HandHistoryEntry) => void
@@ -527,6 +529,78 @@ export const useGameStore = create<GameState>()(
         currentBet: 0,
         players: createMockPlayers()
       })
+    },
+
+    startNewHand: (handNumber: number, smallBlind: number, bigBlind: number) => {
+      set((state) => ({
+        currentHandNumber: handNumber,
+        smallBlind,
+        bigBlind,
+        gamePhase: 'pre-flop',
+        isGameActive: true,
+        communityCards: [],
+        pot: 0,
+        currentBet: bigBlind,
+        showdownVisible: false,
+        // Reset player states for new hand
+        players: state.players.map(p => ({
+          ...p,
+          currentBet: 0,
+          hasActed: false,
+          isFolded: false,
+          isAllIn: false,
+          isActive: true,
+          lastAction: undefined,
+          holeCards: undefined,
+          isWinner: false,
+          winnings: 0,
+          handResult: undefined
+        }))
+      }))
+    },
+
+    announceWinner: (winnerId: string, winnerName: string, winAmount: number, winType: string) => {
+      const state = get()
+      
+      // Update winner player
+      const updatedPlayers = state.players.map(p => 
+        p.id === winnerId 
+          ? { ...p, isWinner: true, winnings: winAmount, chips: p.chips + winAmount }
+          : { ...p, isWinner: false, winnings: 0 }
+      )
+
+      // Add to hand history
+      const historyEntry: HandHistoryEntry = {
+        id: `hand-${state.currentHandNumber}`,
+        handNumber: state.currentHandNumber,
+        timestamp: new Date(),
+        pot: winAmount,
+        winner: {
+          name: winnerName,
+          handResult: state.players.find(p => p.id === winnerId)?.handResult || {
+            handName: winType,
+            strength: 0,
+            cards: [],
+            description: `Won by ${winType}`
+          },
+          winnings: winAmount
+        },
+        communityCards: state.communityCards,
+        playerCount: state.players.filter(p => !p.isFolded).length,
+        keyActions: [`${winnerName} wins ${winAmount} chips by ${winType}`]
+      }
+
+      set({
+        players: updatedPlayers,
+        gamePhase: 'showdown',
+        showdownVisible: true,
+        handHistory: [historyEntry, ...state.handHistory].slice(0, 50)
+      })
+
+      // Auto-hide showdown after 5 seconds
+      setTimeout(() => {
+        set({ showdownVisible: false })
+      }, 5000)
     },
     
     resetHand: () => set((state) => ({

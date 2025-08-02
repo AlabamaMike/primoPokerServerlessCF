@@ -493,6 +493,10 @@ export class GameTableDurableObject {
           await this.handleReserveSeat(websocket, payload)
           break
           
+        case 'stand_up':
+          await this.handleStandUp(websocket, payload)
+          break
+          
         case 'heartbeat':
           await this.handleHeartbeat(websocket, payload)
           break
@@ -882,6 +886,89 @@ export class GameTableDurableObject {
         })
       }
     }, 60000)
+  }
+
+  /**
+   * Handle player standing up from table
+   */
+  private async handleStandUp(websocket: WebSocket, payload: any): Promise<void> {
+    const { playerId } = payload
+    const player = this.state.players.get(playerId)
+    
+    if (!player) {
+      return this.sendError(websocket, 'Player not at table')
+    }
+    
+    // Check if player is in active hand
+    if (this.isPlayerInActiveHand(playerId)) {
+      return this.sendError(websocket, 'Cannot stand up during active hand')
+    }
+    
+    // Get player's current chips
+    const chipCount = player.chips
+    const seatIndex = player.position?.seat
+    
+    // Remove player from table
+    this.state.players.delete(playerId)
+    
+    // Add back as spectator
+    this.state.spectators.set(playerId, {
+      id: playerId,
+      username: player.username,
+      joinedAt: Date.now()
+    })
+    
+    // Send confirmation with chip count
+    this.sendMessage(websocket, {
+      type: 'stand_up_success',
+      data: {
+        chipCount,
+        returnedToBankroll: true,
+        seatIndex
+      }
+    })
+    
+    // Broadcast table update
+    await this.broadcastTableState()
+    
+    // Broadcast spectator update
+    await this.broadcastMessage({
+      type: 'player_stood_up',
+      data: {
+        playerId,
+        username: player.username,
+        seatIndex,
+        chipCount
+      }
+    })
+    
+    // Update spectator count
+    await this.broadcastMessage({
+      type: 'spectator_count_update',
+      data: {
+        count: this.state.spectators.size,
+        spectators: Array.from(this.state.spectators.values())
+      }
+    })
+    
+    console.log(`Player ${player.username} stood up from seat ${seatIndex} with ${chipCount} chips`)
+  }
+
+  /**
+   * Helper to check if player is in active hand
+   */
+  private isPlayerInActiveHand(playerId: string): boolean {
+    if (!this.state.game || this.state.game.phase === GamePhase.WAITING) {
+      return false
+    }
+    
+    const player = this.state.players.get(playerId)
+    if (!player || player.isFolded) {
+      return false
+    }
+    
+    // Player is in active hand if game is running and they haven't folded
+    return this.state.game.phase !== GamePhase.SHOWDOWN
   }
 
   /**

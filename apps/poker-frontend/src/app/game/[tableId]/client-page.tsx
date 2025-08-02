@@ -8,6 +8,8 @@ import { useGameWebSocket } from '@/hooks/useWebSocket'
 import { PokerTable } from '@/components/poker/PokerTable'
 import { JoinTableModal } from '@/components/JoinTableModal'
 import { GetChipsModal } from '@/components/GetChipsModal'
+import { StandUpModal } from '@/components/StandUpModal'
+import { useBankrollStore } from '@/stores/bankroll-store'
 
 interface MultiplayerGameClientProps {
   tableId: string
@@ -34,7 +36,8 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   
   const { user, isAuthenticated } = useAuthStore()
   const gameStore = useGameStore()
-  const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable, joinAsSpectator, leaveSpectator } = useGameWebSocket(tableId)
+  const bankrollStore = useBankrollStore()
+  const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable, joinAsSpectator, leaveSpectator, standUp } = useGameWebSocket(tableId)
   
   const [showHistory, setShowHistory] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
@@ -45,6 +48,8 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   const [playerSeat, setPlayerSeat] = useState<number | null>(null)
   const [isSpectating, setIsSpectating] = useState(false)
   const [seatReservations, setSeatReservations] = useState<Map<number, { playerId: string; expiresAt: number }>>(new Map())
+  const [showStandUpModal, setShowStandUpModal] = useState(false)
+  const [isStandingUp, setIsStandingUp] = useState(false)
   const spectatorCount = gameStore.spectatorCount
 
   // Fetch table information on mount
@@ -165,6 +170,29 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
     }
   }
 
+  const handleStandUp = async () => {
+    try {
+      setIsStandingUp(true)
+      
+      // Call the stand up WebSocket method
+      standUp()
+      
+      // Wait a bit for the response
+      setTimeout(() => {
+        // Update local state
+        setPlayerSeat(null)
+        setIsSpectating(true)
+        setShowStandUpModal(false)
+        setIsStandingUp(false)
+        
+        console.log('Successfully stood up from table')
+      }, 500)
+    } catch (error) {
+      console.error('Failed to stand up:', error)
+      setIsStandingUp(false)
+    }
+  }
+
   // Loading state
   if (loadingTable) {
     return (
@@ -280,7 +308,7 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
                     : "Player controls will appear here when it's your turn"}
                 </div>
                 <button
-                  onClick={handleLeaveTable}
+                  onClick={() => setShowStandUpModal(true)}
                   disabled={gameStore.activePlayerId === user?.id}
                   className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded text-sm transition-colors"
                   title={gameStore.activePlayerId === user?.id ? "Cannot stand up during your turn" : "Stand up from table"}
@@ -356,7 +384,7 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
           seatNumber={selectedSeat}
           minBuyIn={tableInfo.config.minBuyIn}
           maxBuyIn={tableInfo.config.maxBuyIn}
-          playerBalance={10000} // TODO: Get from wallet/bankroll system
+          playerBalance={bankrollStore.balance}
         />
       )}
 
@@ -376,6 +404,17 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
             Hand history will appear here
           </div>
         </div>
+      )}
+
+      {/* Stand Up Modal */}
+      {showStandUpModal && playerSeat !== null && (
+        <StandUpModal
+          isOpen={showStandUpModal}
+          onClose={() => setShowStandUpModal(false)}
+          onConfirm={handleStandUp}
+          chipCount={gameStore.players.find(p => p.id === user?.id)?.chips || 0}
+          isStandingUp={isStandingUp}
+        />
       )}
     </div>
   )

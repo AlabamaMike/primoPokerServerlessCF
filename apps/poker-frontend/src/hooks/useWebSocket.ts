@@ -6,6 +6,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGameStore } from '@/stores/game-store'
+import { useBankrollStore } from '@/stores/bankroll-store'
 import { WebSocketClient, gameWebSocket } from '@/lib/websocket-client'
 import { getWebSocketUrl } from '@/lib/config'
 
@@ -163,6 +164,13 @@ export function useGameWebSocket(tableId?: string) {
 
       client.on('join_table_success', (message) => {
         console.log('Successfully joined table:', message.payload)
+        if (message.payload) {
+          const { chipCount } = message.payload
+          // Remove chips from bankroll when joining
+          const bankrollStore = useBankrollStore.getState()
+          bankrollStore.removeChips(chipCount)
+          console.log(`Removed ${chipCount} chips from bankroll. New balance: ${bankrollStore.balance - chipCount}`)
+        }
         // Player successfully joined - the table state will be updated via table_state message
       })
 
@@ -212,6 +220,26 @@ export function useGameWebSocket(tableId?: string) {
           gameStore.setCommunityCards(state.communityCards || [])
           gameStore.setPlayers(state.players || [])
           gameStore.setActivePlayer(state.currentPlayer)
+        }
+      })
+
+      client.on('stand_up_success', (message) => {
+        console.log('Stand up successful:', message.payload)
+        if (message.payload) {
+          const { chipCount } = message.payload
+          // Update bankroll with returned chips
+          const bankrollStore = useBankrollStore.getState()
+          bankrollStore.addChips(chipCount)
+          gameStore.setSpectatorMode(true)
+          console.log(`Returned ${chipCount} chips to bankroll. New balance: ${bankrollStore.balance + chipCount}`)
+        }
+      })
+
+      client.on('player_stood_up', (message) => {
+        console.log('Player stood up:', message.payload)
+        if (message.payload) {
+          const { playerId, seatIndex } = message.payload
+          // Table state will be updated via table_state_update
         }
       })
 
@@ -291,6 +319,16 @@ export function useGameWebSocket(tableId?: string) {
     }
   }, [webSocket.client])
 
+  const standUp = useCallback(() => {
+    if (webSocket.client && webSocket.isConnected) {
+      const { user } = useAuthStore.getState()
+      
+      webSocket.client.send('stand_up', {
+        playerId: user?.id
+      })
+    }
+  }, [webSocket.client])
+
   return {
     isConnected: isConnected && webSocket.isConnected,
     error: webSocket.error,
@@ -298,7 +336,8 @@ export function useGameWebSocket(tableId?: string) {
     sendChatMessage,
     joinTable,
     joinAsSpectator,
-    leaveSpectator
+    leaveSpectator,
+    standUp
   }
 }
 

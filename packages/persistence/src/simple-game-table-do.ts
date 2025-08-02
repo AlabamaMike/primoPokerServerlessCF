@@ -670,10 +670,7 @@ export class GameTableDurableObject {
       player.hasActed = false
       
       // Deal 2 hole cards to each player
-      player.holeCards = [
-        this.state.deck.deal(),
-        this.state.deck.deal()
-      ]
+      player.holeCards = this.state.deck.deal(2)
     }
 
     // Post blinds (simplified)
@@ -771,24 +768,20 @@ export class GameTableDurableObject {
     switch (this.state.phase) {
       case GamePhase.PRE_FLOP:
         this.state.phase = GamePhase.FLOP
-        // Deal flop (3 cards)
-        this.state.communityCards = [
-          this.state.deck.deal(),
-          this.state.deck.deal(),
-          this.state.deck.deal()
-        ]
+        // Deal flop (3 cards with burn)
+        this.state.communityCards = this.state.deck.dealFlop()
         console.log('🃏 Dealt flop:', this.state.communityCards)
         break
       case GamePhase.FLOP:
         this.state.phase = GamePhase.TURN
-        // Deal turn (1 card)
-        this.state.communityCards.push(this.state.deck.deal())
+        // Deal turn (1 card with burn)
+        this.state.communityCards.push(this.state.deck.dealTurn())
         console.log('🃏 Dealt turn:', this.state.communityCards[3])
         break
       case GamePhase.TURN:
         this.state.phase = GamePhase.RIVER
-        // Deal river (1 card)
-        this.state.communityCards.push(this.state.deck.deal())
+        // Deal river (1 card with burn)
+        this.state.communityCards.push(this.state.deck.dealRiver())
         console.log('🃏 Dealt river:', this.state.communityCards[4])
         break
       case GamePhase.RIVER:
@@ -806,6 +799,7 @@ export class GameTableDurableObject {
       for (const player of this.state.players.values()) {
         if (!player.isFolded) {
           player.hasActed = false
+          player.currentBet = 0 // Reset current bets for new round
         }
       }
 

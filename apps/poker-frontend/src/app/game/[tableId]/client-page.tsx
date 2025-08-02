@@ -273,8 +273,20 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
           {/* Player Controls */}
           {playerSeat !== null && !isSpectating && (
             <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3d3d3d]">
-              <div className="text-center text-gray-400">
-                Player controls will appear here when it's your turn
+              <div className="flex justify-between items-center">
+                <div className="text-gray-400">
+                  {gameStore.activePlayerId === user?.id 
+                    ? "It's your turn to act" 
+                    : "Player controls will appear here when it's your turn"}
+                </div>
+                <button
+                  onClick={handleLeaveTable}
+                  disabled={gameStore.activePlayerId === user?.id}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded text-sm transition-colors"
+                  title={gameStore.activePlayerId === user?.id ? "Cannot stand up during your turn" : "Stand up from table"}
+                >
+                  Stand Up
+                </button>
               </div>
             </div>
           )}

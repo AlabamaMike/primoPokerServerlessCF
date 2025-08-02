@@ -576,7 +576,7 @@ export class GameTableDurableObject {
     if (assignedSeat !== undefined && assignedSeat !== null) {
       // Check if seat is occupied
       const seatOccupied = Array.from(this.state.players.values()).some(
-        p => p.position.seat === assignedSeat
+        p => p.position?.seat === assignedSeat
       )
       
       if (seatOccupied) {
@@ -805,22 +805,28 @@ export class GameTableDurableObject {
     
     // Check if seat is already occupied
     const seatOccupied = Array.from(this.state.players.values()).some(
-      player => player.position === seatIndex
+      player => player.position?.seat === seatIndex
     )
     
     if (seatOccupied) {
-      return this.send(websocket, 'seat_unavailable', {
-        seatIndex,
-        reason: 'Seat is already occupied'
+      return this.sendMessage(websocket, {
+        type: 'seat_unavailable',
+        data: {
+          seatIndex,
+          reason: 'Seat is already occupied'
+        }
       })
     }
     
     // Check if seat is already reserved
     const existingReservation = this.state.seatReservations.get(seatIndex)
     if (existingReservation && existingReservation.expiresAt > Date.now()) {
-      return this.send(websocket, 'seat_unavailable', {
-        seatIndex,
-        reason: 'Seat is reserved by another player'
+      return this.sendMessage(websocket, {
+        type: 'seat_unavailable',
+        data: {
+          seatIndex,
+          reason: 'Seat is reserved by another player'
+        }
       })
     }
     
@@ -843,10 +849,13 @@ export class GameTableDurableObject {
     this.state.seatReservations.set(seatIndex, reservation)
     
     // Send confirmation to player
-    this.send(websocket, 'seat_reserved', {
-      seatIndex,
-      reservation,
-      expiresIn: 60
+    this.sendMessage(websocket, {
+      type: 'seat_reserved',
+      data: {
+        seatIndex,
+        reservation,
+        expiresIn: 60
+      }
     })
     
     // Broadcast reservation to all

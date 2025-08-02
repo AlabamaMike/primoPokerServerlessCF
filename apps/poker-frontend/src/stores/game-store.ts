@@ -592,9 +592,13 @@ export const useGameStore = create<GameState>()(
         winner: {
           name: winnerName,
           handResult: state.players.find(p => p.id === winnerId)?.handResult || {
+            handType: 0, // Default to HIGH_CARD
+            handRank: 0,
             handName: winType,
-            strength: 0,
-            cards: []
+            handDescription: winType,
+            kickers: [],
+            cards: [],
+            strength: 0
           },
           winnings: winAmount
         },

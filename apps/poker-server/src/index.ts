@@ -180,17 +180,17 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
 
     // Forward WebSocket upgrade request to the GameTable Durable Object
     // We need to preserve the WebSocket upgrade headers and add authentication info
+    const headers = new Headers(request.headers)
+    headers.set('X-Player-ID', decodedPayload.userId)
+    headers.set('X-Username', decodedPayload.username)
+    headers.set('X-Table-ID', tableId)
+    headers.set('X-Roles', decodedPayload.roles?.join(',') || 'player')
+    headers.set('Upgrade', 'websocket')
+    headers.set('Connection', 'Upgrade')
+    
     const websocketRequest = new Request(request.url, {
       method: 'GET',
-      headers: {
-        ...Object.fromEntries(request.headers.entries()),
-        'X-Player-ID': decodedPayload.userId,
-        'X-Username': decodedPayload.username,
-        'X-Table-ID': tableId,
-        'X-Roles': decodedPayload.roles?.join(',') || 'player',
-        'Upgrade': 'websocket',
-        'Connection': 'Upgrade'
-      }
+      headers
     });
 
     // Forward to Durable Object - it will handle the WebSocket upgrade

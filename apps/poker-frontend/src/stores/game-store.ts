@@ -236,7 +236,7 @@ export const useGameStore = create<GameState>()(
     
     // Spectators
     spectatorCount: 0,
-    isSpectating: false
+    isSpectating: false,
 
     // WebSocket methods
     connectToTable: async (tableId: string) => {
@@ -594,8 +594,7 @@ export const useGameStore = create<GameState>()(
           handResult: state.players.find(p => p.id === winnerId)?.handResult || {
             handName: winType,
             strength: 0,
-            cards: [],
-            description: `Won by ${winType}`
+            cards: []
           },
           winnings: winAmount
         },

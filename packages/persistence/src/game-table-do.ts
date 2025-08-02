@@ -514,9 +514,12 @@ export class GameTableDurableObject {
           this.state.connections.delete(playerId)
           
           // Broadcast spectator count update
-          await this.broadcast('spectator_count_update', {
-            count: this.state.spectators.size,
-            spectators: Array.from(this.state.spectators.values())
+          await this.broadcastMessage({
+            type: 'spectator_count_update',
+            data: {
+              count: this.state.spectators.size,
+              spectators: Array.from(this.state.spectators.values())
+            }
           })
         } else if (this.state.players.has(playerId)) {
           // Give player 30 seconds to reconnect before removing from game
@@ -714,9 +717,12 @@ export class GameTableDurableObject {
     })
 
     // Broadcast spectator count update to all
-    await this.broadcast('spectator_count_update', {
-      count: this.state.spectators.size,
-      spectators: Array.from(this.state.spectators.values())
+    await this.broadcastMessage({
+      type: 'spectator_count_update',
+      data: {
+        count: this.state.spectators.size,
+        spectators: Array.from(this.state.spectators.values())
+      }
     })
   }
 
@@ -737,9 +743,12 @@ export class GameTableDurableObject {
     })
     
     // Broadcast updated spectator count
-    await this.broadcast('spectator_count_update', {
-      count: this.state.spectators.size,
-      spectators: Array.from(this.state.spectators.values())
+    await this.broadcastMessage({
+      type: 'spectator_count_update',
+      data: {
+        count: this.state.spectators.size,
+        spectators: Array.from(this.state.spectators.values())
+      }
     })
   }
 

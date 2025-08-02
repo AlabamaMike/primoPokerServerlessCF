@@ -162,14 +162,14 @@ export function useGameWebSocket(tableId?: string) {
       })
 
       client.on('join_table_success', (message) => {
-        console.log('Successfully joined table:', message.data)
+        console.log('Successfully joined table:', message.payload)
         // Player successfully joined - the table state will be updated via table_state message
       })
 
       client.on('spectator_joined', (message) => {
-        console.log('Joined as spectator:', message.data)
-        if (message.data?.tableState) {
-          const state = message.data.tableState
+        console.log('Joined as spectator:', message.payload)
+        if (message.payload?.tableState) {
+          const state = message.payload.tableState
           gameStore.setGamePhase(state.gameState?.phase || 'waiting')
           gameStore.setPot(state.gameState?.pot || 0)
           gameStore.setCommunityCards(state.gameState?.communityCards || [])
@@ -179,15 +179,15 @@ export function useGameWebSocket(tableId?: string) {
       })
 
       client.on('spectator_count_update', (message) => {
-        console.log('Spectator count updated:', message.data?.count)
-        gameStore.setSpectatorCount(message.data?.count || 0)
+        console.log('Spectator count updated:', message.payload?.count)
+        gameStore.setSpectatorCount(message.payload?.count || 0)
       })
 
       client.on('hand_started', (message) => {
-        console.log('New hand started:', message.data)
-        if (message.data) {
-          const { handNumber, smallBlind, bigBlind, players } = message.data
-          gameStore.setGamePhase('pre_flop')
+        console.log('New hand started:', message.payload)
+        if (message.payload) {
+          const { handNumber, smallBlind, bigBlind, players } = message.payload
+          gameStore.setGamePhase('pre-flop')
           gameStore.startNewHand(handNumber, smallBlind, bigBlind)
           if (players) {
             gameStore.setPlayers(players)
@@ -196,17 +196,17 @@ export function useGameWebSocket(tableId?: string) {
       })
 
       client.on('hand_winner', (message) => {
-        console.log('Hand winner:', message.data)
-        if (message.data) {
-          const { winnerId, winnerName, winAmount, winType } = message.data
+        console.log('Hand winner:', message.payload)
+        if (message.payload) {
+          const { winnerId, winnerName, winAmount, winType } = message.payload
           gameStore.announceWinner(winnerId, winnerName, winAmount, winType)
         }
       })
 
       client.on('table_state_update', (message) => {
-        console.log('Table state update:', message.data)
-        if (message.data) {
-          const state = message.data
+        console.log('Table state update:', message.payload)
+        if (message.payload) {
+          const state = message.payload
           gameStore.setGamePhase(state.phase)
           gameStore.setPot(state.pot)
           gameStore.setCommunityCards(state.communityCards || [])
@@ -216,7 +216,7 @@ export function useGameWebSocket(tableId?: string) {
       })
 
       client.on('error', (message) => {
-        console.error('WebSocket error:', message.payload || message.data)
+        console.error('WebSocket error:', message.payload)
       })
 
       // Don't auto-join the table here - let the UI control when to join

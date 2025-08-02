@@ -14,6 +14,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
+import { JoinTableModal } from '@/components/JoinTableModal'
 
 // Types from our backend system
 interface TableListing {
@@ -76,6 +77,7 @@ export default function LobbyPage() {
   const [sortBy, setSortBy] = useState<'players' | 'stakes' | 'activity'>('players')
   const [createTableOpen, setCreateTableOpen] = useState(false)
   const [selectedTable, setSelectedTable] = useState<TableListing | null>(null)
+  const [joinModalOpen, setJoinModalOpen] = useState(false)
   
   // WebSocket connection for real-time updates
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null)
@@ -273,8 +275,14 @@ export default function LobbyPage() {
     setFilteredTables(filtered)
   }, [tables, filters, searchTerm, sortBy])
 
+  // Open join modal
+  const openJoinModal = (table: TableListing) => {
+    setSelectedTable(table)
+    setJoinModalOpen(true)
+  }
+
   // Join table handler
-  const handleJoinTable = async (tableId: string, password?: string) => {
+  const handleJoinTable = async (tableId: string, buyIn?: number, password?: string) => {
     try {
       // If user is authenticated, try API call
       if (isAuthenticated && user) {
@@ -290,8 +298,7 @@ export default function LobbyPage() {
             ...(authToken && { 'Authorization': `Bearer ${authToken}` })
           },
           body: JSON.stringify({
-            tableId,
-            playerId: user.id,
+            buyIn: buyIn || 100, // Use provided buy-in or default
             password
           })
         })
@@ -299,7 +306,10 @@ export default function LobbyPage() {
         const result = await response.json()
         
         if (result.success) {
-          // Redirect to game table - use window.location.href for static export compatibility
+          // Close modal and redirect to game table
+          setJoinModalOpen(false)
+          setSelectedTable(null)
+          // Use window.location.href for static export compatibility
           window.location.href = `/game/${tableId}/`
           return
         } else {
@@ -468,7 +478,7 @@ export default function LobbyPage() {
               <TableCard
                 key={table.tableId}
                 table={table}
-                onJoin={() => handleJoinTable(table.tableId)}
+                onJoin={() => openJoinModal(table)}
                 onSpectate={() => handleSpectateTable(table.tableId)}
               />
             ))}
@@ -494,6 +504,22 @@ export default function LobbyPage() {
           <CreateTableModal
             onClose={() => setCreateTableOpen(false)}
             onCreateTable={handleCreateTable}
+          />
+        )}
+
+        {joinModalOpen && selectedTable && (
+          <JoinTableModal
+            isOpen={joinModalOpen}
+            onClose={() => {
+              setJoinModalOpen(false)
+              setSelectedTable(null)
+            }}
+            onJoin={(buyIn) => handleJoinTable(selectedTable.tableId, buyIn)}
+            tableName={selectedTable.name}
+            minBuyIn={40}
+            maxBuyIn={200}
+            smallBlind={selectedTable.stakes.smallBlind}
+            bigBlind={selectedTable.stakes.bigBlind}
           />
         )}
       </div>

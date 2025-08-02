@@ -385,7 +385,7 @@ export default function LobbyPage() {
         if (result.success) {
           // Successfully joined, redirect to table
           setJoinModalOpen(false)
-          window.location.href = `/game/${tableId}/`
+          router.push(`/game/${tableId}`)
           return
         } else {
           // Handle errors
@@ -401,7 +401,7 @@ export default function LobbyPage() {
           if (errorMessage.includes('expired') || errorMessage.includes('unauthorized')) {
             alert('Your session has expired. Please log in again.')
             localStorage.removeItem('auth_token')
-            window.location.href = '/auth/login'
+            router.push('/auth/login')
             return
           }
           
@@ -415,7 +415,7 @@ export default function LobbyPage() {
     
     // For demo mode or if API fails, allow direct navigation
     setJoinModalOpen(false)
-    window.location.href = `/game/${tableId}/`
+    router.push(`/game/${tableId}`)
   }
 
   // Quick seat functionality
@@ -467,7 +467,7 @@ export default function LobbyPage() {
       if (result.success && result.data?.tableId) {
         setCreateTableOpen(false)
         // Redirect to the new table
-        window.location.href = `/game/${result.data.tableId}/`
+        router.push(`/game/${result.data.tableId}`)
       } else {
         alert(result.error?.message || result.error || 'Failed to create table')
       }
@@ -481,7 +481,7 @@ export default function LobbyPage() {
   const handleLogout = () => {
     logout() // Clear auth store
     localStorage.removeItem('auth_token') // Clear stored token
-    window.location.href = '/auth/login' // Redirect to login
+    router.push('/auth/login') // Redirect to login
   }
 
   // Table counts by type

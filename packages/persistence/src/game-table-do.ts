@@ -26,6 +26,12 @@ export interface PlayerConnection {
   lastHeartbeat: number
 }
 
+export interface SpectatorInfo {
+  id: string
+  username: string
+  joinedAt: number
+}
+
 export interface GameTablePlayer extends Player {
   // Additional runtime properties for table management
   isFolded: boolean
@@ -42,7 +48,7 @@ export interface GameTableState {
   connections: Map<string, PlayerConnection>
   gameState: GameState | null
   game: GameState | null  // Current active game state (same as gameState for compatibility)
-  spectators: Set<string>
+  spectators: Map<string, SpectatorInfo>
   createdAt: number
   lastActivity: number
   handNumber: number
@@ -84,7 +90,7 @@ export class GameTableDurableObject {
       connections: new Map(),
       gameState: null,
       game: null,
-      spectators: new Set(),
+      spectators: new Map(),
       createdAt: Date.now(),
       lastActivity: Date.now(),
       handNumber: 0
@@ -115,7 +121,7 @@ export class GameTableDurableObject {
           ...savedState,
           players: new Map(savedState.players),
           connections: new Map(), // Connections are not persisted
-          spectators: new Set(savedState.spectators)
+          spectators: new Map(savedState.spectators || [])
         }
         console.log('Loaded saved table state:', this.state.tableId, 'Config:', this.state.config)
       }
@@ -468,6 +474,10 @@ export class GameTableDurableObject {
           await this.handleSpectateTable(websocket, payload)
           break
           
+        case 'leave_spectator':
+          await this.handleLeaveSpectator(websocket, payload)
+          break
+          
         case 'heartbeat':
           await this.handleHeartbeat(websocket, payload)
           break
@@ -497,12 +507,25 @@ export class GameTableDurableObject {
       if (connection.websocket === websocket) {
         connection.isConnected = false
         
-        // Give player 30 seconds to reconnect before removing from game
-        setTimeout(() => {
-          if (!connection.isConnected) {
-            this.removePlayerFromTable(playerId)
-          }
-        }, 30000)
+        // Check if this is a spectator
+        if (this.state.spectators.has(playerId)) {
+          // Remove spectator immediately
+          this.state.spectators.delete(playerId)
+          this.state.connections.delete(playerId)
+          
+          // Broadcast spectator count update
+          await this.broadcast('spectator_count_update', {
+            count: this.state.spectators.size,
+            spectators: Array.from(this.state.spectators.values())
+          })
+        } else if (this.state.players.has(playerId)) {
+          // Give player 30 seconds to reconnect before removing from game
+          setTimeout(() => {
+            if (!connection.isConnected) {
+              this.removePlayerFromTable(playerId)
+            }
+          }, 30000)
+        }
         
         break
       }
@@ -662,8 +685,14 @@ export class GameTableDurableObject {
   private async handleSpectateTable(websocket: WebSocket, payload: any): Promise<void> {
     const { playerId, username } = payload
 
-    this.state.spectators.add(playerId)
+    // Add to spectators map with info
+    this.state.spectators.set(playerId, {
+      id: playerId,
+      username,
+      joinedAt: Date.now()
+    })
     
+    // Also track connection for WebSocket management
     const connection: PlayerConnection = {
       websocket,
       playerId,
@@ -674,12 +703,44 @@ export class GameTableDurableObject {
     
     this.state.connections.set(playerId, connection)
 
+    // Send success with current table state
     this.sendMessage(websocket, {
-      type: 'spectate_success',
-      data: { tableId: this.state.tableId }
+      type: 'spectator_joined',
+      data: {
+        tableId: this.state.tableId,
+        tableState: await this.getTableStateForClient(),
+        spectatorCount: this.state.spectators.size
+      }
     })
 
-    await this.broadcastTableState()
+    // Broadcast spectator count update to all
+    await this.broadcast('spectator_count_update', {
+      count: this.state.spectators.size,
+      spectators: Array.from(this.state.spectators.values())
+    })
+  }
+
+  /**
+   * Handle spectator leaving the table
+   */
+  private async handleLeaveSpectator(websocket: WebSocket, payload: any): Promise<void> {
+    const { playerId } = payload
+    
+    // Remove from spectators
+    this.state.spectators.delete(playerId)
+    this.state.connections.delete(playerId)
+    
+    // Notify spectator they've left
+    this.sendMessage(websocket, {
+      type: 'left_table',
+      data: { tableId: this.state.tableId }
+    })
+    
+    // Broadcast updated spectator count
+    await this.broadcast('spectator_count_update', {
+      count: this.state.spectators.size,
+      spectators: Array.from(this.state.spectators.values())
+    })
   }
 
   /**
@@ -1107,6 +1168,38 @@ export class GameTableDurableObject {
           connection.isConnected = false
         }
       }
+    }
+  }
+
+  /**
+   * Get table state for client consumption
+   */
+  private async getTableStateForClient(): Promise<any> {
+    const gameState = this.state.game ? {
+      phase: this.state.game.phase,
+      currentPlayer: this.state.game.activePlayerId,
+      currentBet: this.state.game.currentBet,
+      pot: this.calculatePot(),
+      communityCards: this.state.game.communityCards || []
+    } : null
+
+    return {
+      tableId: this.state.tableId,
+      config: this.state.config,
+      players: Array.from(this.state.players.values()).map(p => ({
+        id: p.id,
+        username: p.username,
+        position: p.position,
+        chipCount: p.chips,
+        status: p.status,
+        isDealer: p.isDealer,
+        isFolded: p.isFolded,
+        currentBet: p.currentBet
+      })),
+      spectatorCount: this.state.spectators.size,
+      spectators: Array.from(this.state.spectators.values()),
+      gameState,
+      handNumber: this.state.handNumber
     }
   }
 

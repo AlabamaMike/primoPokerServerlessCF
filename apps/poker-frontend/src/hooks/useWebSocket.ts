@@ -166,6 +166,23 @@ export function useGameWebSocket(tableId?: string) {
         // Player successfully joined - the table state will be updated via table_state message
       })
 
+      client.on('spectator_joined', (message) => {
+        console.log('Joined as spectator:', message.data)
+        if (message.data?.tableState) {
+          const state = message.data.tableState
+          gameStore.setGamePhase(state.gameState?.phase || 'waiting')
+          gameStore.setPot(state.gameState?.pot || 0)
+          gameStore.setCommunityCards(state.gameState?.communityCards || [])
+          gameStore.setPlayers(state.players || [])
+          gameStore.setActivePlayer(state.gameState?.currentPlayer)
+        }
+      })
+
+      client.on('spectator_count_update', (message) => {
+        console.log('Spectator count updated:', message.data?.count)
+        gameStore.setSpectatorCount(message.data?.count || 0)
+      })
+
       client.on('hand_started', (message) => {
         console.log('New hand started:', message.data)
         if (message.data) {
@@ -253,12 +270,35 @@ export function useGameWebSocket(tableId?: string) {
     }
   }, [webSocket.client, tableId])
 
+  const joinAsSpectator = useCallback(() => {
+    if (webSocket.client && webSocket.isConnected) {
+      const { user } = useAuthStore.getState()
+      
+      webSocket.client.send('spectate_table', {
+        playerId: user?.id || `guest-${Date.now()}`,
+        username: user?.username || 'Guest'
+      })
+    }
+  }, [webSocket.client])
+
+  const leaveSpectator = useCallback(() => {
+    if (webSocket.client && webSocket.isConnected) {
+      const { user } = useAuthStore.getState()
+      
+      webSocket.client.send('leave_spectator', {
+        playerId: user?.id
+      })
+    }
+  }, [webSocket.client])
+
   return {
     isConnected: isConnected && webSocket.isConnected,
     error: webSocket.error,
     sendPlayerAction,
     sendChatMessage,
-    joinTable
+    joinTable,
+    joinAsSpectator,
+    leaveSpectator
   }
 }
 

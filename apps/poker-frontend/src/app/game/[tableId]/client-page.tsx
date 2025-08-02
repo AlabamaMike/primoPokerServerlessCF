@@ -34,7 +34,7 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   
   const { user, isAuthenticated } = useAuthStore()
   const gameStore = useGameStore()
-  const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable } = useGameWebSocket(tableId)
+  const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable, joinAsSpectator, leaveSpectator } = useGameWebSocket(tableId)
   
   const [showHistory, setShowHistory] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
@@ -44,6 +44,7 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   const [loadingTable, setLoadingTable] = useState(true)
   const [playerSeat, setPlayerSeat] = useState<number | null>(null)
   const [isSpectating, setIsSpectating] = useState(false)
+  const spectatorCount = gameStore.spectatorCount
 
   // Fetch table information on mount
   useEffect(() => {
@@ -86,11 +87,13 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   useEffect(() => {
     gameStore.setConnectionStatus(isConnected ? 'connected' : 'disconnected')
     
-    // If connected and not seated, default to spectator mode
-    if (isConnected && !loadingTable && !playerSeat && tableInfo) {
+    // If connected and not seated, join as spectator
+    if (isConnected && !loadingTable && !playerSeat && tableInfo && !isSpectating) {
+      console.log('Joining as spectator...')
+      joinAsSpectator()
       setIsSpectating(true)
     }
-  }, [isConnected, loadingTable, playerSeat, tableInfo])
+  }, [isConnected, loadingTable, playerSeat, tableInfo, isSpectating, joinAsSpectator])
 
   const handlePlayerAction = (action: string, amount?: number) => {
     if (isConnected && playerSeat !== null) {
@@ -125,7 +128,10 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   }
 
   const handleLeaveTable = () => {
-    // TODO: Implement leave table functionality
+    if (isSpectating) {
+      leaveSpectator()
+    }
+    // TODO: Implement leave table for seated players
     router.push('/lobby')
   }
 
@@ -207,6 +213,13 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
                   {tableInfo.players?.length || 0}/{tableInfo.config.maxPlayers}
                 </span>
               </div>
+              {spectatorCount > 0 && (
+                <div className="text-gray-300">
+                  Spectators: <span className="text-white font-semibold">
+                    {spectatorCount}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           
@@ -265,17 +278,29 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
           
           {/* Spectator Mode */}
           {isSpectating && (
-            <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3d3d3d] text-center">
-              <p className="text-gray-400">You are spectating this table</p>
-              <button
-                onClick={() => {
-                  setIsSpectating(false)
-                  setShowJoinModal(true)
-                }}
-                className="mt-2 px-4 py-2 bg-[#4CAF50] hover:bg-[#45a049] text-white rounded transition-colors"
-              >
-                Join Table
-              </button>
+            <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3d3d3d]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-1">Spectator Mode</h3>
+                  <p className="text-gray-400 text-sm">
+                    Click on any empty seat to join the game
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-gray-400">
+                    {spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'} watching
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsSpectating(false)
+                      setShowJoinModal(true)
+                    }}
+                    className="mt-2 px-4 py-2 bg-[#4CAF50] hover:bg-[#45a049] text-white rounded text-sm transition-colors"
+                  >
+                    Quick Join
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

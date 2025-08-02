@@ -8,7 +8,7 @@ import { PlayerSeat } from "@/components/poker/PlayerSeat"
 import { Button } from "@/components/ui/button"
 import { useGameStore } from "@/stores/game-store"
 import { useAuthStore } from "@/stores/auth-store"
-import { Coins, Users, Clock } from "lucide-react"
+import { Coins, Users, Clock, Eye } from "lucide-react"
 
 interface PokerTableProps {
   className?: string
@@ -57,7 +57,8 @@ export const PokerTable: React.FC<PokerTableProps> = ({
     isConnected: storeIsConnected,
     currentUserId: storeUserId,
     playerAction,
-    multiplayerAction
+    multiplayerAction,
+    spectatorCount
   } = useGameStore()
   
   const { user } = useAuthStore()
@@ -240,6 +241,31 @@ export const PokerTable: React.FC<PokerTableProps> = ({
             </div>
           </div>
         </motion.div>
+      )}
+
+      {/* Spectator Count Indicator */}
+      {spectatorCount > 0 && (
+        <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-white">
+          <div className="flex items-center gap-2">
+            <Eye className="w-4 h-4" />
+            <span className="text-sm">
+              {spectatorCount} {spectatorCount === 1 ? 'spectator' : 'spectators'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Spectator Mode Indicator */}
+      {isSpectating && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600/80 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+          <div className="flex items-center gap-2">
+            <Eye className="w-4 h-4" />
+            <span className="text-sm font-medium">Spectator Mode</span>
+          </div>
+          <div className="text-xs mt-1 text-white/80">
+            Click an empty seat to join the game
+          </div>
+        </div>
       )}
 
       {/* Table Info Panel */}

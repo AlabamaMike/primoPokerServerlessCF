@@ -66,6 +66,10 @@ export interface GameState {
   maxPlayers: number
   currentUserId?: string
   
+  // Spectators
+  spectatorCount: number
+  isSpectating: boolean
+  
   // Showdown & History
   showdownVisible: boolean
   handHistoryVisible: boolean
@@ -88,6 +92,8 @@ export interface GameState {
   setConnectionStatus: (status: GameState['connectionStatus']) => void
   setShowdownVisible: (visible: boolean) => void
   setHandHistoryVisible: (visible: boolean) => void
+  setSpectatorCount: (count: number) => void
+  setSpectatorMode: (isSpectating: boolean) => void
   
   // Game actions
   playerAction: (playerId: string, action: Player['lastAction'], amount?: number) => void
@@ -227,6 +233,10 @@ export const useGameStore = create<GameState>()(
     handHistory: [],
     currentHandNumber: 1,
     currentUserId: '1', // Default for demo
+    
+    // Spectators
+    spectatorCount: 0,
+    isSpectating: false
 
     // WebSocket methods
     connectToTable: async (tableId: string) => {
@@ -309,6 +319,10 @@ export const useGameStore = create<GameState>()(
     setShowdownVisible: (visible) => set({ showdownVisible: visible }),
 
     setHandHistoryVisible: (visible) => set({ handHistoryVisible: visible }),
+    
+    setSpectatorCount: (count) => set({ spectatorCount: count }),
+    
+    setSpectatorMode: (isSpectating) => set({ isSpectating }),
 
     addToHandHistory: (entry) => set((state) => ({ 
       handHistory: [entry, ...state.handHistory].slice(0, 50) // Keep last 50 hands

@@ -44,6 +44,7 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   const [loadingTable, setLoadingTable] = useState(true)
   const [playerSeat, setPlayerSeat] = useState<number | null>(null)
   const [isSpectating, setIsSpectating] = useState(false)
+  const [seatReservations, setSeatReservations] = useState<Map<number, { playerId: string; expiresAt: number }>>(new Map())
   const spectatorCount = gameStore.spectatorCount
 
   // Fetch table information on mount
@@ -265,6 +266,8 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
             isConnected={isConnected}
             isSpectating={isSpectating}
             onSeatClick={handleSeatClick}
+            minBuyIn={tableInfo?.config.minBuyIn}
+            maxBuyIn={tableInfo?.config.maxBuyIn}
           />
           
           {/* Player Controls */}

@@ -32,6 +32,14 @@ export interface SpectatorInfo {
   joinedAt: number
 }
 
+export interface SeatReservation {
+  playerId: string
+  username: string
+  seatIndex: number
+  reservedAt: number
+  expiresAt: number
+}
+
 export interface GameTablePlayer extends Player {
   // Additional runtime properties for table management
   isFolded: boolean
@@ -49,6 +57,7 @@ export interface GameTableState {
   gameState: GameState | null
   game: GameState | null  // Current active game state (same as gameState for compatibility)
   spectators: Map<string, SpectatorInfo>
+  seatReservations: Map<number, SeatReservation>
   createdAt: number
   lastActivity: number
   handNumber: number
@@ -91,6 +100,7 @@ export class GameTableDurableObject {
       gameState: null,
       game: null,
       spectators: new Map(),
+      seatReservations: new Map(),
       createdAt: Date.now(),
       lastActivity: Date.now(),
       handNumber: 0
@@ -121,7 +131,8 @@ export class GameTableDurableObject {
           ...savedState,
           players: new Map(savedState.players),
           connections: new Map(), // Connections are not persisted
-          spectators: new Map(savedState.spectators || [])
+          spectators: new Map(savedState.spectators || []),
+          seatReservations: new Map(savedState.seatReservations || [])
         }
         console.log('Loaded saved table state:', this.state.tableId, 'Config:', this.state.config)
       }
@@ -478,6 +489,10 @@ export class GameTableDurableObject {
           await this.handleLeaveSpectator(websocket, payload)
           break
           
+        case 'reserve_seat':
+          await this.handleReserveSeat(websocket, payload)
+          break
+          
         case 'heartbeat':
           await this.handleHeartbeat(websocket, payload)
           break
@@ -541,7 +556,7 @@ export class GameTableDurableObject {
    * Handle player joining the table
    */
   private async handleJoinTable(websocket: WebSocket, payload: any): Promise<void> {
-    const { playerId, username, chipCount } = payload
+    const { playerId, username, chipCount, seatIndex } = payload
 
     // Validate player can join
     if (this.state.players.size >= this.state.config.maxPlayers) {
@@ -554,6 +569,36 @@ export class GameTableDurableObject {
       return
     }
 
+    // Determine seat - use requested seat if valid, otherwise find next available
+    let assignedSeat = seatIndex
+    
+    // If seat was specified, validate it
+    if (assignedSeat !== undefined && assignedSeat !== null) {
+      // Check if seat is occupied
+      const seatOccupied = Array.from(this.state.players.values()).some(
+        p => p.position.seat === assignedSeat
+      )
+      
+      if (seatOccupied) {
+        this.sendError(websocket, 'Requested seat is already occupied')
+        return
+      }
+      
+      // Clear any reservation for this seat if it belongs to this player
+      const reservation = this.state.seatReservations.get(assignedSeat)
+      if (reservation && reservation.playerId === playerId) {
+        this.state.seatReservations.delete(assignedSeat)
+      }
+    } else {
+      // No seat specified, find next available
+      assignedSeat = this.findNextAvailableSeat()
+    }
+    
+    // Remove player from spectators if they were spectating
+    if (this.state.spectators.has(playerId)) {
+      this.state.spectators.delete(playerId)
+    }
+    
     // Add player to table
     const player: GameTablePlayer = {
       id: playerId,
@@ -565,7 +610,7 @@ export class GameTableDurableObject {
       isDealer: false,
       timeBank: this.state.config.timeBank,
       position: {
-        seat: this.findNextAvailableSeat(),
+        seat: assignedSeat,
         isButton: false,
         isSmallBlind: false,
         isBigBlind: false
@@ -750,6 +795,84 @@ export class GameTableDurableObject {
         spectators: Array.from(this.state.spectators.values())
       }
     })
+  }
+
+  /**
+   * Handle seat reservation request
+   */
+  private async handleReserveSeat(websocket: WebSocket, payload: any): Promise<void> {
+    const { playerId, username, seatIndex } = payload
+    
+    // Check if seat is already occupied
+    const seatOccupied = Array.from(this.state.players.values()).some(
+      player => player.position === seatIndex
+    )
+    
+    if (seatOccupied) {
+      return this.send(websocket, 'seat_unavailable', {
+        seatIndex,
+        reason: 'Seat is already occupied'
+      })
+    }
+    
+    // Check if seat is already reserved
+    const existingReservation = this.state.seatReservations.get(seatIndex)
+    if (existingReservation && existingReservation.expiresAt > Date.now()) {
+      return this.send(websocket, 'seat_unavailable', {
+        seatIndex,
+        reason: 'Seat is reserved by another player'
+      })
+    }
+    
+    // Remove any existing reservations by this player
+    for (const [seat, reservation] of this.state.seatReservations.entries()) {
+      if (reservation.playerId === playerId) {
+        this.state.seatReservations.delete(seat)
+      }
+    }
+    
+    // Create new reservation
+    const reservation: SeatReservation = {
+      playerId,
+      username,
+      seatIndex,
+      reservedAt: Date.now(),
+      expiresAt: Date.now() + 60000 // 60 second reservation
+    }
+    
+    this.state.seatReservations.set(seatIndex, reservation)
+    
+    // Send confirmation to player
+    this.send(websocket, 'seat_reserved', {
+      seatIndex,
+      reservation,
+      expiresIn: 60
+    })
+    
+    // Broadcast reservation to all
+    await this.broadcastMessage({
+      type: 'seat_reservation_update',
+      data: {
+        seatIndex,
+        reserved: true,
+        playerId,
+        expiresAt: reservation.expiresAt
+      }
+    })
+    
+    // Set timer to expire reservation
+    setTimeout(() => {
+      const currentReservation = this.state.seatReservations.get(seatIndex)
+      if (currentReservation && currentReservation.playerId === playerId) {
+        this.state.seatReservations.delete(seatIndex)
+        
+        // Broadcast expiration
+        this.broadcastMessage({
+          type: 'seat_reservation_expired',
+          data: { seatIndex }
+        })
+      }
+    }, 60000)
   }
 
   /**

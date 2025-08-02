@@ -50,7 +50,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({
     smallBlind,
     bigBlind,
     isMultiplayer,
-    isConnected,
+    isConnected: storeIsConnected,
     currentUserId: storeUserId,
     playerAction,
     multiplayerAction
@@ -58,7 +58,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({
   
   const { user } = useAuthStore()
   const currentUserId = propUserId || storeUserId || user?.id || '1' // Use prop if provided
-  const isConnected = propIsConnected !== undefined ? propIsConnected : isMultiplayer
+  const isConnected = propIsConnected !== undefined ? propIsConnected : storeIsConnected
 
   // Create array of 9 seats, some may be empty
   const seats = Array(9).fill(null).map((_, index) => {

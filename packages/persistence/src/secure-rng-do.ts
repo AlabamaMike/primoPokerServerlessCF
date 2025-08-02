@@ -16,7 +16,16 @@ import {
   DeckCommitment, 
   DeckReveal 
 } from '@primo-poker/security';
-import { RNGAuditStorage, SecurityAlert } from '@primo-poker/api/src/rng-audit-storage';
+// Import types only to avoid circular dependency
+export interface SecurityAlert {
+  id: string;
+  tableId: string;
+  timestamp: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  type: string;
+  description: string;
+  details: any;
+}
 
 export interface RNGRequest {
   type: 'shuffle' | 'random_int' | 'random_bytes' | 'commit_deck' | 'reveal_deck' | 'get_status';
@@ -69,7 +78,7 @@ export class SecureRNGDurableObject {
   private tableId: string;
   private storedState?: StoredState;
   private initialized = false;
-  private auditStorage: RNGAuditStorage | null = null;
+  private auditStorageAvailable = false;
   private pendingAuditLogs: AuditLog[] = [];
   private lastAuditFlush: number = Date.now();
 
@@ -84,10 +93,8 @@ export class SecureRNGDurableObject {
     this.env = env;
     this.tableId = ''; // Will be set on first request
     
-    // Initialize audit storage if R2 bucket is available
-    if (env.AUDIT_BUCKET) {
-      this.auditStorage = new RNGAuditStorage(env.AUDIT_BUCKET);
-    }
+    // Check if audit storage is available
+    this.auditStorageAvailable = !!env.AUDIT_BUCKET;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -129,24 +136,6 @@ export class SecureRNGDurableObject {
     }
   }
 
-  async alarm(): Promise<void> {
-    // This runs periodically for maintenance
-    try {
-      // Flush any pending audit logs
-      await this.flushAuditLogs(true);
-      
-      // Clean up old audit logs from R2
-      if (this.auditStorage) {
-        const deletedCount = await this.auditStorage.cleanupOldLogs();
-        console.log(`Cleaned up ${deletedCount} old audit logs from R2`);
-      }
-      
-      // Schedule next alarm
-      await this.state.storage.setAlarm(new Date(Date.now() + 24 * 60 * 60 * 1000)); // Daily
-    } catch (error) {
-      console.error('Alarm handler error:', error);
-    }
-  }
 
   private async initialize(tableId: string): Promise<void> {
     this.tableId = tableId;
@@ -239,18 +228,19 @@ export class SecureRNGDurableObject {
       // Perform secure shuffle
       const shuffleResult = await SecureShuffle.shuffle(deck as Card[], true);
       
-      // Create audit log
+      // Create audit log - only store hashes of sensitive data
       const auditLog = await this.createAuditLog(
         'shuffle',
         request.tableId,
         request.gameId,
         shuffleResult.shuffleProof.entropyUsed,
-        JSON.stringify(deck),
-        JSON.stringify(shuffleResult.shuffledArray),
+        await CryptoHelpers.sha256Hex(JSON.stringify(deck)),
+        shuffleResult.shuffleProof.shuffledHash,
         {
           originalSize: deck.length,
           algorithm: shuffleResult.shuffleProof.algorithm,
-          swaps: shuffleResult.shuffleProof.swapSequence?.length || 0
+          swaps: shuffleResult.shuffleProof.swapSequence?.length || 0,
+          deckIntegrity: await this.verifyDeckIntegrity(deck)
         }
       );
 
@@ -294,8 +284,8 @@ export class SecureRNGDurableObject {
         request.tableId,
         request.gameId,
         entropyUsed,
-        JSON.stringify({ min, max }),
-        JSON.stringify(randomValue),
+        await CryptoHelpers.sha256Hex(JSON.stringify({ min, max })),
+        await CryptoHelpers.sha256Hex(randomValue.toString()),
         { range: max - min + 1 }
       );
 
@@ -335,7 +325,7 @@ export class SecureRNGDurableObject {
         request.tableId,
         request.gameId,
         length,
-        JSON.stringify({ length }),
+        await CryptoHelpers.sha256Hex(JSON.stringify({ length })),
         await CryptoHelpers.sha256Hex(randomBytes),
         { bytesGenerated: length }
       );
@@ -383,11 +373,12 @@ export class SecureRNGDurableObject {
         request.tableId,
         gameId,
         32, // nonce size
-        JSON.stringify(deck),
+        await CryptoHelpers.sha256Hex(JSON.stringify(deck)),
         commitment.commitmentHash,
         {
           deckSize: deck.length,
-          commitmentVersion: commitment.version
+          commitmentVersion: commitment.version,
+          deckIntegrity: await this.verifyDeckIntegrity(deck)
         }
       );
 
@@ -485,8 +476,8 @@ export class SecureRNGDurableObject {
     tableId: string,
     gameId: string | undefined,
     entropyUsed: number,
-    inputData: string,
-    outputData: string,
+    inputHash: string,  // Now expects hash instead of raw data
+    outputHash: string, // Now expects hash instead of raw data
     metadata?: Record<string, any>
   ): Promise<AuditLog> {
     const auditLog: AuditLog = {
@@ -495,8 +486,8 @@ export class SecureRNGDurableObject {
       tableId,
       ...(gameId !== undefined && { gameId }),
       entropyUsed,
-      inputHash: await CryptoHelpers.sha256Hex(inputData),
-      outputHash: await CryptoHelpers.sha256Hex(outputData),
+      inputHash,  // Already hashed
+      outputHash, // Already hashed
       ...(metadata !== undefined && { metadata })
     };
 
@@ -574,22 +565,45 @@ export class SecureRNGDurableObject {
   }
   
   private async flushAuditLogs(force: boolean = false): Promise<void> {
-    if (!this.auditStorage || (this.pendingAuditLogs.length === 0 && !force)) {
+    if (!this.auditStorageAvailable || (this.pendingAuditLogs.length === 0 && !force)) {
       return;
     }
     
     try {
-      // Store the batch
-      const batchId = await this.auditStorage.storeBatch(this.tableId, this.pendingAuditLogs);
+      // Store audit logs directly to R2
+      const batchId = `${Date.now()}-${crypto.randomUUID()}`;
+      const batchKey = `audit-batch/${this.tableId}/${batchId}.json`;
+      
+      const batch = {
+        tableId: this.tableId,
+        batchId,
+        timestamp: Date.now(),
+        logs: this.pendingAuditLogs,
+        summary: {
+          operationCount: this.pendingAuditLogs.length,
+          totalEntropyUsed: this.pendingAuditLogs.reduce((sum, log) => sum + (log.entropyUsed || 0), 0),
+          operationTypes: this.pendingAuditLogs.reduce((acc, log) => {
+            acc[log.operation] = (acc[log.operation] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+          timeRange: {
+            start: Math.min(...this.pendingAuditLogs.map(l => l.timestamp)),
+            end: Math.max(...this.pendingAuditLogs.map(l => l.timestamp))
+          }
+        }
+      };
+      
+      await this.env.AUDIT_BUCKET.put(batchKey, JSON.stringify(batch));
       
       // Clear pending logs
+      const logCount = this.pendingAuditLogs.length;
       this.pendingAuditLogs = [];
       this.lastAuditFlush = Date.now();
       
       // Check for suspicious patterns
       await this.checkForSuspiciousActivity();
       
-      console.log(`Flushed ${this.pendingAuditLogs.length} audit logs to R2, batch: ${batchId}`);
+      console.log(`Flushed ${logCount} audit logs to R2, batch: ${batchId}`);
     } catch (error) {
       console.error('Failed to flush audit logs to R2:', error);
       // Keep logs in memory for retry
@@ -597,13 +611,34 @@ export class SecureRNGDurableObject {
   }
   
   private async checkForSuspiciousActivity(): Promise<void> {
-    if (!this.auditStorage) return;
+    if (!this.auditStorageAvailable) return;
     
-    // Get recent analytics
-    const analytics = await this.auditStorage.generateAnalytics(this.tableId, 1);
+    // Simple suspicious pattern detection based on recent logs
+    const recentLogs = this.storedState!.auditLogs.slice(-100);
+    const suspiciousPatterns: string[] = [];
     
-    // Check for suspicious patterns
-    if (analytics.suspiciousPatterns.length > 0) {
+    // Check for excessive operations in short time
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+    const recentOpsCount = recentLogs.filter(log => log.timestamp > oneMinuteAgo).length;
+    
+    if (recentOpsCount > 50) {
+      suspiciousPatterns.push(`Excessive operations (${recentOpsCount}) in last minute`);
+    }
+    
+    // Check for repeated operations
+    const opCounts = recentLogs.reduce((acc, log) => {
+      acc[log.operation] = (acc[log.operation] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    for (const [op, count] of Object.entries(opCounts)) {
+      if (count > 30) {
+        suspiciousPatterns.push(`Repeated ${op} operations (${count} times)`);
+      }
+    }
+    
+    if (suspiciousPatterns.length > 0) {
       const alert: SecurityAlert = {
         id: crypto.randomUUID(),
         tableId: this.tableId,
@@ -612,13 +647,15 @@ export class SecureRNGDurableObject {
         type: 'suspicious_pattern',
         description: 'Suspicious RNG usage pattern detected',
         details: {
-          patterns: analytics.suspiciousPatterns,
-          recentOperations: analytics.totalOperations,
-          entropyUsed: analytics.totalEntropyUsed
+          patterns: suspiciousPatterns,
+          recentOperations: recentLogs.length,
+          entropyUsed: recentLogs.reduce((sum, log) => sum + (log.entropyUsed || 0), 0)
         }
       };
       
-      await this.auditStorage.storeSecurityAlert(alert);
+      // Store security alert to R2
+      const alertKey = `security-alert/${this.tableId}/${alert.id}.json`;
+      await this.env.AUDIT_BUCKET.put(alertKey, JSON.stringify(alert));
     }
   }
 
@@ -643,11 +680,24 @@ export class SecureRNGDurableObject {
     };
   }
 
+  private async verifyDeckIntegrity(deck: any[]): Promise<string> {
+    // Create a hash representing deck integrity without exposing card values
+    const deckSignature = {
+      size: deck.length,
+      uniqueCards: new Set(deck.map(c => `${c.suit}:${c.rank}`)).size,
+      checksum: deck.reduce((sum, card) => sum + card.suit.charCodeAt(0) + card.rank.charCodeAt(0), 0)
+    };
+    return await CryptoHelpers.sha256Hex(JSON.stringify(deckSignature));
+  }
+
   // Cleanup method for alarm-based maintenance
   async alarm(): Promise<void> {
     if (!this.initialized || !this.storedState) return;
 
     try {
+      // Flush any pending audit logs
+      await this.flushAuditLogs(true);
+      
       // Refresh entropy
       this.storedState.randomState = await CryptoHelpers.refreshRandomState(
         this.storedState.randomState,

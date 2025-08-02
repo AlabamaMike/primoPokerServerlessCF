@@ -6,7 +6,7 @@
  */
 
 import { Card } from '@primo-poker/shared';
-import { DeckCommitment } from '@primo-poker/security';
+import { DeckCommitment, AuthenticationManager, TokenPayload } from '@primo-poker/security';
 
 export interface RNGApiRequest {
   tableId: string;
@@ -76,8 +76,20 @@ export class RNGApiHandler {
         return this.createErrorResponse(401, authResult.error || 'Authentication failed');
       }
 
+      // Check table permissions
+      const hasPermission = await this.checkTablePermission(
+        authResult.userId!,
+        apiRequest.tableId,
+        apiRequest.operation,
+        authResult.roles || []
+      );
+
+      if (!hasPermission) {
+        return this.createErrorResponse(403, 'Insufficient permissions for this table');
+      }
+
       // Rate limiting
-      const rateLimitResult = await this.checkRateLimit(apiRequest.tableId);
+      const rateLimitResult = await this.checkRateLimit(apiRequest.tableId, authResult.userId!);
       if (!rateLimitResult.allowed) {
         return this.createErrorResponse(429, 'Rate limit exceeded');
       }
@@ -409,7 +421,8 @@ export class RNGApiHandler {
     }
     
     try {
-      const auditStorage = new (await import('./rng-audit-storage')).RNGAuditStorage(this.env.AUDIT_BUCKET);
+      const { RNGAuditStorage } = await import('./rng-audit-storage');
+      const auditStorage = new RNGAuditStorage(this.env.AUDIT_BUCKET);
       const logs = await auditStorage.getAuditLogs(
         apiRequest.tableId,
         startTime,
@@ -440,7 +453,8 @@ export class RNGApiHandler {
     }
     
     try {
-      const auditStorage = new (await import('./rng-audit-storage')).RNGAuditStorage(this.env.AUDIT_BUCKET);
+      const { RNGAuditStorage } = await import('./rng-audit-storage');
+      const auditStorage = new RNGAuditStorage(this.env.AUDIT_BUCKET);
       const analytics = await auditStorage.generateAnalytics(
         apiRequest.tableId,
         days || 7
@@ -473,7 +487,8 @@ export class RNGApiHandler {
     }
     
     try {
-      const auditStorage = new (await import('./rng-audit-storage')).RNGAuditStorage(this.env.AUDIT_BUCKET);
+      const { RNGAuditStorage } = await import('./rng-audit-storage');
+      const auditStorage = new RNGAuditStorage(this.env.AUDIT_BUCKET);
       const exportKey = await auditStorage.exportForCompliance(
         apiRequest.tableId,
         new Date(startDate),
@@ -526,48 +541,132 @@ export class RNGApiHandler {
    */
   private async authenticateRequest(apiRequest: RNGApiRequest): Promise<{
     success: boolean;
+    userId?: string;
+    roles?: string[];
     error?: string;
   }> {
-    // For demo/development, allow unauthenticated requests to specific tables
-    if (apiRequest.tableId.startsWith('demo-')) {
-      return { success: true };
-    }
-
     // Check authentication data
-    if (!apiRequest.authentication?.token || !apiRequest.authentication?.playerId) {
-      return { success: false, error: 'Missing authentication credentials' };
+    if (!apiRequest.authentication?.token) {
+      return { success: false, error: 'Missing authentication token' };
     }
 
-    // Validate token (integrate with existing auth system)
+    // Initialize authentication manager
+    if (!this.env.JWT_SECRET) {
+      return { success: false, error: 'Authentication not configured' };
+    }
+
+    const authManager = new AuthenticationManager(this.env.JWT_SECRET);
+
+    // Verify JWT token
     try {
-      // Simple token validation for now
-      const token = apiRequest.authentication.token;
-      if (token.startsWith('demo-token-') || token.length > 20) {
-        return { success: true };
-      }
+      const result = await authManager.verifyAccessToken(apiRequest.authentication.token);
       
-      return { success: false, error: 'Invalid token' };
-    } catch {
+      if (!result.valid || !result.payload) {
+        return { success: false, error: result.error || 'Invalid token' };
+      }
+
+      // Verify player ID matches token (if provided)
+      if (apiRequest.authentication.playerId && 
+          apiRequest.authentication.playerId !== result.payload.userId) {
+        return { success: false, error: 'Player ID mismatch' };
+      }
+
+      return { 
+        success: true, 
+        userId: result.payload.userId,
+        roles: result.payload.roles 
+      };
+    } catch (error) {
       return { success: false, error: 'Token validation failed' };
     }
   }
 
   /**
+   * Checks if user has permission to perform RNG operations on table
+   */
+  private async checkTablePermission(
+    userId: string, 
+    tableId: string, 
+    operation: string,
+    roles: string[]
+  ): Promise<boolean> {
+    // Admin role has access to all tables
+    if (roles.includes('admin')) {
+      return true;
+    }
+
+    // For audit/analytics operations, require admin role
+    if (['get_audit_logs', 'get_analytics', 'export_compliance'].includes(operation)) {
+      return false;
+    }
+
+    // Check if user is a player at the table
+    try {
+      const tableStub = this.env.GAME_TABLE_DO.idFromName(tableId);
+      const stub = this.env.GAME_TABLE_DO.get(tableStub);
+      
+      const response = await stub.fetch(new Request('https://dummy.com/check-player', {
+        method: 'POST',
+        body: JSON.stringify({ playerId: userId })
+      }));
+
+      if (response.ok) {
+        const result = await response.json() as { isPlayer: boolean };
+        return result.isPlayer;
+      }
+    } catch (error) {
+      console.error('Permission check failed:', error);
+    }
+
+    return false;
+  }
+
+  /**
    * Checks rate limiting for table
    */
-  private async checkRateLimit(tableId: string): Promise<{
+  private async checkRateLimit(tableId: string, userId: string): Promise<{
     allowed: boolean;
     remainingRequests?: number;
   }> {
-    // Simple in-memory rate limiting (should use Durable Objects for production)
-    const now = Date.now();
-    const windowStart = now - RNGApiHandler.RATE_LIMIT_WINDOW;
+    if (!this.env.RATE_LIMIT_DO) {
+      // If rate limiting DO is not configured, allow the request
+      console.warn('Rate limiting Durable Object not configured');
+      return { allowed: true, remainingRequests: RNGApiHandler.RATE_LIMIT_MAX };
+    }
 
-    // For now, allow all requests (implement proper rate limiting in production)
-    return {
-      allowed: true,
-      remainingRequests: RNGApiHandler.RATE_LIMIT_MAX
-    };
+    try {
+      // Create unique key for user+table combination
+      const rateLimitKey = `rng:${tableId}:${userId}`;
+      const rateLimitId = this.env.RATE_LIMIT_DO.idFromName(rateLimitKey);
+      const stub = this.env.RATE_LIMIT_DO.get(rateLimitId);
+
+      const response = await stub.fetch(new Request('https://dummy.com', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: rateLimitKey,
+          limit: RNGApiHandler.RATE_LIMIT_MAX,
+          window: RNGApiHandler.RATE_LIMIT_WINDOW
+        })
+      }));
+
+      if (response.ok) {
+        const result = await response.json() as {
+          allowed: boolean;
+          remaining: number;
+          resetAt: number;
+        };
+        
+        return {
+          allowed: result.allowed,
+          remainingRequests: result.remaining
+        };
+      }
+    } catch (error) {
+      console.error('Rate limit check failed:', error);
+    }
+
+    // Fail open - allow request if rate limiting fails
+    return { allowed: true, remainingRequests: 0 };
   }
 
   /**
@@ -633,17 +732,33 @@ export class RNGApiHandler {
   }
 
   /**
+   * Get security headers
+   */
+  public getSecurityHeaders(): Record<string, string> {
+    const allowedOrigins = this.env.ALLOWED_ORIGINS || 'https://localhost:3000';
+    
+    return {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': allowedOrigins,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+      'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+      'Referrer-Policy': 'strict-origin-when-cross-origin'
+    };
+  }
+
+  /**
    * Creates success response
    */
   private createSuccessResponse(data: RNGApiResponse): Response {
     return new Response(JSON.stringify(data), {
       status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      }
+      headers: this.getSecurityHeaders()
     });
   }
 
@@ -651,21 +766,37 @@ export class RNGApiHandler {
    * Creates error response
    */
   private createErrorResponse(status: number, error: string, metadata?: any): Response {
+    // Sanitize error messages for production
+    const sanitizedError = this.env.ENVIRONMENT === 'production' 
+      ? this.sanitizeErrorMessage(error)
+      : error;
+
     const response: RNGApiResponse = {
       success: false,
-      error,
+      error: sanitizedError,
       metadata
     };
 
     return new Response(JSON.stringify(response), {
       status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      }
+      headers: this.getSecurityHeaders()
     });
+  }
+
+  /**
+   * Sanitizes error messages for production
+   */
+  private sanitizeErrorMessage(error: string): string {
+    // Map internal errors to user-friendly messages
+    const errorMappings: Record<string, string> = {
+      'Authentication not configured': 'Service temporarily unavailable',
+      'Rate limit Durable Object not configured': 'Service temporarily unavailable',
+      'Token validation failed': 'Authentication failed',
+      'Invalid token': 'Authentication failed',
+      'Permission check failed': 'Access denied'
+    };
+
+    return errorMappings[error] || 'An error occurred processing your request';
   }
 }
 
@@ -690,11 +821,7 @@ export function createRNGApiRouter(env: any) {
       // Handle CORS preflight
       if (request.method === 'OPTIONS') {
         return new Response(null, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-          }
+          headers: handler.getSecurityHeaders()
         });
       }
 

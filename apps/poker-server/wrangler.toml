@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ENVIRONMENT = "development"
 JWT_SECRET = "your-super-secret-jwt-key-for-development-only-change-in-production"
+ALLOWED_ORIGINS = "https://localhost:3000"
 
 # D1 Database
 [[d1_databases]]
@@ -27,6 +28,12 @@ binding = "HAND_HISTORY_BUCKET"
 bucket_name = "primo-poker-hand-history"
 preview_bucket_name = "primo-poker-hand-history-preview"
 
+# R2 Bucket for RNG audit logs
+[[r2_buckets]]
+binding = "AUDIT_BUCKET"
+bucket_name = "primo-poker-rng-audit"
+preview_bucket_name = "primo-poker-rng-audit-preview"
+
 # Durable Objects
 [[durable_objects.bindings]]
 name = "TABLE_OBJECTS"
@@ -39,6 +46,24 @@ name = "GAME_TABLES"
 class_name = "GameTableDurableObject"
 script_name = "primo-poker-server"
 
+# Same DO with different binding name for permission checks
+[[durable_objects.bindings]]
+name = "GAME_TABLE_DO"
+class_name = "GameTableDurableObject"
+script_name = "primo-poker-server"
+
+# Secure RNG Durable Object
+[[durable_objects.bindings]]
+name = "SECURE_RNG_DO"
+class_name = "SecureRNGDurableObject"
+script_name = "primo-poker-server"
+
+# Rate Limiting Durable Object
+[[durable_objects.bindings]]
+name = "RATE_LIMIT_DO"
+class_name = "RateLimitDurableObject"
+script_name = "primo-poker-server"
+
 [[migrations]]
 tag = "v1"
 new_classes = ["TableDurableObject"]
@@ -46,6 +71,10 @@ new_classes = ["TableDurableObject"]
 [[migrations]]
 tag = "v2"
 new_classes = ["GameTableDurableObject"]
+
+[[migrations]]
+tag = "v3"
+new_classes = ["SecureRNGDurableObject", "RateLimitDurableObject"]
 
 # Queue for tournament processing
 [[queues.producers]]

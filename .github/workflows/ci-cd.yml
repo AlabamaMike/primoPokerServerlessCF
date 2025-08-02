@@ -303,7 +303,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         run: |
           cd apps/poker-frontend
-          npx wrangler pages deploy out --project-name=primo-poker-frontend --compatibility-date=2024-08-01
+          npx wrangler pages deploy out --project-name=primo-poker-frontend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

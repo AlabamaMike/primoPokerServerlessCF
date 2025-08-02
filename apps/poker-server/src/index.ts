@@ -1,3 +1,4 @@
+// Version: 1.0.1 - Security fixes applied
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
 

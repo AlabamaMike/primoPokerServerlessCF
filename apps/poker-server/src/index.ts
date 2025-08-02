@@ -136,18 +136,33 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     return new Response('Missing tableId parameter', { status: 400 });
   }
 
-  // Validate JWT token
+  // Validate JWT token or handle demo tokens
+  let decodedPayload: any;
+  
   try {
-    // Simple JWT validation (you may want to use a proper JWT library)
-    const [header, payload, signature] = token.split('.');
-    if (!header || !payload || !signature) {
-      return new Response('Invalid token format', { status: 401 });
-    }
+    // Check if this is a demo token
+    if (token.startsWith('demo-token-')) {
+      // Handle demo tokens for development/testing
+      const timestamp = token.split('-')[2] || Date.now().toString();
+      decodedPayload = {
+        sub: `demo-user-${timestamp}`,
+        username: `DemoPlayer${timestamp.slice(-4)}`,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600 // 1 hour expiry
+      };
+      console.log('Demo token processed:', decodedPayload);
+    } else {
+      // Handle real JWT tokens
+      const [header, payload, signature] = token.split('.');
+      if (!header || !payload || !signature) {
+        return new Response('Invalid token format', { status: 401 });
+      }
 
-    // Decode payload (basic validation)
-    const decodedPayload = JSON.parse(atob(payload));
-    if (!decodedPayload.sub || !decodedPayload.username) {
-      return new Response('Invalid token payload', { status: 401 });
+      // Decode payload (basic validation)
+      decodedPayload = JSON.parse(atob(payload));
+      if (!decodedPayload.sub || !decodedPayload.username) {
+        return new Response('Invalid token payload', { status: 401 });
+      }
     }
 
     // Create WebSocket pair

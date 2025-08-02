@@ -27,7 +27,7 @@ export function useWebSocketConnection() {
 
     // Get token from auth store or localStorage
     let authToken = token
-    let authUser = user
+    const authUser = user
     
     if (!authToken) {
       // Try to get token from localStorage as fallback

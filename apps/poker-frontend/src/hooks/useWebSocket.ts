@@ -25,19 +25,25 @@ export function useWebSocketConnection() {
       return null
     }
 
-    // For demo purposes, create a fallback user if not authenticated
-    let demoToken = token
-    let demoUser = user
+    // Get token from auth store or localStorage
+    let authToken = token
+    let authUser = user
     
-    if (!token || !user) {
-      console.log('No authentication found, creating demo user for WebSocket connection')
-      demoToken = 'demo-token-' + Date.now()
-      demoUser = {
-        id: 'demo-user-' + Date.now(),
-        username: 'Demo Player',
-        email: 'demo@example.com',
-        chipCount: 10000
+    if (!authToken) {
+      // Try to get token from localStorage as fallback
+      const storedToken = localStorage.getItem('auth_token')
+      if (storedToken) {
+        console.log('Using token from localStorage for WebSocket')
+        authToken = storedToken
       }
+    }
+    
+    if (!authToken || !authUser) {
+      console.warn('No authentication found for WebSocket connection')
+      // For now, we'll try to connect anyway and let the backend handle it
+      // In production, you might want to redirect to login
+      setError('Authentication required for multiplayer')
+      return null
     }
 
     try {
@@ -48,8 +54,8 @@ export function useWebSocketConnection() {
 
       console.log('Using singleton gameWebSocket instance')
       
-      // Ensure token and table ID are set (use demo token if needed)
-      gameWebSocket.setToken(demoToken)
+      // Ensure token and table ID are set
+      gameWebSocket.setToken(authToken)
       gameWebSocket.setTableId(tableId)
 
       await gameWebSocket.connect()

@@ -38,6 +38,14 @@ export class WebSocketClient {
           ? `${this.url}?token=${this.token}&tableId=${this.tableId}`
           : this.url
 
+        console.log('WebSocket connecting to:', wsUrl)
+        console.log('WebSocket params:', { 
+          baseUrl: this.url,
+          hasToken: !!this.token,
+          tokenPrefix: this.token?.substring(0, 20),
+          tableId: this.tableId 
+        })
+        
         this.ws = new WebSocket(wsUrl)
 
         this.ws.onopen = () => {
@@ -79,6 +87,12 @@ export class WebSocketClient {
 
         this.ws.onerror = (error) => {
           console.error('WebSocket error:', error)
+          console.error('WebSocket connection details:', {
+            url: wsUrl,
+            readyState: this.ws?.readyState,
+            token: this.token ? 'present' : 'missing',
+            tableId: this.tableId
+          })
           reject(error)
         }
 

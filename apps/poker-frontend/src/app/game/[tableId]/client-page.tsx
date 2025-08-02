@@ -50,10 +50,14 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
     const fetchTableInfo = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
+        console.log('Fetching table info for:', tableId, 'from:', `${apiUrl}/api/tables/${tableId}`)
+        
         const response = await fetch(`${apiUrl}/api/tables/${tableId}`)
         
         if (response.ok) {
           const result = await response.json()
+          console.log('Table info response:', result)
+          
           if (result.success && result.data) {
             setTableInfo(result.data)
             

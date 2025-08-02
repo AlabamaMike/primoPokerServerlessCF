@@ -1,0 +1,16 @@
+{
+  "timestamp": "2025-08-02T06:12:05.360Z",
+  "credentials": {
+    "email": "smoketest1754115054396@example.com",
+    "password": "Test1754115054396!",
+    "username": "smoketest1754115054396"
+  },
+  "tests": {
+    "registration": true,
+    "login": false,
+    "lobby": false,
+    "tableCreation": false,
+    "tableJoin": true
+  },
+  "finalUrl": "https://6e77d385.primo-poker-frontend.pages.dev/demo/table/"
+}

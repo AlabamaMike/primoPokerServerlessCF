@@ -46,6 +46,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250731.0",
     "@jest/globals": "^30.0.0",
+    "@playwright/test": "^1.54.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.11.0",
     "@types/ws": "^8.18.1",

@@ -10,9 +10,7 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {
-      "actualWorkers": 1
-    },
+    "metadata": {},
     "preserveOutput": "always",
     "reporter": [
       [
@@ -42,9 +40,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "chromium",
         "name": "chromium",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -58,9 +54,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "firefox",
         "name": "firefox",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -74,9 +68,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "webkit",
         "name": "webkit",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -90,9 +82,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "Mobile Chrome",
         "name": "Mobile Chrome",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -106,9 +96,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "Mobile Safari",
         "name": "Mobile Safari",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -122,9 +110,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "Microsoft Edge",
         "name": "Microsoft Edge",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -138,9 +124,7 @@
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "Google Chrome",
         "name": "Google Chrome",
         "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/tests",
@@ -158,114 +142,19 @@
     "workers": 1,
     "webServer": null
   },
-  "suites": [
+  "suites": [],
+  "errors": [
     {
-      "title": "live-integration-test.spec.ts",
-      "file": "live-integration-test.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "Live Backend Integration",
-          "file": "live-integration-test.spec.ts",
-          "line": 3,
-          "column": 6,
-          "specs": [
-            {
-              "title": "should connect to live backend and test API endpoints",
-              "ok": false,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "timedOut",
-                      "duration": 31499,
-                      "error": {
-                        "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m",
-                        "stack": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
-                      },
-                      "errors": [
-                        {
-                          "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
-                        },
-                        {
-                          "location": {
-                            "file": "/workspaces/primoPokerServerlessCF/tests/e2e/tests/live-integration-test.spec.ts",
-                            "column": 18,
-                            "line": 54
-                          },
-                          "message": "Error: page.fill: Test timeout of 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"email\"]')\u001b[22m\n\n\n  52 |       const testEmail = `test${timestamp}@example.com`;\n  53 |       \n> 54 |       await page.fill('input[name=\"email\"]', testEmail);\n     |                  ^\n  55 |       await page.fill('input[name=\"username\"]', `testuser${timestamp}`);\n  56 |       await page.fill('input[name=\"password\"]', 'testpass123');\n  57 |       \n    at /workspaces/primoPokerServerlessCF/tests/e2e/tests/live-integration-test.spec.ts:54:18"
-                        }
-                      ],
-                      "stdout": [
-                        {
-                          "text": "=== TESTING LIVE BACKEND INTEGRATION ===\n"
-                        },
-                        {
-                          "text": "✅ Step 1: Lobby loaded\n"
-                        },
-                        {
-                          "text": "Connection Status: {\n  hasLiveConnection: \u001b[33mtrue\u001b[39m,\n  hasDemo: \u001b[33mtrue\u001b[39m,\n  contentPreview: \u001b[32m'Poker LobbyFind your perfect table and start playing!Live Updates ActiveDemo Mode - Login for full features🔍All GamesCash GameTournamentSit & GoSort by PlayersSort by StakesSort by Activity➕ Create T'\u001b[39m\n}\n"
-                        },
-                        {
-                          "text": "✅ Live backend connection established\n"
-                        },
-                        {
-                          "text": "✅ Registration page loaded correctly\n"
-                        }
-                      ],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-08-01T22:58:52.781Z",
-                      "annotations": [],
-                      "attachments": [
-                        {
-                          "name": "screenshot",
-                          "contentType": "image/png",
-                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/test-failed-1.png"
-                        },
-                        {
-                          "name": "video",
-                          "contentType": "video/webm",
-                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/video.webm"
-                        },
-                        {
-                          "name": "error-context",
-                          "contentType": "text/markdown",
-                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/live-integration-test-Live-d4457-kend-and-test-API-endpoints-chromium/error-context.md"
-                        }
-                      ]
-                    }
-                  ],
-                  "status": "unexpected"
-                }
-              ],
-              "id": "d345153f510692a53042-d339254c359a43aa6f83",
-              "file": "live-integration-test.spec.ts",
-              "line": 4,
-              "column": 7
-            }
-          ]
-        }
-      ]
+      "message": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments.",
+      "stack": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments."
     }
   ],
-  "errors": [],
   "stats": {
-    "startTime": "2025-08-01T22:58:51.968Z",
-    "duration": 32502.971999999998,
+    "startTime": "2025-08-02T05:48:55.574Z",
+    "duration": 3975.745,
     "expected": 0,
     "skipped": 0,
-    "unexpected": 1,
+    "unexpected": 0,
     "flaky": 0
   }
 }

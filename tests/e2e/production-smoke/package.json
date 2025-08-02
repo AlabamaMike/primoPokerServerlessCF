@@ -1,0 +1,22 @@
+{
+  "name": "primo-poker-production-smoke-tests",
+  "version": "1.0.0",
+  "description": "Production smoke tests for Primo Poker platform",
+  "scripts": {
+    "test": "playwright test --config=../playwright.production.config.ts",
+    "test:chromium": "playwright test --config=../playwright.production.config.ts --project=chromium-production",
+    "test:firefox": "playwright test --config=../playwright.production.config.ts --project=firefox-production",
+    "test:webkit": "playwright test --config=../playwright.production.config.ts --project=webkit-production",
+    "test:mobile": "playwright test --config=../playwright.production.config.ts --project=mobile-*",
+    "test:headed": "playwright test --config=../playwright.production.config.ts --headed",
+    "test:debug": "PWDEBUG=1 playwright test --config=../playwright.production.config.ts",
+    "report": "playwright show-report ../playwright-report-production",
+    "install:browsers": "playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -275,8 +275,13 @@ export class GameTableDurableObject {
 
       // Start game if we have enough players
       if (this.state.players.size >= 2 && !this.state.game) {
+        console.log('Starting new game - players:', this.state.players.size, 'game:', this.state.game)
         // In Durable Objects, we should await the game start directly
         await this.startNewGame()
+        console.log('Game started - game state:', this.state.game)
+        
+        // Broadcast the game start immediately
+        await this.broadcastTableState()
         
         // Update the response to include game state
         return new Response(JSON.stringify({
@@ -689,7 +694,7 @@ export class GameTableDurableObject {
    * Process player action through game engine
    */
   private async processPlayerAction(playerId: string, action: string, amount?: number): Promise<{success: boolean, error?: string}> {
-    if (!this.state.gameState) {
+    if (!this.state.game) {
       return { success: false, error: 'No game in progress' }
     }
 
@@ -699,7 +704,7 @@ export class GameTableDurableObject {
     }
 
     // Validate it's the player's turn
-    if (this.state.gameState.activePlayerId !== playerId) {
+    if (this.state.game.activePlayerId !== playerId) {
       return { success: false, error: 'Not your turn' }
     }
 
@@ -711,19 +716,19 @@ export class GameTableDurableObject {
         break
         
       case 'check':
-        if (this.state.gameState.currentBet > player.currentBet) {
+        if (this.state.game.currentBet > player.currentBet) {
           return { success: false, error: 'Cannot check, must call or fold' }
         }
         player.hasActed = true
         break
         
       case 'call':
-        const callAmount = this.state.gameState.currentBet - player.currentBet
+        const callAmount = this.state.game.currentBet - player.currentBet
         if (player.chips < callAmount) {
           return { success: false, error: 'Insufficient chips to call' }
         }
         player.chips -= callAmount
-        player.currentBet = this.state.gameState.currentBet
+        player.currentBet = this.state.game.currentBet
         player.hasActed = true
         break
         
@@ -734,7 +739,7 @@ export class GameTableDurableObject {
         }
         
         const totalBet = player.currentBet + amount
-        if (totalBet <= this.state.gameState.currentBet) {
+        if (totalBet <= this.state.game.currentBet) {
           return { success: false, error: 'Bet must be higher than current bet' }
         }
         
@@ -744,7 +749,7 @@ export class GameTableDurableObject {
         
         player.chips -= amount
         player.currentBet = totalBet
-        this.state.gameState.currentBet = totalBet
+        this.state.game.currentBet = totalBet
         player.hasActed = true
         
         // Reset other players' hasActed flag for the raise
@@ -759,8 +764,14 @@ export class GameTableDurableObject {
         return { success: false, error: 'Unknown action' }
     }
 
-    // Update pot
-    this.state.gameState.pot = this.calculatePot()
+    // Update pot in both game and gameState
+    const newPot = this.calculatePot()
+    if (this.state.game) {
+      this.state.game.pot = newPot
+    }
+    if (this.state.gameState) {
+      this.state.gameState.pot = newPot
+    }
 
     // Advance to next player
     this.advanceToNextPlayer()
@@ -816,8 +827,19 @@ export class GameTableDurableObject {
     
     const dealerIndex = Math.floor(Math.random() * playerArray.length)
     const dealer = playerArray[dealerIndex]!
-    const smallBlindIndex = (dealerIndex + 1) % playerArray.length
-    const bigBlindIndex = (dealerIndex + 2) % playerArray.length
+    
+    // In heads-up (2 players), dealer is small blind
+    let smallBlindIndex: number
+    let bigBlindIndex: number
+    
+    if (playerArray.length === 2) {
+      smallBlindIndex = dealerIndex
+      bigBlindIndex = (dealerIndex + 1) % playerArray.length
+    } else {
+      smallBlindIndex = (dealerIndex + 1) % playerArray.length
+      bigBlindIndex = (dealerIndex + 2) % playerArray.length
+    }
+    
     const smallBlind = playerArray[smallBlindIndex]!
     const bigBlind = playerArray[bigBlindIndex]!
     
@@ -830,7 +852,7 @@ export class GameTableDurableObject {
       communityCards: [],
       currentBet: this.state.config.bigBlind,
       minRaise: this.state.config.bigBlind,
-      activePlayerId: bigBlind.id, // Big blind acts first pre-flop
+      activePlayerId: playerArray.length === 2 ? smallBlind.id : bigBlind.id, // In heads-up, dealer/SB acts first pre-flop
       dealerId: dealer.id,
       smallBlindId: smallBlind.id,
       bigBlindId: bigBlind.id,
@@ -848,9 +870,9 @@ export class GameTableDurableObject {
       player.hasActed = false
     }
 
-    // Shuffle deck and deal cards
-    this.deck = this.deckManager.createDeck()
-    this.deckManager.shuffle(this.deck)
+    // Create new deck and shuffle
+    this.deckManager = new DeckManager()
+    this.deck = [...this.deckManager.cards]
     
     // Deal hole cards to each player
     for (const player of this.state.players.values()) {
@@ -958,12 +980,25 @@ export class GameTableDurableObject {
     switch (this.state.game.phase) {
       case GamePhase.PRE_FLOP:
         this.state.game.phase = GamePhase.FLOP
+        // Deal flop cards
+        this.deck.pop() // Burn card
+        this.state.game.communityCards = [
+          this.deck.pop()!,
+          this.deck.pop()!,
+          this.deck.pop()!
+        ]
         break
       case GamePhase.FLOP:
         this.state.game.phase = GamePhase.TURN
+        // Deal turn card
+        this.deck.pop() // Burn card
+        this.state.game.communityCards.push(this.deck.pop()!)
         break
       case GamePhase.TURN:
         this.state.game.phase = GamePhase.RIVER
+        // Deal river card
+        this.deck.pop() // Burn card
+        this.state.game.communityCards.push(this.deck.pop()!)
         break
       case GamePhase.RIVER:
         this.state.game.phase = GamePhase.SHOWDOWN
@@ -978,6 +1013,14 @@ export class GameTableDurableObject {
     }
 
     this.state.game.currentBet = 0
+    
+    // Set first player to act (left of dealer/button)
+    const playerArray = Array.from(this.state.players.values()).filter(p => !p.isFolded)
+    if (playerArray.length > 0) {
+      const dealerIndex = playerArray.findIndex(p => p.id === this.state.game!.dealerId)
+      const firstToActIndex = (dealerIndex + 1) % playerArray.length
+      this.state.game.activePlayerId = playerArray[firstToActIndex]!.id
+    }
   }
 
   /**

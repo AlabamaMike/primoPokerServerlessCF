@@ -23,6 +23,7 @@ interface WorkerEnv {
   DB: D1Database;
   SESSION_STORE: KVNamespace;
   TABLE_OBJECTS: DurableObjectNamespace;
+  GAME_TABLES: DurableObjectNamespace;
   JWT_SECRET: string;
 }
 
@@ -332,17 +333,45 @@ export class PokerAPIRoutes {
   // Table handlers
   private async handleGetTables(request: AuthenticatedRequest): Promise<Response> {
     try {
-      const activeTables = await this.tableManager.getActiveTables();
+      // For now, return an empty array since we don't have a table registry yet
+      // In production, this would query a table registry or database
+      const tables: any[] = [];
       
-      // Convert Map to serializable format
-      const tables = activeTables.map(table => ({
-        id: table.id,
-        config: table.config,
-        playerCount: table.players.size,
-        isActive: table.isActive,
-        lastActivity: table.lastActivity,
-      }));
-
+      // If we have specific table IDs in KV storage or database, we could query them
+      // For demo purposes, let's check if there's a known table in the request
+      const knownTableId = request.query?.tableId;
+      
+      if (knownTableId && request.env?.GAME_TABLES) {
+        try {
+          const durableObjectId = request.env.GAME_TABLES.idFromName(knownTableId as string);
+          const gameTable = request.env.GAME_TABLES.get(durableObjectId);
+          
+          const stateResponse = await gameTable.fetch(
+            new Request(`http://internal/state`, {
+              method: 'GET',
+            })
+          );
+          
+          if (stateResponse.ok) {
+            const tableState = await stateResponse.json() as any;
+            tables.push({
+              id: tableState.tableId,
+              name: tableState.config.name,
+              gameType: tableState.config.gameType,
+              stakes: {
+                smallBlind: tableState.config.smallBlind,
+                bigBlind: tableState.config.bigBlind,
+              },
+              playerCount: tableState.playerCount,
+              maxPlayers: tableState.config.maxPlayers,
+              isActive: tableState.isActive,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching table state:', error);
+        }
+      }
+      
       return this.successResponse(tables);
     } catch (error) {
       return this.errorResponse('Failed to fetch tables', 500);
@@ -352,6 +381,10 @@ export class PokerAPIRoutes {
   private async handleCreateTable(request: AuthenticatedRequest): Promise<Response> {
     if (!request.user) {
       return this.errorResponse('Not authenticated', 401);
+    }
+
+    if (!request.env?.GAME_TABLES) {
+      return this.errorResponse('Server configuration error', 500);
     }
 
     try {
@@ -366,18 +399,41 @@ export class PokerAPIRoutes {
       const configResult = TableConfigSchema.safeParse(config);
 
       if (!configResult.success) {
+        console.error('Table config validation failed:', configResult.error.format());
         return this.errorResponse('Invalid table configuration', 400);
       }
 
-      const table = await this.tableManager.createTable(configResult.data);
+      // Create table using Durable Object
+      const tableId = config.id;
+      const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
+      const gameTable = request.env.GAME_TABLES.get(durableObjectId);
+
+      // Send create request to Durable Object
+      const createResponse = await gameTable.fetch(
+        new Request(`http://internal/create`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Creator-ID': request.user.userId,
+            'X-Creator-Username': request.user.username,
+          },
+          body: JSON.stringify({ config: configResult.data }),
+        })
+      );
+
+      if (!createResponse.ok) {
+        const error = await createResponse.text();
+        return this.errorResponse(error || 'Failed to create table', createResponse.status);
+      }
+
+      const tableData = await createResponse.json() as any;
+      
       return this.successResponse({
-        id: table.id,
-        config: table.config,
-        playerCount: table.players.size,
-        isActive: table.isActive,
-        lastActivity: table.lastActivity,
+        tableId: tableId,
+        ...tableData,
       });
     } catch (error) {
+      console.error('Table creation error:', error);
       return this.errorResponse('Failed to create table', 500);
     }
   }
@@ -388,20 +444,28 @@ export class PokerAPIRoutes {
       return this.errorResponse('Table ID required', 400);
     }
 
+    if (!request.env?.GAME_TABLES) {
+      return this.errorResponse('Server configuration error', 500);
+    }
+
     try {
-      const table = await this.tableManager.getTable(tableId);
-      if (!table) {
+      const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
+      const gameTable = request.env.GAME_TABLES.get(durableObjectId);
+      
+      const stateResponse = await gameTable.fetch(
+        new Request(`http://internal/state`, {
+          method: 'GET',
+        })
+      );
+      
+      if (!stateResponse.ok) {
         return this.errorResponse('Table not found', 404);
       }
 
-      return this.successResponse({
-        id: table.id,
-        config: table.config,
-        players: Array.from(table.players.values()),
-        gameState: table.gameState,
-        isActive: table.isActive,
-      });
+      const tableState = await stateResponse.json();
+      return this.successResponse(tableState);
     } catch (error) {
+      console.error('Get table error:', error);
       return this.errorResponse('Failed to fetch table', 500);
     }
   }
@@ -412,10 +476,43 @@ export class PokerAPIRoutes {
       return this.errorResponse('Table ID and authentication required', 400);
     }
 
+    if (!request.env?.GAME_TABLES) {
+      return this.errorResponse('Server configuration error', 500);
+    }
+
     try {
-      const result = await this.tableManager.joinTable(tableId, request.user.userId);
+      const body = await request.json() as { buyIn?: number; password?: string };
+      
+      // Get the table's durable object
+      const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
+      const gameTable = request.env.GAME_TABLES.get(durableObjectId);
+
+      // Send join request to Durable Object
+      const joinResponse = await gameTable.fetch(
+        new Request(`http://internal/join`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Player-ID': request.user.userId,
+            'X-Username': request.user.username,
+          },
+          body: JSON.stringify({
+            playerId: request.user.userId,
+            buyIn: body.buyIn || 100, // Default buy-in
+            password: body.password,
+          }),
+        })
+      );
+
+      if (!joinResponse.ok) {
+        const error = await joinResponse.text();
+        return this.errorResponse(error || 'Failed to join table', joinResponse.status);
+      }
+
+      const result = await joinResponse.json();
       return this.successResponse(result);
     } catch (error) {
+      console.error('Join table error:', error);
       return this.errorResponse('Failed to join table', 500);
     }
   }

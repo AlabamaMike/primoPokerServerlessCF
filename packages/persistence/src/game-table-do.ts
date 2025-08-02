@@ -54,8 +54,13 @@ export class GameTableDurableObject {
   private deck: Card[] = []
   private bettingEngine: BettingEngine
   private deckManager: DeckManager
+  private durableObjectState: DurableObjectState
+  private env: any
 
   constructor(state: DurableObjectState, env: any) {
+    this.durableObjectState = state
+    this.env = env
+    
     // Initialize table state
     this.state = {
       tableId: crypto.randomUUID(),
@@ -90,6 +95,283 @@ export class GameTableDurableObject {
 
     // Start heartbeat monitoring
     this.startHeartbeatMonitoring()
+  }
+
+  /**
+   * Handle HTTP requests to the Durable Object
+   */
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    const path = url.pathname
+
+    // Handle WebSocket upgrade
+    if (request.headers.get('Upgrade') === 'websocket') {
+      const pair = new WebSocketPair()
+      const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
+      
+      // Accept the WebSocket connection
+      this.durableObjectState.acceptWebSocket(server)
+      
+      // Extract player info from headers
+      const playerId = request.headers.get('X-Player-ID')
+      const username = request.headers.get('X-Username')
+      
+      if (playerId && username) {
+        // Store connection info
+        const connection: PlayerConnection = {
+          websocket: server,
+          playerId,
+          username,
+          isConnected: true,
+          lastHeartbeat: Date.now()
+        }
+        this.state.connections.set(playerId, connection)
+      }
+      
+      return new Response(null, {
+        status: 101,
+        webSocket: client,
+      })
+    }
+
+    // Handle REST API endpoints
+    switch (path) {
+      case '/create':
+        return this.handleCreateTable(request)
+      case '/join':
+        return this.handleJoinTableREST(request)
+      case '/leave':
+        return this.handleLeaveTableREST(request)
+      case '/state':
+        return this.handleGetTableState(request)
+      case '/action':
+        return this.handlePlayerActionREST(request)
+      default:
+        return new Response('Not found', { status: 404 })
+    }
+  }
+
+  /**
+   * Handle table creation via REST
+   */
+  private async handleCreateTable(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { config: TableConfig }
+      const creatorId = request.headers.get('X-Creator-ID')
+      const creatorUsername = request.headers.get('X-Creator-Username')
+
+      // Update table configuration
+      this.state.config = body.config
+      this.state.tableId = body.config.id
+      this.state.createdAt = Date.now()
+      this.state.lastActivity = Date.now()
+
+      // Save state
+      await this.durableObjectState.storage.put('tableState', this.state)
+
+      return new Response(JSON.stringify({
+        success: true,
+        tableId: this.state.tableId,
+        config: this.state.config,
+        createdBy: creatorUsername,
+        createdAt: this.state.createdAt
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to create table'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
+   * Handle player join via REST
+   */
+  private async handleJoinTableREST(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { playerId: string; buyIn: number; password?: string }
+      const playerId = request.headers.get('X-Player-ID') || body.playerId
+      const username = request.headers.get('X-Username') || `Player_${playerId.substring(0, 8)}`
+
+      // Validate join conditions
+      if (this.state.players.size >= this.state.config.maxPlayers) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: { message: 'Table is full' }
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      if (this.state.players.has(playerId)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: { message: 'Player already at table' }
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Validate buy-in
+      if (body.buyIn < this.state.config.minBuyIn || body.buyIn > this.state.config.maxBuyIn) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: { message: `Buy-in must be between ${this.state.config.minBuyIn} and ${this.state.config.maxBuyIn}` }
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Add player to table
+      const player: GameTablePlayer = {
+        id: playerId,
+        username,
+        email: '',
+        chipCount: body.buyIn,
+        chips: body.buyIn,
+        status: PlayerStatus.ACTIVE,
+        isDealer: false,
+        timeBank: this.state.config.timeBank,
+        position: {
+          seat: this.findNextAvailableSeat(),
+          isButton: false,
+          isSmallBlind: false,
+          isBigBlind: false
+        },
+        isFolded: false,
+        currentBet: 0,
+        hasActed: false,
+        holeCards: []
+      }
+
+      this.state.players.set(playerId, player)
+      this.state.lastActivity = Date.now()
+
+      // Save state
+      await this.durableObjectState.storage.put('tableState', this.state)
+
+      // Broadcast to all connected players
+      await this.broadcastTableState()
+
+      // Start game if we have enough players
+      if (this.state.players.size >= 2 && !this.state.game) {
+        setTimeout(() => this.startNewGame(), 1000)
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        tableId: this.state.tableId,
+        position: player.position,
+        chipCount: player.chips
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      console.error('Join table error:', error)
+      return new Response(JSON.stringify({
+        success: false,
+        error: { message: 'Failed to join table' }
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
+   * Handle player leave via REST
+   */
+  private async handleLeaveTableREST(request: Request): Promise<Response> {
+    try {
+      const playerId = request.headers.get('X-Player-ID')
+      if (!playerId || !this.state.players.has(playerId)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Player not at table'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      await this.removePlayerFromTable(playerId)
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Left table successfully'
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to leave table'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
+   * Handle get table state
+   */
+  private async handleGetTableState(request: Request): Promise<Response> {
+    return new Response(JSON.stringify({
+      tableId: this.state.tableId,
+      config: this.state.config,
+      players: Array.from(this.state.players.values()).map(p => ({
+        id: p.id,
+        username: p.username,
+        chipCount: p.chips,
+        position: p.position,
+        status: p.status
+      })),
+      gameState: this.state.gameState,
+      playerCount: this.state.players.size,
+      isActive: this.state.game !== null,
+      lastActivity: this.state.lastActivity
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  /**
+   * Handle player action via REST
+   */
+  private async handlePlayerActionREST(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { playerId: string; action: string; amount?: number }
+      const playerId = request.headers.get('X-Player-ID') || body.playerId
+
+      // Process action (simplified for now)
+      // In a real implementation, this would use the PokerGame class
+      await this.handlePlayerAction(null as any, body)
+
+      return new Response(JSON.stringify({
+        success: true,
+        action: body.action,
+        amount: body.amount
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to process action'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
   }
 
   /**

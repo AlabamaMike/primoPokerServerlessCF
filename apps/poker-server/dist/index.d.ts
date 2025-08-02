@@ -1,11 +1,13 @@
-import { TableDurableObject, GameTableDurableObject } from '@primo-poker/persistence';
-export { TableDurableObject, GameTableDurableObject };
+import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject } from '@primo-poker/persistence';
+export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject };
 interface Env {
     DB: D1Database;
     SESSION_STORE: KVNamespace;
     HAND_HISTORY_BUCKET: R2Bucket;
+    AUDIT_BUCKET: R2Bucket;
     TABLE_OBJECTS: DurableObjectNamespace;
     GAME_TABLES: DurableObjectNamespace;
+    SECURE_RNG_DO: DurableObjectNamespace;
     TOURNAMENT_QUEUE: Queue;
     ANALYTICS: AnalyticsEngineDataset;
     JWT_SECRET: string;

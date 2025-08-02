@@ -3,6 +3,7 @@ export * from './durable-objects';
 export * from './simple-game-table-do';
 export * from './table-registry-do';
 export * from './lobby-manager';
+export * from './secure-rng-do';
 
 // Re-export key interfaces and classes
 export type {
@@ -29,3 +30,5 @@ export { GameTableDurableObject } from './simple-game-table-do';
 export { TableRegistryDurableObject } from './table-registry-do';
 export { LobbyManager } from './lobby-manager';
 export { WalletManager } from './wallet-manager';
+export { SecureRNGDurableObject } from './secure-rng-do';
+export type { RNGRequest, RNGResponse, RNGStatus, AuditLog, StoredState } from './secure-rng-do';

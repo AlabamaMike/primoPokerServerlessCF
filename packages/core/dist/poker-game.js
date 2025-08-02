@@ -16,7 +16,9 @@ export class PokerGame {
         });
     }
     initializeGameState(players) {
-        const dealerIndex = Math.floor(Math.random() * players.length);
+        // Use crypto.getRandomValues for dealer selection
+        const randomBytes = crypto.getRandomValues(new Uint32Array(1));
+        const dealerIndex = (randomBytes[0] ?? 0) % players.length;
         const dealer = players[dealerIndex];
         const blindPositions = this.calculateBlindPositions(players, dealerIndex);
         const smallBlindPlayer = players[blindPositions.smallBlind];

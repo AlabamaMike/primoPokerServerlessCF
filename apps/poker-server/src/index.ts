@@ -1,16 +1,18 @@
-import { PokerAPIRoutes, WebSocketManager } from '@primo-poker/api';
-import { TableDurableObject, GameTableDurableObject } from '@primo-poker/persistence';
+import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
+import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject } from '@primo-poker/persistence';
 
 // Export Durable Objects for Cloudflare Workers
-export { TableDurableObject, GameTableDurableObject };
+export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject };
 
 // Environment interface
 interface Env {
   DB: D1Database;
   SESSION_STORE: KVNamespace;
   HAND_HISTORY_BUCKET: R2Bucket;
+  AUDIT_BUCKET: R2Bucket; // For RNG audit logs
   TABLE_OBJECTS: DurableObjectNamespace;
   GAME_TABLES: DurableObjectNamespace; // Our new GameTable Durable Objects
+  SECURE_RNG_DO: DurableObjectNamespace; // SecureRNG Durable Objects
   TOURNAMENT_QUEUE: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   
@@ -27,6 +29,7 @@ interface Env {
 // Initialize API routes and WebSocket manager
 let apiRoutes: PokerAPIRoutes;
 let wsManager: WebSocketManager;
+let rngApiRouter: ReturnType<typeof createRNGApiRouter>;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -37,6 +40,10 @@ export default {
     
     if (!wsManager) {
       wsManager = new WebSocketManager(env.JWT_SECRET);
+    }
+    
+    if (!rngApiRouter) {
+      rngApiRouter = createRNGApiRouter(env);
     }
 
     try {
@@ -49,7 +56,14 @@ export default {
 
       // Handle API routes
       if (url.pathname.startsWith('/api/')) {
-        // Create a proper extended request with environment
+        // Check if it's an RNG API route
+        for (const [path, operation] of Object.entries(RNG_API_ROUTES)) {
+          if (url.pathname === path) {
+            return await rngApiRouter.handleRequest(request, operation);
+          }
+        }
+        
+        // Handle other API routes
         const extendedRequest = new Request(request.url, {
           method: request.method,
           headers: request.headers,
@@ -395,7 +409,7 @@ function getIndexHTML(): string {
             </div>
             <div class="feature">
                 <h3>🔒 Provably Fair</h3>
-                <p>Cryptographically secure shuffling with verifiable randomness and complete hand history.</p>
+                <p>Cryptographically secure shuffling using Web Crypto API with SHA-256 commitments, verifiable randomness, and complete audit trails.</p>
             </div>
             <div class="feature">
                 <h3>⚡ Real-time Play</h3>

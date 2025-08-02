@@ -1,10 +1,11 @@
-import { PokerAPIRoutes, WebSocketManager } from '@primo-poker/api';
-import { TableDurableObject, GameTableDurableObject } from '@primo-poker/persistence';
+import { PokerAPIRoutes, WebSocketManager, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
+import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject } from '@primo-poker/persistence';
 // Export Durable Objects for Cloudflare Workers
-export { TableDurableObject, GameTableDurableObject };
+export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject };
 // Initialize API routes and WebSocket manager
 let apiRoutes;
 let wsManager;
+let rngApiRouter;
 export default {
     async fetch(request, env, ctx) {
         // Initialize services
@@ -14,6 +15,9 @@ export default {
         if (!wsManager) {
             wsManager = new WebSocketManager(env.JWT_SECRET);
         }
+        if (!rngApiRouter) {
+            rngApiRouter = createRNGApiRouter(env);
+        }
         try {
             const url = new URL(request.url);
             // Handle WebSocket upgrade requests
@@ -22,7 +26,13 @@ export default {
             }
             // Handle API routes
             if (url.pathname.startsWith('/api/')) {
-                // Create a proper extended request with environment
+                // Check if it's an RNG API route
+                for (const [path, operation] of Object.entries(RNG_API_ROUTES)) {
+                    if (url.pathname === path) {
+                        return await rngApiRouter.handleRequest(request, operation);
+                    }
+                }
+                // Handle other API routes
                 const extendedRequest = new Request(request.url, {
                     method: request.method,
                     headers: request.headers,
@@ -98,17 +108,32 @@ async function handleWebSocketUpgrade(request, env) {
     if (!tableId) {
         return new Response('Missing tableId parameter', { status: 400 });
     }
-    // Validate JWT token
+    // Validate JWT token or handle demo tokens
+    let decodedPayload;
     try {
-        // Simple JWT validation (you may want to use a proper JWT library)
-        const [header, payload, signature] = token.split('.');
-        if (!header || !payload || !signature) {
-            return new Response('Invalid token format', { status: 401 });
+        // Check if this is a demo token
+        if (token.startsWith('demo-token-')) {
+            // Handle demo tokens for development/testing
+            const timestamp = token.split('-')[2] || Date.now().toString();
+            decodedPayload = {
+                sub: `demo-user-${timestamp}`,
+                username: `DemoPlayer${timestamp.slice(-4)}`,
+                iat: Math.floor(Date.now() / 1000),
+                exp: Math.floor(Date.now() / 1000) + 3600 // 1 hour expiry
+            };
+            console.log('Demo token processed:', decodedPayload);
         }
-        // Decode payload (basic validation)
-        const decodedPayload = JSON.parse(atob(payload));
-        if (!decodedPayload.sub || !decodedPayload.username) {
-            return new Response('Invalid token payload', { status: 401 });
+        else {
+            // Handle real JWT tokens
+            const [header, payload, signature] = token.split('.');
+            if (!header || !payload || !signature) {
+                return new Response('Invalid token format', { status: 401 });
+            }
+            // Decode payload (basic validation)
+            decodedPayload = JSON.parse(atob(payload));
+            if (!decodedPayload.sub || !decodedPayload.username) {
+                return new Response('Invalid token payload', { status: 401 });
+            }
         }
         // Create WebSocket pair
         const webSocketPair = new WebSocketPair();
@@ -324,7 +349,7 @@ function getIndexHTML() {
             </div>
             <div class="feature">
                 <h3>🔒 Provably Fair</h3>
-                <p>Cryptographically secure shuffling with verifiable randomness and complete hand history.</p>
+                <p>Cryptographically secure shuffling using Web Crypto API with SHA-256 commitments, verifiable randomness, and complete audit trails.</p>
             </div>
             <div class="feature">
                 <h3>⚡ Real-time Play</h3>

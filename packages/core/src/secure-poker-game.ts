@@ -1,3 +1,10 @@
+/**
+ * Secure Poker Game Implementation
+ * 
+ * Uses SecureDeckManager and SecureRNG Durable Object for all random operations.
+ * Ensures cryptographically secure gameplay with full audit trails.
+ */
+
 import {
   Card,
   Player,
@@ -11,32 +18,46 @@ import {
   GameType,
   Rank,
   CardUtils,
-  RandomUtils,
   PokerMath,
   GameRuleError,
   InvalidActionError,
   InsufficientFundsError,
 } from '@primo-poker/shared';
+import { CryptoHelpers } from '@primo-poker/security';
 import { Hand, HandEvaluation } from './hand-evaluator';
+import { SecureDeckManager, SecureDeck } from './secure-deck-manager';
 
-export interface IPokerGame {
+export interface ISecurePokerGame {
   dealCards(): Promise<void>;
   processBet(playerId: string, amount: number): Promise<BetResult>;
   evaluateShowdown(): Promise<ShowdownResult>;
   getGameState(): GameState;
+  getAuditTrail(): AuditEntry[];
 }
 
-export class PokerGame implements IPokerGame {
+export interface AuditEntry {
+  timestamp: number;
+  operation: string;
+  playerId?: string;
+  details: any;
+  entropyUsed?: number;
+}
+
+export class SecurePokerGame implements ISecurePokerGame {
   private gameState: GameState;
   private players: Map<string, Player> = new Map();
-  private deck: Card[] = [];
+  private secureDeck?: SecureDeck;
+  private deckManager: SecureDeckManager;
   private playerHands: Map<string, Card[]> = new Map();
   private currentBets: Map<string, number> = new Map();
+  private auditTrail: AuditEntry[] = [];
 
   constructor(
     private tableConfig: TableConfig,
-    initialPlayers: Player[]
+    initialPlayers: Player[],
+    private rngEndpoint: string
   ) {
+    this.deckManager = new SecureDeckManager(tableConfig.id, rngEndpoint);
     this.gameState = this.initializeGameState(initialPlayers);
     initialPlayers.forEach(player => {
       this.players.set(player.id, player);
@@ -45,18 +66,28 @@ export class PokerGame implements IPokerGame {
   }
 
   private initializeGameState(players: Player[]): GameState {
-    // Use crypto.getRandomValues for dealer selection
-    const randomBytes = crypto.getRandomValues(new Uint32Array(1));
-    const dealerIndex = (randomBytes[0] ?? 0) % players.length;
+    // Use crypto.getRandomValues for dealer selection with bias elimination
+    const dealerIndex = CryptoHelpers.generateSecureInteger(0, players.length - 1);
     const dealer = players[dealerIndex];
     
     const blindPositions = this.calculateBlindPositions(players, dealerIndex);
     const smallBlindPlayer = players[blindPositions.smallBlind];
     const bigBlindPlayer = players[blindPositions.bigBlind];
 
+    this.addAuditEntry({
+      operation: 'initialize_game',
+      details: {
+        dealerIndex,
+        dealerId: dealer!.id,
+        playerCount: players.length,
+        smallBlindId: smallBlindPlayer!.id,
+        bigBlindId: bigBlindPlayer!.id
+      }
+    });
+
     return {
       tableId: this.tableConfig.id,
-      gameId: RandomUtils.generateUUID(),
+      gameId: crypto.randomUUID(),
       phase: GamePhase.WAITING,
       pot: 0,
       sidePots: [],
@@ -77,26 +108,69 @@ export class PokerGame implements IPokerGame {
       throw new GameRuleError('Cannot deal cards in current game phase');
     }
 
-    // Create and shuffle deck
-    this.deck = this.shuffleDeck(CardUtils.createDeck());
-    
-    // Deal hole cards based on game type
-    const cardsPerPlayer = this.getCardsPerPlayer();
-    for (const [playerId] of this.players) {
-      const holeCards: Card[] = [];
-      for (let i = 0; i < cardsPerPlayer; i++) {
-        const card = this.deck.pop();
-        if (!card) throw new GameRuleError('Insufficient cards in deck');
-        holeCards.push(card);
-      }
-      this.playerHands.set(playerId, holeCards);
-    }
+    try {
+      // Create and commit deck
+      const deck = await this.deckManager.createDeck();
+      const committedDeck = await this.deckManager.commitDeck(deck, this.gameState.gameId);
+      
+      // Shuffle deck with cryptographic security
+      this.secureDeck = await this.deckManager.shuffleDeck(committedDeck, this.gameState.gameId);
+      
+      const shuffleEntropy = this.secureDeck.shuffleHistory[0]?.entropyUsed;
+      this.addAuditEntry({
+        operation: 'deck_shuffled',
+        details: {
+          commitment: committedDeck.commitment,
+          shuffleProof: this.secureDeck.shuffleHistory[0],
+          deckIntegrity: await this.deckManager.verifyDeckIntegrity(this.secureDeck)
+        },
+        ...(shuffleEntropy !== undefined && { entropyUsed: shuffleEntropy })
+      });
 
-    // Post blinds
-    await this.postBlinds();
-    
-    this.gameState.phase = GamePhase.PRE_FLOP;
-    this.gameState.timestamp = new Date();
+      // Deal hole cards
+      const { playerHands, deck: updatedDeck } = await this.deckManager.dealHoleCards(
+        this.secureDeck,
+        this.players.size,
+        this.getCardsPerPlayer()
+      );
+
+      this.secureDeck = updatedDeck;
+
+      // Assign hole cards to players
+      let playerIndex = 0;
+      for (const [playerId] of this.players) {
+        const holeCards = playerHands[playerIndex];
+        if (!holeCards) throw new GameRuleError('Failed to deal cards to player');
+        this.playerHands.set(playerId, holeCards);
+        
+        this.addAuditEntry({
+          operation: 'deal_hole_cards',
+          playerId,
+          details: {
+            cardCount: holeCards.length,
+            deckRemainingCards: this.secureDeck.cards.length
+          }
+        });
+        
+        playerIndex++;
+      }
+
+      // Post blinds
+      await this.postBlinds();
+      
+      this.gameState.phase = GamePhase.PRE_FLOP;
+      this.gameState.timestamp = new Date();
+
+    } catch (error) {
+      this.addAuditEntry({
+        operation: 'deal_cards_error',
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          phase: this.gameState.phase
+        }
+      });
+      throw error;
+    }
   }
 
   async processBet(playerId: string, amount: number): Promise<BetResult> {
@@ -114,12 +188,32 @@ export class PokerGame implements IPokerGame {
       const result = await this.executeAction(playerId, action, amount);
       
       if (result.success) {
+        this.addAuditEntry({
+          operation: 'player_action',
+          playerId,
+          details: {
+            action,
+            amount,
+            pot: this.gameState.pot,
+            playerChips: result.playerChips
+          }
+        });
+
         this.advanceToNextPlayer();
         await this.checkPhaseCompletion();
       }
 
       return result;
     } catch (error) {
+      this.addAuditEntry({
+        operation: 'bet_error',
+        playerId,
+        details: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          attemptedAmount: amount
+        }
+      });
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -164,6 +258,20 @@ export class PokerGame implements IPokerGame {
     const winners = this.determineWinners(handEvaluations);
     await this.distributePot(winners);
 
+    // Audit showdown results
+    this.addAuditEntry({
+      operation: 'showdown',
+      details: {
+        activePlayers: activePlayers.length,
+        winners: winners.map(w => ({
+          playerId: w.playerId,
+          handRanking: w.evaluation.ranking,
+          winAmount: w.winAmount
+        })),
+        deckCommitment: this.secureDeck?.commitment
+      }
+    });
+
     return {
       winners: winners.map(winner => ({
         playerId: winner.playerId,
@@ -178,8 +286,20 @@ export class PokerGame implements IPokerGame {
     return { ...this.gameState };
   }
 
-  private shuffleDeck(deck: Card[]): Card[] {
-    return RandomUtils.shuffleArray(deck);
+  getAuditTrail(): AuditEntry[] {
+    return [...this.auditTrail];
+  }
+
+  private addAuditEntry(entry: Omit<AuditEntry, 'timestamp'>): void {
+    this.auditTrail.push({
+      ...entry,
+      timestamp: Date.now()
+    });
+
+    // Keep audit trail size manageable
+    if (this.auditTrail.length > 1000) {
+      this.auditTrail = this.auditTrail.slice(-500);
+    }
   }
 
   private getCardsPerPlayer(): number {
@@ -231,6 +351,15 @@ export class PokerGame implements IPokerGame {
     this.gameState.pot += bigBlindAmount;
 
     this.gameState.currentBet = bigBlindAmount;
+
+    this.addAuditEntry({
+      operation: 'post_blinds',
+      details: {
+        smallBlind: { playerId: smallBlindPlayer.id, amount: smallBlindAmount },
+        bigBlind: { playerId: bigBlindPlayer.id, amount: bigBlindAmount },
+        pot: this.gameState.pot
+      }
+    });
   }
 
   private determineAction(amount: number, playerId: string): PlayerAction {
@@ -390,41 +519,72 @@ export class PokerGame implements IPokerGame {
   }
 
   private async dealFlop(): Promise<void> {
-    // Burn one card
-    this.deck.pop();
-    
-    // Deal three community cards
-    for (let i = 0; i < 3; i++) {
-      const card = this.deck.pop();
-      if (!card) throw new GameRuleError('Insufficient cards for flop');
-      this.gameState.communityCards.push(card);
+    if (!this.secureDeck) {
+      throw new GameRuleError('No deck available');
     }
+
+    const { communityCards, deck } = await this.deckManager.dealCommunityCards(
+      this.secureDeck,
+      'flop'
+    );
     
+    this.secureDeck = deck;
+    this.gameState.communityCards.push(...communityCards);
     this.gameState.phase = GamePhase.FLOP;
+
+    this.addAuditEntry({
+      operation: 'deal_flop',
+      details: {
+        cardsDealt: communityCards.length,
+        deckRemainingCards: this.secureDeck.cards.length
+      }
+    });
   }
 
   private async dealTurn(): Promise<void> {
-    // Burn one card
-    this.deck.pop();
+    if (!this.secureDeck) {
+      throw new GameRuleError('No deck available');
+    }
+
+    const { communityCards, deck } = await this.deckManager.dealCommunityCards(
+      this.secureDeck,
+      'turn'
+    );
     
-    // Deal one community card
-    const card = this.deck.pop();
-    if (!card) throw new GameRuleError('Insufficient cards for turn');
-    this.gameState.communityCards.push(card);
-    
+    this.secureDeck = deck;
+    this.gameState.communityCards.push(...communityCards);
     this.gameState.phase = GamePhase.TURN;
+
+    this.addAuditEntry({
+      operation: 'deal_turn',
+      details: {
+        cardsDealt: communityCards.length,
+        deckRemainingCards: this.secureDeck.cards.length
+      }
+    });
   }
 
   private async dealRiver(): Promise<void> {
-    // Burn one card
-    this.deck.pop();
+    if (!this.secureDeck) {
+      throw new GameRuleError('No deck available');
+    }
+
+    const { communityCards, deck } = await this.deckManager.dealCommunityCards(
+      this.secureDeck,
+      'river'
+    );
     
-    // Deal one community card
-    const card = this.deck.pop();
-    if (!card) throw new GameRuleError('Insufficient cards for river');
-    this.gameState.communityCards.push(card);
-    
+    this.secureDeck = deck;
+    this.gameState.communityCards.push(...communityCards);
     this.gameState.phase = GamePhase.RIVER;
+
+    this.addAuditEntry({
+      operation: 'deal_river',
+      details: {
+        cardsDealt: communityCards.length,
+        deckRemainingCards: this.secureDeck.cards.length
+      }
+    });
   }
 
   private determineWinners(
@@ -486,5 +646,25 @@ export class PokerGame implements IPokerGame {
 
     this.gameState.pot = 0;
     this.gameState.phase = GamePhase.FINISHED;
+  }
+
+  /**
+   * Exports game audit data for external verification
+   */
+  async exportGameData(): Promise<{
+    gameState: GameState;
+    deckCommitment: any;
+    auditTrail: AuditEntry[];
+    deckVerification: boolean;
+  }> {
+    const deckVerification = this.secureDeck ? 
+      await this.deckManager.verifyDeckIntegrity(this.secureDeck) : false;
+
+    return {
+      gameState: this.getGameState(),
+      deckCommitment: this.secureDeck?.commitment,
+      auditTrail: this.getAuditTrail(),
+      deckVerification
+    };
   }
 }

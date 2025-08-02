@@ -13,6 +13,9 @@ export interface GameDeck {
   burn(): Card
   reset(): void
   remaining(): number
+  dealFlop(): Card[]
+  dealTurn(): Card
+  dealRiver(): Card
 }
 
 export class DeckManager implements GameDeck {
@@ -44,10 +47,15 @@ export class DeckManager implements GameDeck {
 
   /**
    * Shuffles the deck using Fisher-Yates algorithm
+   * @deprecated Use SecureDeckManager for cryptographically secure shuffling
    */
   shuffle(): void {
+    console.warn('DeckManager.shuffle() is deprecated. Use SecureDeckManager for cryptographically secure shuffling.');
+    // Temporary implementation using crypto.getRandomValues for backwards compatibility
     for (let i = this.cards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
+      // Use crypto.getRandomValues instead of Math.random()
+      const randomBytes = crypto.getRandomValues(new Uint32Array(1));
+      const j = Math.floor(((randomBytes[0] ?? 0) / 0xFFFFFFFF) * (i + 1));
       const temp = this.cards[i]!
       this.cards[i] = this.cards[j]!
       this.cards[j] = temp

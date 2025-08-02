@@ -1,3 +1,6 @@
+export * from './crypto-helpers';
+export * from './secure-shuffle';
+export * from './deck-commitment';
 export * from './shuffle-verifier';
 export * from './authentication';
 export { ShuffleVerifier, MentalPoker, SecureRNG, } from './shuffle-verifier';

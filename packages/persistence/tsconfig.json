@@ -10,6 +10,7 @@
   "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts"],
   "references": [
     { "path": "../shared" },
-    { "path": "../core" }
+    { "path": "../core" },
+    { "path": "../security" }
   ]
 }

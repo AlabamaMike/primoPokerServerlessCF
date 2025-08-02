@@ -3,6 +3,8 @@ export * from './poker-game';
 export * from './table-manager';
 export * from './betting-engine';
 export * from './deck-manager';
+export * from './secure-deck-manager';
+export * from './secure-poker-game';
 export { Hand } from './hand-evaluator';
 export type { HandEvaluation } from './hand-evaluator';
 export { PokerGame } from './poker-game';
@@ -13,4 +15,8 @@ export type { BettingRules, SidePot, BettingAction, ValidationResult, BettingRou
 export { DeckManager } from './deck-manager';
 export type { GameDeck } from './deck-manager';
 export type { ITableManager } from './table-manager';
+export { SecureDeckManager, DeckUtils } from './secure-deck-manager';
+export type { SecureDeck, SecureDeckOperations, DealResult, ShuffleRecord, DeckStatus } from './secure-deck-manager';
+export { SecurePokerGame } from './secure-poker-game';
+export type { ISecurePokerGame, AuditEntry } from './secure-poker-game';
 //# sourceMappingURL=index.d.ts.map

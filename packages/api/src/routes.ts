@@ -544,7 +544,7 @@ export class PokerAPIRoutes {
       );
       
       if (!leaveResponse.ok) {
-        const error = await leaveResponse.json();
+        const error = await leaveResponse.json() as any;
         return this.errorResponse(error.error || 'Failed to leave table', leaveResponse.status);
       }
       

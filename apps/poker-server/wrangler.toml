@@ -1,5 +1,5 @@
 name = "primo-poker-server"
-main = "dist/index.js"
+main = "src/index.ts"
 compatibility_date = "2024-01-17"
 compatibility_flags = ["nodejs_compat"]
 
@@ -101,7 +101,4 @@ dataset = "primo-poker-metrics"
 # DATABASE_ENCRYPTION_KEY
 # ANTHROPIC_API_KEY (for AI features)
 
-[build]
-command = "npm run build"
-cwd = "./"
-watch_dir = "src"
+# Let wrangler handle the build with esbuild

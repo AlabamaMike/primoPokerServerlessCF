@@ -30,6 +30,8 @@ interface TableListing {
   playerList: PublicPlayerInfo[]
   waitingList?: string[]
   status: 'waiting' | 'active' | 'finishing'
+  minBuyIn?: number
+  maxBuyIn?: number
 }
 
 interface PublicPlayerInfo {
@@ -104,7 +106,9 @@ export default function LobbyPage() {
         { playerId: '3', username: 'CardShark99', chipCount: 2100, isActive: true },
         { playerId: '4', username: 'ChipLeader', chipCount: 1500, isActive: false }
       ],
-      status: 'active'
+      status: 'active',
+      minBuyIn: 40,
+      maxBuyIn: 200
     },
     {
       tableId: 'demo-table-2',
@@ -120,7 +124,9 @@ export default function LobbyPage() {
         { playerId: '5', username: 'HighRoller', chipCount: 5000, isActive: true },
         { playerId: '6', username: 'VegasVet', chipCount: 3200, isActive: true }
       ],
-      status: 'active'
+      status: 'active',
+      minBuyIn: 400,
+      maxBuyIn: 2000
     },
     {
       tableId: 'demo-table-3',
@@ -133,7 +139,9 @@ export default function LobbyPage() {
       avgPot: 1250,
       handsPerHour: 45,
       playerList: [],
-      status: 'active'
+      status: 'active',
+      minBuyIn: 1000,
+      maxBuyIn: 1000
     }
   ])
 
@@ -541,8 +549,8 @@ export default function LobbyPage() {
             }}
             onJoin={(buyIn, seat) => handleJoinTable(selectedTable.tableId, buyIn)}
             tableName={selectedTable.name}
-            minBuyIn={40}
-            maxBuyIn={200}
+            minBuyIn={selectedTable.minBuyIn || (selectedTable as any).config?.minBuyIn || 40}
+            maxBuyIn={selectedTable.maxBuyIn || (selectedTable as any).config?.maxBuyIn || 200}
             smallBlind={selectedTable.stakes.smallBlind}
             bigBlind={selectedTable.stakes.bigBlind}
             maxPlayers={selectedTable.maxPlayers}

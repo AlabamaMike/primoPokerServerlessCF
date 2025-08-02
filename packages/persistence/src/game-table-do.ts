@@ -56,12 +56,13 @@ export class GameTableDurableObject {
   private deckManager: DeckManager
   private durableObjectState: DurableObjectState
   private env: any
+  private initialized: boolean = false
 
   constructor(state: DurableObjectState, env: any) {
     this.durableObjectState = state
     this.env = env
     
-    // Initialize table state
+    // Initialize with default state
     this.state = {
       tableId: crypto.randomUUID(),
       config: {
@@ -93,14 +94,45 @@ export class GameTableDurableObject {
     this.bettingEngine = new BettingEngine()
     this.deckManager = new DeckManager()
 
+    // Load saved state on first request
+    this.initialized = false
+
     // Start heartbeat monitoring
     this.startHeartbeatMonitoring()
+  }
+
+  /**
+   * Initialize state from storage if not already done
+   */
+  private async initializeState(): Promise<void> {
+    if (this.initialized) return
+    
+    try {
+      const savedState = await this.durableObjectState.storage.get('tableState') as GameTableState | undefined
+      if (savedState) {
+        // Restore saved state
+        this.state = {
+          ...savedState,
+          players: new Map(savedState.players),
+          connections: new Map(), // Connections are not persisted
+          spectators: new Set(savedState.spectators)
+        }
+        console.log('Loaded saved table state:', this.state.tableId, 'Config:', this.state.config)
+      }
+    } catch (error) {
+      console.error('Failed to load saved state:', error)
+    }
+    
+    this.initialized = true
   }
 
   /**
    * Handle HTTP requests to the Durable Object
    */
   async fetch(request: Request): Promise<Response> {
+    // Initialize state from storage on first request
+    await this.initializeState()
+    
     const url = new URL(request.url)
     const path = url.pathname
 

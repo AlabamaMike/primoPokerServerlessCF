@@ -29,10 +29,11 @@ bucket_name = "primo-poker-hand-history"
 preview_bucket_name = "primo-poker-hand-history-preview"
 
 # R2 Bucket for RNG audit logs
-[[r2_buckets]]
-binding = "AUDIT_BUCKET"
-bucket_name = "primo-poker-rng-audit"
-preview_bucket_name = "primo-poker-rng-audit-preview"
+# TODO: Create this R2 bucket before uncommenting
+# [[r2_buckets]]
+# binding = "AUDIT_BUCKET"
+# bucket_name = "primo-poker-rng-audit"
+# preview_bucket_name = "primo-poker-rng-audit-preview"
 
 # Durable Objects
 [[durable_objects.bindings]]

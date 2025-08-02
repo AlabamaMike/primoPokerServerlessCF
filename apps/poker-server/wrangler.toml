@@ -76,10 +76,7 @@ new_classes = ["GameTableDurableObject"]
 tag = "v3"
 new_classes = ["SecureRNGDurableObject", "RateLimitDurableObject"]
 
-[[migrations]]
-tag = "v4"
-renamed_classes = [{ from = "GameTableDurableObject", to = "GameTableDurableObject" }]
-deleted_classes = []
+# Removed v4 migration - not needed
 
 # Queue for tournament processing
 [[queues.producers]]

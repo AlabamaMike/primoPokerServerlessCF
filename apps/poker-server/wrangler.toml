@@ -77,6 +77,7 @@ tag = "v3"
 new_classes = ["SecureRNGDurableObject", "RateLimitDurableObject"]
 
 # Removed v4 migration - not needed
+# Build configuration ensures dist/index.js is created
 
 # Queue for tournament processing
 [[queues.producers]]

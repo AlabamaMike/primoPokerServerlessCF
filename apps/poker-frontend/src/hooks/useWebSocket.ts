@@ -197,7 +197,16 @@ export function useGameWebSocket(tableId?: string) {
 
   const joinTable = useCallback((seatNumber: number, buyInAmount: number) => {
     if (webSocket.client && webSocket.isConnected) {
+      // Get player info from auth store
+      const { user, token } = useAuthStore.getState()
+      
+      // Use authenticated user info or demo fallback
+      const playerId = user?.id || 'demo-user-' + Date.now()
+      const username = user?.username || 'Demo Player'
+      
       webSocket.client.send('join_table', { 
+        playerId,
+        username,
         tableId,
         seatIndex: seatNumber,
         chipCount: buyInAmount,

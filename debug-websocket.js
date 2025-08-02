@@ -24,18 +24,10 @@ async function testWebSocketConnection() {
     // Connection handlers
     ws.on('open', () => {
       console.log('✅ WebSocket connected successfully!');
-      console.log('📨 Sending connection_established message...');
+      console.log('⏳ Waiting for connection_confirmed from server...');
       
-      // Send initial connection message
-      ws.send(JSON.stringify({
-        type: 'connection_established',
-        payload: {
-          playerId: 'demo-user-test',
-          username: 'Demo Test User',
-          tableId: TABLE_ID
-        },
-        timestamp: new Date().toISOString()
-      }));
+      // Don't send connection_established manually - the server does this automatically
+      // during WebSocket upgrade in handleConnectionEstablished
     });
     
     ws.on('message', (data) => {
@@ -54,8 +46,9 @@ async function testWebSocketConnection() {
               payload: {
                 playerId: 'demo-user-test',
                 username: 'Demo Test User',
-                chipCount: 2000,
-                seatIndex: 0
+                tableId: TABLE_ID,
+                seatIndex: 0,
+                chipCount: 2000
               },
               timestamp: new Date().toISOString()
             }));

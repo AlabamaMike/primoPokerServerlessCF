@@ -1,13 +1,17 @@
 name: Security Scan
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+  # Only run on scheduled builds to save CI minutes
   schedule:
-    # Run security scan weekly on Mondays at 2 AM UTC to save CI minutes
-    - cron: '0 2 * * 1'
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  # Allow manual trigger when needed
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for running security scan'
+        required: false
+        default: 'Manual security audit'
 
 jobs:
   security-scan:

@@ -301,13 +301,12 @@ jobs:
           key: build-${{ github.sha }}
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: primo-poker-frontend
-          directory: apps/poker-frontend/out
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd apps/poker-frontend
+          npx wrangler pages deploy out --project-name=primo-poker-frontend --compatibility-date=2024-08-01
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Notify deployment success
         run: |

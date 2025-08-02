@@ -104,6 +104,9 @@ export class GameTableDurableObject {
     const url = new URL(request.url)
     const path = url.pathname
 
+    // Debug logging
+    console.log('GameTableDO fetch - URL:', request.url, 'Path:', path, 'Method:', request.method)
+
     // Handle WebSocket upgrade
     if (request.headers.get('Upgrade') === 'websocket') {
       const pair = new WebSocketPair()
@@ -135,18 +138,25 @@ export class GameTableDurableObject {
     }
 
     // Handle REST API endpoints
+    console.log('GameTableDO - Switching on path:', JSON.stringify(path))
     switch (path) {
       case '/create':
+        console.log('GameTableDO - Matched /create case')
         return this.handleCreateTable(request)
       case '/join':
+        console.log('GameTableDO - Matched /join case')
         return this.handleJoinTableREST(request)
       case '/leave':
+        console.log('GameTableDO - Matched /leave case')
         return this.handleLeaveTableREST(request)
       case '/state':
+        console.log('GameTableDO - Matched /state case')
         return this.handleGetTableState(request)
       case '/action':
+        console.log('GameTableDO - Matched /action case')
         return this.handlePlayerActionREST(request)
       default:
+        console.log('GameTableDO - No match, returning 404. Path was:', JSON.stringify(path))
         return new Response('Not found', { status: 404 })
     }
   }
@@ -155,10 +165,12 @@ export class GameTableDurableObject {
    * Handle table creation via REST
    */
   private async handleCreateTable(request: Request): Promise<Response> {
+    console.log('GameTableDO - handleCreateTable called')
     try {
       const body = await request.json() as { config: TableConfig }
       const creatorId = request.headers.get('X-Creator-ID')
       const creatorUsername = request.headers.get('X-Creator-Username')
+      console.log('GameTableDO - handleCreateTable - Body:', JSON.stringify(body))
 
       // Update table configuration
       this.state.config = body.config
@@ -263,7 +275,20 @@ export class GameTableDurableObject {
 
       // Start game if we have enough players
       if (this.state.players.size >= 2 && !this.state.game) {
-        setTimeout(() => this.startNewGame(), 1000)
+        // In Durable Objects, we should await the game start directly
+        await this.startNewGame()
+        
+        // Update the response to include game state
+        return new Response(JSON.stringify({
+          success: true,
+          tableId: this.state.tableId,
+          position: player.position,
+          chipCount: player.chips,
+          gameStarted: true,
+          gameState: this.state.game
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        })
       }
 
       return new Response(JSON.stringify({
@@ -333,12 +358,17 @@ export class GameTableDurableObject {
         username: p.username,
         chipCount: p.chips,
         position: p.position,
-        status: p.status
+        status: p.status,
+        currentBet: p.currentBet,
+        isFolded: p.isFolded
       })),
       gameState: this.state.gameState,
       playerCount: this.state.players.size,
       isActive: this.state.game !== null,
-      lastActivity: this.state.lastActivity
+      lastActivity: this.state.lastActivity,
+      pot: this.state.game?.pot || 0,
+      activePlayerId: this.state.game?.activePlayerId,
+      phase: this.state.game?.phase
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
@@ -818,16 +848,66 @@ export class GameTableDurableObject {
       player.hasActed = false
     }
 
+    // Shuffle deck and deal cards
+    this.deck = this.deckManager.createDeck()
+    this.deckManager.shuffle(this.deck)
+    
+    // Deal hole cards to each player
+    for (const player of this.state.players.values()) {
+      player.holeCards = [
+        this.deck.pop()!,
+        this.deck.pop()!
+      ]
+    }
+    
+    // Post blinds
+    smallBlind.currentBet = this.state.config.smallBlind
+    smallBlind.chips -= this.state.config.smallBlind
+    bigBlind.currentBet = this.state.config.bigBlind
+    bigBlind.chips -= this.state.config.bigBlind
+    this.state.game.pot = this.state.config.smallBlind + this.state.config.bigBlind
+    
     console.log(`Started new game with ${this.state.players.size} players`)
+    console.log(`Dealer: ${dealer.username}, SB: ${smallBlind.username}, BB: ${bigBlind.username}`)
     
     await this.broadcastMessage({
       type: 'game_started',
       data: {
-        players: Array.from(this.state.players.values()),
-        smallBlind: this.state.config.smallBlind,
-        bigBlind: this.state.config.bigBlind
+        gameId: this.state.game.gameId,
+        phase: this.state.game.phase,
+        pot: this.state.game.pot,
+        dealerId: dealer.id,
+        smallBlindId: smallBlind.id,
+        bigBlindId: bigBlind.id,
+        activePlayerId: this.state.game.activePlayerId,
+        players: Array.from(this.state.players.values()).map(p => ({
+          id: p.id,
+          username: p.username,
+          chipCount: p.chips,
+          position: p.position,
+          currentBet: p.currentBet,
+          isFolded: p.isFolded,
+          isDealer: p.id === dealer.id,
+          isSmallBlind: p.id === smallBlind.id,
+          isBigBlind: p.id === bigBlind.id,
+          // Only send hole cards to the player themselves
+          holeCards: undefined // Will be sent separately
+        }))
       }
     })
+    
+    // Send hole cards privately to each player
+    for (const [playerId, connection] of this.state.connections.entries()) {
+      const player = this.state.players.get(playerId)
+      if (player && connection.isConnected) {
+        this.sendMessage(connection.websocket, {
+          type: 'hole_cards',
+          data: {
+            cards: player.holeCards
+          }
+        })
+      }
+    }
   }
 
   /**

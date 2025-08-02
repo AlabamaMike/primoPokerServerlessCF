@@ -12,6 +12,7 @@ interface Env {
     DATABASE_ENCRYPTION_KEY: string;
     ANTHROPIC_API_KEY?: string;
     ENVIRONMENT: string;
+    NODE_ENV?: string;
 }
 declare const _default: {
     fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;

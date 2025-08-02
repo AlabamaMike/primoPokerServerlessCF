@@ -313,18 +313,25 @@ export class GameTableDurableObject {
    * Handle player joining the table
    */
   private async handleJoinTable(websocket: WebSocket, payload: any): Promise<void> {
+    console.log('🎯 handleJoinTable called with payload:', JSON.stringify(payload, null, 2))
     const { playerId, username, chipCount = 2000 } = payload
+
+    console.log(`📝 Extracted values - playerId: ${playerId}, username: ${username}, chipCount: ${chipCount}`)
 
     // Validate player can join
     if (this.state.players.size >= 9) {
+      console.log('❌ Table is full')
       this.sendError(websocket, 'Table is full')
       return
     }
 
     if (this.state.players.has(playerId)) {
+      console.log('❌ Player already at table')
       this.sendError(websocket, 'Player already at table')
       return
     }
+
+    console.log('✅ Player validation passed, adding to table...')
 
     // Add player to table
     const player: SimpleGamePlayer = {

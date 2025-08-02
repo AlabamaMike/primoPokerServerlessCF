@@ -5,14 +5,25 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGameStore } from '@/stores/game-store'
 import { useGameWebSocket } from '@/hooks/useWebSocket'
-import { Button } from '@/components/ui/button'
 import { PokerTable } from '@/components/poker/PokerTable'
-import HandHistory from '@/components/poker/HandHistory'
-import SeatSelection from '@/components/poker/SeatSelection'
-import { Wifi, WifiOff, Users, Settings, History } from 'lucide-react'
+import { JoinTableModal } from '@/components/JoinTableModal'
 
 interface MultiplayerGameClientProps {
   tableId: string
+}
+
+interface TableInfo {
+  id: string
+  name: string
+  config: {
+    smallBlind: number
+    bigBlind: number
+    minBuyIn: number
+    maxBuyIn: number
+    maxPlayers: number
+  }
+  players: any[]
+  status: string
 }
 
 export default function MultiplayerGameClient({ tableId }: MultiplayerGameClientProps) {
@@ -23,56 +34,65 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable } = useGameWebSocket(tableId)
   
   const [showHistory, setShowHistory] = useState(false)
-  const [showSeatSelection, setShowSeatSelection] = useState(false)
-  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [showJoinModal, setShowJoinModal] = useState(false)
+  const [tableInfo, setTableInfo] = useState<TableInfo | null>(null)
+  const [loadingTable, setLoadingTable] = useState(true)
   const [playerSeat, setPlayerSeat] = useState<number | null>(null)
-  const [playerChips, setPlayerChips] = useState<number>(0)
-  const [hasLoggedAuth, setHasLoggedAuth] = useState(false)
+  const [isSpectating, setIsSpectating] = useState(false)
 
+  // Fetch table information on mount
   useEffect(() => {
-    if (!isAuthenticated && !hasLoggedAuth) {
-      console.log('User not authenticated - allowing demo mode for game table')
-      setHasLoggedAuth(true)
-      // For testing purposes, allow demo mode
-      // In production, you might want to redirect to login
-      // router.push('/auth/login')
-      // return
+    const fetchTableInfo = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
+        const response = await fetch(`${apiUrl}/api/tables/${tableId}`)
+        
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.data) {
+            setTableInfo(result.data)
+            
+            // Check if user is already seated
+            const existingPlayer = result.data.players?.find((p: any) => 
+              p.playerId === user?.id || p.id === user?.id
+            )
+            if (existingPlayer) {
+              setPlayerSeat(existingPlayer.position || existingPlayer.seat)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch table info:', error)
+      } finally {
+        setLoadingTable(false)
+      }
     }
 
-    if (!tableId) {
-      router.push('/lobby')
-      return
+    if (tableId) {
+      fetchTableInfo()
     }
+  }, [tableId, user])
 
-    // Set connection status in game store
+  // Set up game state when connected
+  useEffect(() => {
     gameStore.setConnectionStatus(isConnected ? 'connected' : 'disconnected')
     
-    if (!isConnected) {
-      console.log('Not connected to game server')
+    // If connected and not seated, show join modal
+    if (isConnected && !loadingTable && !playerSeat && tableInfo) {
+      // Check URL params for spectate mode
+      const urlParams = new URLSearchParams(window.location.search)
+      if (urlParams.get('spectate') === 'true') {
+        setIsSpectating(true)
+      } else {
+        setShowJoinModal(true)
+      }
     }
-
-    // Check if player is already seated at this table
-    // For now, show seat selection if not seated
-    if (!playerSeat) {
-      setShowSeatSelection(true)
-    }
-
-  }, [isAuthenticated, tableId, isConnected, playerSeat])
+  }, [isConnected, loadingTable, playerSeat, tableInfo])
 
   const handlePlayerAction = (action: string, amount?: number) => {
-    if (isConnected) {
+    if (isConnected && playerSeat !== null) {
       console.log(`Player action: ${action}, amount: ${amount}`)
       sendPlayerAction(action, amount)
-    } else {
-      // Demo mode fallback
-      if (user) {
-        gameStore.addAction({
-          playerId: user.id,
-          action,
-          amount,
-          timestamp: Date.now()
-        })
-      }
     }
   }
 
@@ -80,286 +100,191 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
     if (isConnected) {
       sendChatMessage(message)
     }
-    
-    // Add to local chat for demo
-    const newMessage = {
-      playerId: user?.id || 'demo-user',
-      username: user?.username || 'Demo Player',
-      message,
-      timestamp: Date.now()
-    }
-    setChatMessages(prev => [...prev, newMessage])
   }
 
-  const handleSeatSelection = async (seatNumber: number, buyInAmount: number) => {
+  const handleJoinTable = async (buyIn: number, seatPreference?: number) => {
     try {
-      console.log(`Attempting to join seat ${seatNumber} with $${buyInAmount}`)
-      console.log('WebSocket status:', { isConnected, joinTable: !!joinTable, error })
-      console.log('User status:', { user: !!user, isAuthenticated })
+      console.log(`Attempting to join table with $${buyIn}`)
       
       if (isConnected && joinTable) {
-        console.log('Sending join table message via WebSocket...')
-        // Send join table message via WebSocket
-        joinTable(seatNumber, buyInAmount)
+        // Use seat preference if provided, otherwise let server assign
+        const seatToJoin = seatPreference || 0
+        joinTable(seatToJoin, buyIn)
         
-        // Update local state immediately for UI responsiveness
-        setPlayerSeat(seatNumber)
-        setPlayerChips(buyInAmount)
-        setShowSeatSelection(false)
-        
-        console.log('Local state updated, adding player to game store...')
-        
-        // Update game store with player seated
-        if (user) {
-          gameStore.addPlayer({
-            id: user.id,
-            username: user.username,
-            chipCount: buyInAmount,
-            position: seatNumber - 1, // Convert to 0-based position
-            isActive: true,
-            cards: [],
-            hasActed: false,
-            status: 'active'
-          })
-          console.log('Player added to game store successfully')
-        } else {
-          console.warn('No user found when adding to game store')
-        }
+        setShowJoinModal(false)
+        // Wait for WebSocket confirmation before updating local state
       } else {
-        console.error('Cannot join table:', {
-          isConnected,
-          hasJoinTableFunction: !!joinTable,
-          error,
-          reason: !isConnected ? 'WebSocket not connected' : 'joinTable function missing'
-        })
-        
-        // For now, let's allow demo mode fallback
-        console.log('Falling back to demo mode...')
-        setPlayerSeat(seatNumber)
-        setPlayerChips(buyInAmount)
-        setShowSeatSelection(false)
-        
-        if (user) {
-          gameStore.addPlayer({
-            id: user.id,
-            username: user.username,
-            chipCount: buyInAmount,
-            position: seatNumber - 1,
-            isActive: true,
-            cards: [],
-            hasActed: false,
-            status: 'active'
-          })
-        }
+        console.error('Cannot join table: WebSocket not connected')
       }
     } catch (error) {
       console.error('Failed to join table:', error)
-      // Handle error - show message to user
     }
   }
 
-  const handleCancelSeatSelection = () => {
-    setShowSeatSelection(false)
-    router.push('/lobby')
-  }
-
   const handleLeaveTable = () => {
-    // TODO: Call API to leave table and cash out chips
+    // TODO: Implement leave table functionality
     router.push('/lobby')
   }
 
-  // Allow demo mode for testing
-  // if (!isAuthenticated) {
-  //   return <div>Redirecting to login...</div>
-  // }
-
-  return (
-    <div className="min-h-screen bg-green-900 text-white p-4">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Table {tableId}</h1>
-        
-        <div className="flex items-center gap-4">
-          {/* Connection Status */}
-          <div className="flex items-center gap-2">
-            {isConnected ? (
-              <>
-                <Wifi className="h-5 w-5 text-green-400" />
-                <span className="text-sm text-green-400">Connected</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="h-5 w-5 text-red-400" />
-                <span className="text-sm text-red-400">
-                  {error ? 'Connection Error' : 'Demo Mode'}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowHistory(!showHistory)}
-            className="bg-green-800 border-green-600 hover:bg-green-700"
-          >
-            <History className="h-4 w-4 mr-2" />
-            History
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLeaveTable}
-            className="bg-red-800 border-red-600 hover:bg-red-700"
-          >
-            Leave Table
-          </Button>
+  // Loading state
+  if (loadingTable) {
+    return (
+      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4CAF50] mx-auto mb-4"></div>
+          <p className="text-white">Loading table...</p>
         </div>
       </div>
+    )
+  }
 
-      {/* Game Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Main Game Area */}
-        <div className="lg:col-span-3">
-          <PokerTable
+  // Error state
+  if (!tableInfo) {
+    return (
+      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">Table not found</p>
+          <button
+            onClick={() => router.push('/lobby')}
+            className="px-4 py-2 bg-[#4CAF50] hover:bg-[#45a049] text-white rounded transition-colors"
+          >
+            Back to Lobby
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#1a1a1a] text-white">
+      {/* Header */}
+      <header className="bg-[#2d2d2d] px-5 py-3 border-b-2 border-[#3d3d3d]">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-6">
+            <h1 className="text-2xl font-bold text-[#4CAF50]">
+              {tableInfo.name || `Table ${tableId}`}
+            </h1>
+            <div className="flex items-center gap-4 text-sm">
+              <div className="text-gray-300">
+                Stakes: <span className="text-white font-semibold">
+                  ${tableInfo.config.smallBlind}/${tableInfo.config.bigBlind}
+                </span>
+              </div>
+              <div className="text-gray-300">
+                Players: <span className="text-white font-semibold">
+                  {tableInfo.players?.length || 0}/{tableInfo.config.maxPlayers}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                isConnected ? 'bg-green-400' : 'bg-red-400'
+              }`}></div>
+              <span className={`text-sm ${
+                isConnected ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {isConnected ? 'Connected' : error || 'Disconnected'}
+              </span>
+            </div>
+            
+            {/* Action Buttons */}
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="px-3 py-1.5 bg-[#3d3d3d] hover:bg-[#4d4d4d] text-white rounded text-sm transition-colors"
+            >
+              History
+            </button>
+            <button
+              onClick={handleLeaveTable}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
+            >
+              Leave Table
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <PokerTable 
+            className="mb-6"
             tableId={tableId}
-            currentUserId={user?.id || 'demo-user'}
+            currentUserId={user?.id || ''}
             onPlayerAction={handlePlayerAction}
             onChatMessage={handleChatMessage}
             isConnected={isConnected}
           />
+          
+          {/* Player Controls */}
+          {playerSeat !== null && !isSpectating && (
+            <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3d3d3d]">
+              <div className="text-center text-gray-400">
+                Player controls will appear here when it's your turn
+              </div>
+            </div>
+          )}
+          
+          {/* Spectator Mode */}
+          {isSpectating && (
+            <div className="bg-[#2d2d2d] rounded-lg p-4 border border-[#3d3d3d] text-center">
+              <p className="text-gray-400">You are spectating this table</p>
+              <button
+                onClick={() => {
+                  setIsSpectating(false)
+                  setShowJoinModal(true)
+                }}
+                className="mt-2 px-4 py-2 bg-[#4CAF50] hover:bg-[#45a049] text-white rounded transition-colors"
+              >
+                Join Table
+              </button>
+            </div>
+          )}
         </div>
+      </main>
 
-        {/* Side Panel */}
-        <div className="lg:col-span-1 space-y-4">
-          {/* Player Info */}
-          <div className="bg-green-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-2">
-              <Users className="inline h-5 w-5 mr-2" />
-              Player Stats
-            </h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Username:</span>
-                <span className="font-medium">{user?.username || 'Demo Player'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Chips:</span>
-                <span className="font-medium text-yellow-400">
-                  ${playerChips > 0 ? playerChips.toLocaleString() : 'Not seated'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Position:</span>
-                <span className="font-medium">
-                  {playerSeat ? `Seat ${playerSeat}` : 'Not seated'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Status:</span>
-                <span className={`font-medium ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-                  {isConnected ? 'Live' : 'Demo'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Game Controls */}
-          <div className="bg-green-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-2">
-              <Settings className="inline h-5 w-5 mr-2" />
-              Game Settings
-            </h3>
-            <div className="space-y-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full bg-green-700 border-green-600 hover:bg-green-600"
-                onClick={() => console.log('Sit out next hand')}
-              >
-                Sit Out Next Hand
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full bg-green-700 border-green-600 hover:bg-green-600"
-                onClick={() => console.log('Auto-fold enabled')}
-              >
-                Auto-Fold
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full bg-green-700 border-green-600 hover:bg-green-600"
-                onClick={() => console.log('Show options')}
-              >
-                Table Options
-              </Button>
-            </div>
-          </div>
-
-          {/* Chat Messages */}
-          <div className="bg-green-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-2">Table Chat</h3>
-            <div className="space-y-2 h-40 overflow-y-auto">
-              {chatMessages.length === 0 ? (
-                <p className="text-sm text-gray-400">No messages yet...</p>
-              ) : (
-                chatMessages.map((msg, idx) => (
-                  <div key={idx} className="text-sm">
-                    <span className="font-medium text-blue-300">{msg.username}:</span>
-                    <span className="ml-2">{msg.message}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Hand History Modal */}
-      {showHistory && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-green-800 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Hand History</h2>
-              <Button
-                variant="outline"
-                onClick={() => setShowHistory(false)}
-                className="bg-red-700 border-red-600 hover:bg-red-600"
-              >
-                Close
-              </Button>
-            </div>
-            <HandHistory tableId={tableId} />
-          </div>
-        </div>
-      )}
-
-      {/* Seat Selection Modal */}
-      {showSeatSelection && (
-        <SeatSelection
-          tableId={tableId}
-          onSeatSelection={handleSeatSelection}
-          onCancel={handleCancelSeatSelection}
+      {/* Join Table Modal */}
+      {showJoinModal && tableInfo && (
+        <JoinTableModal
+          isOpen={showJoinModal}
+          onClose={() => {
+            setShowJoinModal(false)
+            router.push('/lobby')
+          }}
+          onJoin={handleJoinTable}
+          tableName={tableInfo.name}
+          minBuyIn={tableInfo.config.minBuyIn}
+          maxBuyIn={tableInfo.config.maxBuyIn}
+          smallBlind={tableInfo.config.smallBlind}
+          bigBlind={tableInfo.config.bigBlind}
+          maxPlayers={tableInfo.config.maxPlayers}
+          currentPlayers={tableInfo.players?.map(p => ({
+            seat: p.position || p.seat || 0,
+            username: p.username || p.playerName || 'Unknown',
+            chipCount: p.chipCount || 0
+          })) || []}
         />
       )}
 
-      {/* Error Display */}
-      {error && (
-        <div className="fixed bottom-4 right-4 bg-red-600 text-white p-4 rounded-lg shadow-lg">
-          <p className="font-medium">Connection Error</p>
-          <p className="text-sm opacity-90">{error}</p>
-        </div>
-      )}
-
-      {/* Demo Mode Notice */}
-      {!isConnected && !error && (
-        <div className="fixed bottom-4 left-4 bg-yellow-600 text-white p-4 rounded-lg shadow-lg">
-          <p className="font-medium">Demo Mode Active</p>
-          <p className="text-sm opacity-90">Playing offline with demo data</p>
+      {/* Hand History */}
+      {showHistory && (
+        <div className="fixed right-0 top-0 h-full w-80 bg-[#2d2d2d] border-l border-[#3d3d3d] p-4 overflow-y-auto">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Hand History</h2>
+            <button
+              onClick={() => setShowHistory(false)}
+              className="text-gray-400 hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+          <div className="text-gray-400 text-sm">
+            Hand history will appear here
+          </div>
         </div>
       )}
     </div>

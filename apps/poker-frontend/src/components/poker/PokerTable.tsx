@@ -12,6 +12,11 @@ import { Coins, Users, Clock } from "lucide-react"
 
 interface PokerTableProps {
   className?: string
+  tableId?: string
+  currentUserId?: string
+  onPlayerAction?: (action: string, amount?: number) => void
+  onChatMessage?: (message: string) => void
+  isConnected?: boolean
 }
 
 // Position coordinates for seats around an oval table (9-max)
@@ -27,7 +32,14 @@ const SEAT_POSITIONS = [
   { top: '10%', left: '40%', transform: 'translate(-50%, -50%)' },    // Seat 9 (top left center)
 ]
 
-export const PokerTable: React.FC<PokerTableProps> = ({ className }) => {
+export const PokerTable: React.FC<PokerTableProps> = ({ 
+  className,
+  tableId,
+  currentUserId: propUserId,
+  onPlayerAction: propOnPlayerAction,
+  onChatMessage,
+  isConnected: propIsConnected
+}) => {
   const {
     players,
     communityCards,
@@ -45,7 +57,8 @@ export const PokerTable: React.FC<PokerTableProps> = ({ className }) => {
   } = useGameStore()
   
   const { user } = useAuthStore()
-  const currentUserId = storeUserId || user?.id || '1' // Default to first player for demo
+  const currentUserId = propUserId || storeUserId || user?.id || '1' // Use prop if provided
+  const isConnected = propIsConnected !== undefined ? propIsConnected : isMultiplayer
 
   // Create array of 9 seats, some may be empty
   const seats = Array(9).fill(null).map((_, index) => {
@@ -60,7 +73,10 @@ export const PokerTable: React.FC<PokerTableProps> = ({ className }) => {
     if (!canAct) return
     
     try {
-      if (isMultiplayer && isConnected) {
+      if (propOnPlayerAction) {
+        // Use provided action handler (for multiplayer)
+        propOnPlayerAction(action, amount)
+      } else if (isMultiplayer && isConnected) {
         // Use multiplayer WebSocket action
         await multiplayerAction(action, amount)
       } else {

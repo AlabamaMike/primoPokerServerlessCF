@@ -165,10 +165,10 @@ export function useGameWebSocket(tableId?: string) {
       client.on('join_table_success', (message) => {
         console.log('Successfully joined table:', message.payload)
         if (message.payload) {
-          const { chipCount } = message.payload
+          const { chipCount, tableId } = message.payload
           // Remove chips from bankroll when joining
           const bankrollStore = useBankrollStore.getState()
-          bankrollStore.removeChips(chipCount)
+          bankrollStore.removeChips(chipCount, `Bought in at table`, tableId)
           console.log(`Removed ${chipCount} chips from bankroll. New balance: ${bankrollStore.balance - chipCount}`)
         }
         // Player successfully joined - the table state will be updated via table_state message
@@ -229,9 +229,9 @@ export function useGameWebSocket(tableId?: string) {
           const { chipCount } = message.payload
           // Update bankroll with returned chips
           const bankrollStore = useBankrollStore.getState()
-          bankrollStore.addChips(chipCount)
+          bankrollStore.addChips(chipCount, `Cashed out from table`, tableId)
           gameStore.setSpectatorMode(true)
-          console.log(`Returned ${chipCount} chips to bankroll. New balance: ${bankrollStore.balance + chipCount}`)
+          console.log(`Returned ${chipCount} chips to bankroll. New balance: ${bankrollStore.balance}`)
         }
       })
 

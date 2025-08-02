@@ -9,6 +9,7 @@ import { PokerTable } from '@/components/poker/PokerTable'
 import { JoinTableModal } from '@/components/JoinTableModal'
 import { GetChipsModal } from '@/components/GetChipsModal'
 import { StandUpModal } from '@/components/StandUpModal'
+import { WalletDisplay } from '@/components/WalletDisplay'
 import { useBankrollStore } from '@/stores/bankroll-store'
 
 interface MultiplayerGameClientProps {
@@ -253,6 +254,9 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Wallet Display */}
+            <WalletDisplay compact showHistory />
+            
             {/* Connection Status */}
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${

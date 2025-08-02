@@ -10,7 +10,7 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@primo-poker/shared$': '<rootDir>/../packages/shared/src',
     '^@primo-poker/core$': '<rootDir>/../packages/core/src',
     '^@primo-poker/security$': '<rootDir>/../packages/security/src',

@@ -165,33 +165,40 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     // Accept WebSocket and handle via Durable Object
     server.accept();
     
+    // Forward WebSocket to the GameTable Durable Object for handling
+    try {
+      await gameTable.webSocketMessage(server, JSON.stringify({
+        type: 'connection_established',
+        payload: {
+          playerId: decodedPayload.sub,
+          username: decodedPayload.username,
+          tableId: tableId,
+          timestamp: Date.now()
+        }
+      }));
+    } catch (error) {
+      console.error('Error establishing WebSocket connection with Durable Object:', error);
+    }
+    
     // Set up message forwarding to the Durable Object
     server.addEventListener('message', async (event) => {
       try {
-        // Forward the message to the GameTable Durable Object
-        // We'll need to implement a different approach since we can't directly forward WebSockets
-        // For now, let's set up a simple message handler
-        
         const messageData = JSON.parse(event.data);
         
         // Add authentication info to the message
         messageData.playerId = decodedPayload.sub;
         messageData.username = decodedPayload.username;
+        messageData.tableId = tableId;
+        messageData.timestamp = Date.now();
         
-        // Send acknowledgment for now
-        server.send(JSON.stringify({
-          type: 'connection_established',
-          data: {
-            playerId: decodedPayload.sub,
-            tableId: tableId
-          }
-        }));
+        // Forward the message to the GameTable Durable Object
+        await gameTable.webSocketMessage(server, JSON.stringify(messageData));
         
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
         server.send(JSON.stringify({
           type: 'error',
-          data: { error: 'Failed to process message' }
+          payload: { error: 'Failed to process message' }
         }));
       }
     });

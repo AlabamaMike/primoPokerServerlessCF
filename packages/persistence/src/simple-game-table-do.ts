@@ -139,6 +139,10 @@ export class GameTableDurableObject {
       console.log(`GameTable received message: ${type}`, payload)
 
       switch (type) {
+        case 'connection_established':
+          await this.handleConnectionEstablished(websocket, payload)
+          break
+          
         case 'join_table':
           await this.handleJoinTable(websocket, payload)
           break
@@ -202,6 +206,39 @@ export class GameTableDurableObject {
     }
     
     await this.broadcastTableState()
+  }
+
+  /**
+   * Handle initial WebSocket connection establishment
+   */
+  private async handleConnectionEstablished(websocket: WebSocket, payload: any): Promise<void> {
+    const { playerId, username, tableId } = payload
+    
+    console.log(`Connection established for player ${playerId} (${username}) at table ${tableId}`)
+    
+    // Store connection
+    const connection: PlayerConnection = {
+      websocket,
+      playerId,
+      username,
+      isConnected: true,
+      lastHeartbeat: Date.now()
+    }
+    
+    this.state.connections.set(playerId, connection)
+    
+    // Send connection confirmation
+    this.sendMessage(websocket, {
+      type: 'connection_confirmed',
+      payload: {
+        playerId,
+        tableId: this.state.tableId,
+        timestamp: Date.now()
+      }
+    })
+    
+    // Send initial table state
+    this.sendTableState(websocket)
   }
 
   /**
@@ -814,6 +851,38 @@ export class GameTableDurableObject {
     } catch (error) {
       console.error('Failed to send WebSocket message:', error)
     }
+  }
+
+  /**
+   * Send current table state to specific WebSocket
+   */
+  private sendTableState(websocket: WebSocket): void {
+    const players = Array.from(this.state.players.values()).map(player => ({
+      id: player.id,
+      username: player.username,
+      chipCount: player.chipCount,
+      seat: player.seat,
+      isConnected: player.isConnected,
+      status: player.status
+    }))
+
+    this.sendMessage(websocket, {
+      type: 'table_state',
+      payload: {
+        tableId: this.state.tableId,
+        phase: this.state.phase,
+        players,
+        pot: this.state.pot,
+        currentBet: this.state.currentBet,
+        currentPlayer: this.state.currentPlayer,
+        communityCards: this.state.communityCards,
+        handNumber: this.state.handNumber,
+        smallBlind: this.state.smallBlind,
+        bigBlind: this.state.bigBlind,
+        isActive: this.state.isActive,
+        timestamp: Date.now()
+      }
+    })
   }
 
   /**

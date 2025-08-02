@@ -20,7 +20,7 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
   
   const { user, isAuthenticated } = useAuthStore()
   const gameStore = useGameStore()
-  const { isConnected, error, sendPlayerAction, sendChatMessage } = useGameWebSocket(tableId)
+  const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable } = useGameWebSocket(tableId)
   
   const [showHistory, setShowHistory] = useState(false)
   const [showSeatSelection, setShowSeatSelection] = useState(false)
@@ -93,26 +93,33 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
 
   const handleSeatSelection = async (seatNumber: number, buyInAmount: number) => {
     try {
-      // TODO: Call API to join table with seat and buy-in
       console.log(`Joining seat ${seatNumber} with $${buyInAmount}`)
       
-      // For now, simulate successful join
-      setPlayerSeat(seatNumber)
-      setPlayerChips(buyInAmount)
-      setShowSeatSelection(false)
-      
-      // Update game store with player seated
-      if (user) {
-        gameStore.addPlayer({
-          id: user.id,
-          username: user.username,
-          chipCount: buyInAmount,
-          position: seatNumber - 1, // Convert to 0-based position
-          isActive: true,
-          cards: [],
-          hasActed: false,
-          status: 'active'
-        })
+      if (isConnected && joinTable) {
+        // Send join table message via WebSocket
+        joinTable(seatNumber, buyInAmount)
+        
+        // Update local state immediately for UI responsiveness
+        setPlayerSeat(seatNumber)
+        setPlayerChips(buyInAmount)
+        setShowSeatSelection(false)
+        
+        // Update game store with player seated
+        if (user) {
+          gameStore.addPlayer({
+            id: user.id,
+            username: user.username,
+            chipCount: buyInAmount,
+            position: seatNumber - 1, // Convert to 0-based position
+            isActive: true,
+            cards: [],
+            hasActed: false,
+            status: 'active'
+          })
+        }
+      } else {
+        console.error('Cannot join table: WebSocket not connected')
+        // Show error message to user about connection
       }
     } catch (error) {
       console.error('Failed to join table:', error)

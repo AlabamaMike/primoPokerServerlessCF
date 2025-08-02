@@ -108,8 +108,34 @@ export function useGameWebSocket(tableId?: string) {
         }
       })
 
-      // Join the table
-      client.send('join_table', { tableId })
+      client.on('connection_confirmed', (message) => {
+        console.log('WebSocket connection confirmed:', message.payload)
+      })
+
+      client.on('table_state', (message) => {
+        console.log('Table state received:', message.payload)
+        if (message.payload) {
+          // Update game store with complete table state
+          const state = message.payload
+          gameStore.setGamePhase(state.phase)
+          gameStore.setPot(state.pot)
+          gameStore.setCommunityCards(state.communityCards || [])
+          gameStore.setPlayers(state.players || [])
+          gameStore.setActivePlayer(state.currentPlayer)
+        }
+      })
+
+      client.on('join_table_success', (message) => {
+        console.log('Successfully joined table:', message.data)
+        // Player successfully joined - the table state will be updated via table_state message
+      })
+
+      client.on('error', (message) => {
+        console.error('WebSocket error:', message.payload || message.data)
+      })
+
+      // Don't auto-join the table here - let the UI control when to join
+      // client.send('join_table', { tableId })
     }
 
     connectToTable()
@@ -139,11 +165,23 @@ export function useGameWebSocket(tableId?: string) {
     }
   }, [webSocket.client, tableId])
 
+  const joinTable = useCallback((seatNumber: number, buyInAmount: number) => {
+    if (webSocket.client && webSocket.isConnected) {
+      webSocket.client.send('join_table', { 
+        tableId,
+        seatIndex: seatNumber,
+        chipCount: buyInAmount,
+        timestamp: Date.now()
+      })
+    }
+  }, [webSocket.client, tableId])
+
   return {
     isConnected: isConnected && webSocket.isConnected,
     error: webSocket.error,
     sendPlayerAction,
-    sendChatMessage
+    sendChatMessage,
+    joinTable
   }
 }
 

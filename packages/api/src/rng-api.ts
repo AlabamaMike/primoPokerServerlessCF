@@ -11,7 +11,7 @@ import { DeckCommitment } from '@primo-poker/security';
 export interface RNGApiRequest {
   tableId: string;
   gameId?: string;
-  operation: 'shuffle' | 'random_int' | 'random_bytes' | 'commit_deck' | 'reveal_deck' | 'status';
+  operation: 'shuffle' | 'random_int' | 'random_bytes' | 'commit_deck' | 'reveal_deck' | 'status' | 'get_audit_logs' | 'get_analytics' | 'export_compliance';
   data?: any;
   authentication?: {
     playerId: string;
@@ -120,6 +120,12 @@ export class RNGApiHandler {
         return await this.handleRevealDeck(apiRequest);
       case 'status':
         return await this.handleStatus(apiRequest);
+      case 'get_audit_logs':
+        return await this.handleGetAuditLogs(apiRequest);
+      case 'get_analytics':
+        return await this.handleGetAnalytics(apiRequest);
+      case 'export_compliance':
+        return await this.handleExportCompliance(apiRequest);
       default:
         throw new Error(`Unknown operation: ${apiRequest.operation}`);
     }
@@ -385,6 +391,108 @@ export class RNGApiHandler {
       success: true,
       data: { status: statusResponse }
     };
+  }
+
+  /**
+   * Handles get audit logs request
+   */
+  private async handleGetAuditLogs(apiRequest: RNGApiRequest): Promise<RNGApiResponse> {
+    const { startTime, endTime, limit } = apiRequest.data || {};
+    
+    if (!startTime || !endTime) {
+      return { success: false, error: 'Start time and end time required' };
+    }
+    
+    // Direct R2 access through environment
+    if (!this.env.AUDIT_BUCKET) {
+      return { success: false, error: 'Audit storage not configured' };
+    }
+    
+    try {
+      const auditStorage = new (await import('./rng-audit-storage')).RNGAuditStorage(this.env.AUDIT_BUCKET);
+      const logs = await auditStorage.getAuditLogs(
+        apiRequest.tableId,
+        startTime,
+        endTime,
+        limit || 1000
+      );
+      
+      return {
+        success: true,
+        data: { logs, count: logs.length }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to retrieve audit logs'
+      };
+    }
+  }
+  
+  /**
+   * Handles get analytics request
+   */
+  private async handleGetAnalytics(apiRequest: RNGApiRequest): Promise<RNGApiResponse> {
+    const { days } = apiRequest.data || {};
+    
+    if (!this.env.AUDIT_BUCKET) {
+      return { success: false, error: 'Audit storage not configured' };
+    }
+    
+    try {
+      const auditStorage = new (await import('./rng-audit-storage')).RNGAuditStorage(this.env.AUDIT_BUCKET);
+      const analytics = await auditStorage.generateAnalytics(
+        apiRequest.tableId,
+        days || 7
+      );
+      
+      return {
+        success: true,
+        data: { analytics }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate analytics'
+      };
+    }
+  }
+  
+  /**
+   * Handles compliance export request
+   */
+  private async handleExportCompliance(apiRequest: RNGApiRequest): Promise<RNGApiResponse> {
+    const { startDate, endDate } = apiRequest.data || {};
+    
+    if (!startDate || !endDate) {
+      return { success: false, error: 'Start date and end date required' };
+    }
+    
+    if (!this.env.AUDIT_BUCKET) {
+      return { success: false, error: 'Audit storage not configured' };
+    }
+    
+    try {
+      const auditStorage = new (await import('./rng-audit-storage')).RNGAuditStorage(this.env.AUDIT_BUCKET);
+      const exportKey = await auditStorage.exportForCompliance(
+        apiRequest.tableId,
+        new Date(startDate),
+        new Date(endDate)
+      );
+      
+      return {
+        success: true,
+        data: { 
+          exportKey,
+          downloadUrl: `/api/rng/download/${exportKey}`
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to export compliance data'
+      };
+    }
   }
 
   /**

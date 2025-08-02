@@ -16,6 +16,7 @@ import {
   DeckCommitment, 
   DeckReveal 
 } from '@primo-poker/security';
+import { RNGAuditStorage, SecurityAlert } from '@primo-poker/api/src/rng-audit-storage';
 
 export interface RNGRequest {
   type: 'shuffle' | 'random_int' | 'random_bytes' | 'commit_deck' | 'reveal_deck' | 'get_status';
@@ -68,15 +69,25 @@ export class SecureRNGDurableObject {
   private tableId: string;
   private storedState?: StoredState;
   private initialized = false;
+  private auditStorage: RNGAuditStorage | null = null;
+  private pendingAuditLogs: AuditLog[] = [];
+  private lastAuditFlush: number = Date.now();
 
   private static readonly MAX_AUDIT_LOGS = 10000;
   private static readonly BACKUP_INTERVAL = 300000; // 5 minutes
   private static readonly OPERATION_RATE_LIMIT = 1000; // per minute
+  private static readonly AUDIT_FLUSH_INTERVAL = 60000; // 1 minute
+  private static readonly AUDIT_FLUSH_SIZE = 50; // Batch size
 
   constructor(state: DurableObjectState, env: any) {
     this.state = state;
     this.env = env;
     this.tableId = ''; // Will be set on first request
+    
+    // Initialize audit storage if R2 bucket is available
+    if (env.AUDIT_BUCKET) {
+      this.auditStorage = new RNGAuditStorage(env.AUDIT_BUCKET);
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -118,6 +129,25 @@ export class SecureRNGDurableObject {
     }
   }
 
+  async alarm(): Promise<void> {
+    // This runs periodically for maintenance
+    try {
+      // Flush any pending audit logs
+      await this.flushAuditLogs(true);
+      
+      // Clean up old audit logs from R2
+      if (this.auditStorage) {
+        const deletedCount = await this.auditStorage.cleanupOldLogs();
+        console.log(`Cleaned up ${deletedCount} old audit logs from R2`);
+      }
+      
+      // Schedule next alarm
+      await this.state.storage.setAlarm(new Date(Date.now() + 24 * 60 * 60 * 1000)); // Daily
+    } catch (error) {
+      console.error('Alarm handler error:', error);
+    }
+  }
+
   private async initialize(tableId: string): Promise<void> {
     this.tableId = tableId;
 
@@ -156,6 +186,12 @@ export class SecureRNGDurableObject {
     // Update initialization
     this.storedState.status.isInitialized = true;
     this.storedState.status.lastOperation = Date.now();
+    
+    // Set up daily cleanup alarm if not already set
+    const currentAlarm = await this.state.storage.getAlarm();
+    if (!currentAlarm) {
+      await this.state.storage.setAlarm(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    }
     
     await this.persistState();
     this.initialized = true;
@@ -466,6 +502,12 @@ export class SecureRNGDurableObject {
 
     // Add to stored logs
     this.storedState!.auditLogs.push(auditLog);
+    
+    // Add to pending R2 upload
+    this.pendingAuditLogs.push(auditLog);
+    
+    // Check if we should flush to R2
+    await this.maybeFlushAuditLogs();
 
     // Trim old logs if necessary
     if (this.storedState!.auditLogs.length > SecureRNGDurableObject.MAX_AUDIT_LOGS) {
@@ -502,6 +544,9 @@ export class SecureRNGDurableObject {
 
   private async backupToR2(): Promise<void> {
     try {
+      // Force flush any pending audit logs
+      await this.flushAuditLogs(true);
+      
       const backup = {
         tableId: this.tableId,
         timestamp: Date.now(),
@@ -514,6 +559,66 @@ export class SecureRNGDurableObject {
       await this.env.AUDIT_BUCKET.put(backupKey, JSON.stringify(backup));
     } catch (error) {
       console.error('Failed to backup to R2:', error);
+    }
+  }
+  
+  private async maybeFlushAuditLogs(): Promise<void> {
+    const now = Date.now();
+    const shouldFlush = 
+      this.pendingAuditLogs.length >= SecureRNGDurableObject.AUDIT_FLUSH_SIZE ||
+      now - this.lastAuditFlush > SecureRNGDurableObject.AUDIT_FLUSH_INTERVAL;
+    
+    if (shouldFlush) {
+      await this.flushAuditLogs();
+    }
+  }
+  
+  private async flushAuditLogs(force: boolean = false): Promise<void> {
+    if (!this.auditStorage || (this.pendingAuditLogs.length === 0 && !force)) {
+      return;
+    }
+    
+    try {
+      // Store the batch
+      const batchId = await this.auditStorage.storeBatch(this.tableId, this.pendingAuditLogs);
+      
+      // Clear pending logs
+      this.pendingAuditLogs = [];
+      this.lastAuditFlush = Date.now();
+      
+      // Check for suspicious patterns
+      await this.checkForSuspiciousActivity();
+      
+      console.log(`Flushed ${this.pendingAuditLogs.length} audit logs to R2, batch: ${batchId}`);
+    } catch (error) {
+      console.error('Failed to flush audit logs to R2:', error);
+      // Keep logs in memory for retry
+    }
+  }
+  
+  private async checkForSuspiciousActivity(): Promise<void> {
+    if (!this.auditStorage) return;
+    
+    // Get recent analytics
+    const analytics = await this.auditStorage.generateAnalytics(this.tableId, 1);
+    
+    // Check for suspicious patterns
+    if (analytics.suspiciousPatterns.length > 0) {
+      const alert: SecurityAlert = {
+        id: crypto.randomUUID(),
+        tableId: this.tableId,
+        timestamp: Date.now(),
+        severity: 'medium',
+        type: 'suspicious_pattern',
+        description: 'Suspicious RNG usage pattern detected',
+        details: {
+          patterns: analytics.suspiciousPatterns,
+          recentOperations: analytics.totalOperations,
+          entropyUsed: analytics.totalEntropyUsed
+        }
+      };
+      
+      await this.auditStorage.storeSecurityAlert(alert);
     }
   }
 

@@ -385,7 +385,7 @@ export default function LobbyPage() {
         if (result.success) {
           // Successfully joined, redirect to table
           setJoinModalOpen(false)
-          router.push(`/game/${tableId}`)
+          router.push(`/multiplayer?table=${tableId}`)
           return
         } else {
           // Handle errors
@@ -415,7 +415,7 @@ export default function LobbyPage() {
     
     // For demo mode or if API fails, allow direct navigation
     setJoinModalOpen(false)
-    router.push(`/game/${tableId}`)
+    router.push(`/multiplayer?table=${tableId}`)
   }
 
   // Quick seat functionality
@@ -467,7 +467,7 @@ export default function LobbyPage() {
       if (result.success && result.data?.tableId) {
         setCreateTableOpen(false)
         // Redirect to the new table
-        router.push(`/game/${result.data.tableId}`)
+        router.push(`/multiplayer?table=${result.data.tableId}`)
       } else {
         alert(result.error?.message || result.error || 'Failed to create table')
       }

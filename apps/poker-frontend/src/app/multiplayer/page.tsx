@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTableWebSocket } from '@/hooks/useWebSocket'
 import { Button } from '@/components/ui/button'
 import { Users, Play, Plus, Wifi, WifiOff } from 'lucide-react'
+import MultiplayerGameClient from '@/app/game/[tableId]/client-page'
 
 interface LiveTable {
   id: string
@@ -21,9 +22,16 @@ interface LiveTable {
 
 export default function MultiplayerLobby() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tableId = searchParams.get('table')
   const { user, isAuthenticated } = useAuthStore()
   const { isConnected, error, tables, createTable, joinTable } = useTableWebSocket()
   const [isLoading, setIsLoading] = useState(false)
+
+  // If table ID is provided, render the game client
+  if (tableId) {
+    return <MultiplayerGameClient tableId={tableId} />
+  }
 
   // Demo tables for development
   const [demoTables] = useState<LiveTable[]>([
@@ -87,7 +95,7 @@ export default function MultiplayerLobby() {
     try {
       if (isConnected) {
         joinTable(tableId)
-        router.push(`/game/${tableId}`)
+        router.push(`/multiplayer?table=${tableId}`)
       } else {
         // Fallback to demo mode
         router.push('/demo/table')

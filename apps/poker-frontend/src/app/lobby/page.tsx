@@ -279,10 +279,15 @@ export default function LobbyPage() {
       // If user is authenticated, try API call
       if (isAuthenticated && user) {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
+        
+        // Get auth token from localStorage
+        const authToken = localStorage.getItem('auth_token')
+        
         const response = await fetch(`${apiUrl}/api/tables/${tableId}/join`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
           },
           body: JSON.stringify({
             tableId,
@@ -299,7 +304,8 @@ export default function LobbyPage() {
           return
         } else {
           // Handle join failure (full table, wrong password, etc.)
-          alert(result.error || 'Failed to join table')
+          const errorMessage = result.error?.message || result.error || 'Failed to join table'
+          alert(errorMessage)
           return
         }
       }
@@ -319,10 +325,15 @@ export default function LobbyPage() {
   const handleCreateTable = async (config: LobbyTableConfig) => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://primo-poker-server.alabamamike.workers.dev'
+      
+      // Get auth token from localStorage
+      const authToken = localStorage.getItem('auth_token')
+      
       const response = await fetch(`${apiUrl}/api/tables`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
         },
         body: JSON.stringify({
           config,
@@ -339,7 +350,8 @@ export default function LobbyPage() {
           window.location.href = `/game/${result.tableId}/`
         }
       } else {
-        alert(result.error || 'Failed to create table')
+        const errorMessage = result.error?.message || result.error || 'Failed to create table'
+        alert(errorMessage)
       }
     } catch (error) {
       console.error('Failed to create table:', error)

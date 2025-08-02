@@ -497,7 +497,7 @@ export default function LobbyPage() {
     <div className="min-h-screen bg-[#1a1a1a] text-white flex flex-col">
       {/* Header */}
       <header className="bg-[#2d2d2d] px-5 py-3 flex justify-between items-center border-b-2 border-[#3d3d3d]">
-        <div className="text-2xl font-bold text-[#4CAF50]">PokerRoom Pro</div>
+        <div className="text-2xl font-bold text-[#4CAF50]">Primo Poker Club</div>
         <div className="flex items-center gap-5">
           {user ? (
             <>

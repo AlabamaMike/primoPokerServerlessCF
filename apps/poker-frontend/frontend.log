@@ -23,3 +23,250 @@ API_BASE_URL configured as: https://primo-poker-server.alabamamike.workers.dev
  ✓ Compiled /auth/register in 2.4s
  GET /auth/register/ 200 in 2792ms
  ✓ Compiled in 237ms
+ ○ Compiling /register ...
+ ✓ Compiled /register in 1002ms
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.q36q7d1ss4'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.q36q7d1ss4'
+}
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 2.8s
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.wf4e74szlk'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.wf4e74szlk'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.q36q7d1ss4'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.q36q7d1ss4'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.33fihbpxel3'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.33fihbpxel3'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.4p61fqh9i4q'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.4p61fqh9i4q'
+}
+ ✓ Compiled /lobby in 6ms
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.98wqce8wdhd'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.98wqce8wdhd'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.unhtaye2hcn'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.unhtaye2hcn'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.z418v15nh8m'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.z418v15nh8m'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2ugcxv6ffva'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2ugcxv6ffva'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.calqdztqw1h'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.calqdztqw1h'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2ugcxv6ffva'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2ugcxv6ffva'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.7uqn5h4yuh'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.7uqn5h4yuh'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.1cv6ctr3bx2'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.1cv6ctr3bx2'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2k700fwxiy'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2k700fwxiy'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.8gkel3ldfby'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.8gkel3ldfby'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2k700fwxiy'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.2k700fwxiy'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.xqmxhi46zaq'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.xqmxhi46zaq'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.h31ihfo11l'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.h31ihfo11l'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.zhxwv9x7yjs'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.zhxwv9x7yjs'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.xif3yd2pmp'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.xif3yd2pmp'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.zhxwv9x7yjs'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.zhxwv9x7yjs'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.b3g5ypqeznh'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.b3g5ypqeznh'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.mojpju143ga'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.mojpju143ga'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.a5gnzwkaxb7'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.a5gnzwkaxb7'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.6ippbbxdrym'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.6ippbbxdrym'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.mzrvyvankxq'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.mzrvyvankxq'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.p887idenk4o'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.p887idenk4o'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.fucn4qnb7vn'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.fucn4qnb7vn'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.htt4vm48dbi'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.htt4vm48dbi'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.sndkfpy6lbi'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.sndkfpy6lbi'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/server/app/lobby/page/app-build-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.ebptyjtlpk6'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.ebptyjtlpk6'
+}
+[Error: ENOENT: no such file or directory, open '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.1v46pn6stja'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/workspaces/primoPokerServerlessCF/apps/poker-frontend/.next/static/development/_buildManifest.js.tmp.1v46pn6stja'
+}
+   Reload env: .env.local
+[?25h

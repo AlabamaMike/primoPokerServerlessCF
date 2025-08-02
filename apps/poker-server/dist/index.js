@@ -1,7 +1,7 @@
 import { PokerAPIRoutes, WebSocketManager, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
-import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject } from '@primo-poker/persistence';
+import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
 // Export Durable Objects for Cloudflare Workers
-export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject };
+export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject };
 // Initialize API routes and WebSocket manager
 let apiRoutes;
 let wsManager;
@@ -108,33 +108,17 @@ async function handleWebSocketUpgrade(request, env) {
     if (!tableId) {
         return new Response('Missing tableId parameter', { status: 400 });
     }
-    // Validate JWT token or handle demo tokens
+    // Validate JWT token using AuthenticationManager
     let decodedPayload;
     try {
-        // Check if this is a demo token
-        if (token.startsWith('demo-token-')) {
-            // Handle demo tokens for development/testing
-            const timestamp = token.split('-')[2] || Date.now().toString();
-            decodedPayload = {
-                sub: `demo-user-${timestamp}`,
-                username: `DemoPlayer${timestamp.slice(-4)}`,
-                iat: Math.floor(Date.now() / 1000),
-                exp: Math.floor(Date.now() / 1000) + 3600 // 1 hour expiry
-            };
-            console.log('Demo token processed:', decodedPayload);
+        // Initialize authentication manager
+        const authManager = new (await import('@primo-poker/security')).AuthenticationManager(env.JWT_SECRET);
+        // Verify the JWT token
+        const verifyResult = await authManager.verifyAccessToken(token);
+        if (!verifyResult.valid || !verifyResult.payload) {
+            return new Response(verifyResult.error || 'Invalid token', { status: 401 });
         }
-        else {
-            // Handle real JWT tokens
-            const [header, payload, signature] = token.split('.');
-            if (!header || !payload || !signature) {
-                return new Response('Invalid token format', { status: 401 });
-            }
-            // Decode payload (basic validation)
-            decodedPayload = JSON.parse(atob(payload));
-            if (!decodedPayload.sub || !decodedPayload.username) {
-                return new Response('Invalid token payload', { status: 401 });
-            }
-        }
+        decodedPayload = verifyResult.payload;
         // Create WebSocket pair
         const webSocketPair = new WebSocketPair();
         const [client, server] = Object.values(webSocketPair);
@@ -148,9 +132,10 @@ async function handleWebSocketUpgrade(request, env) {
         // We need to create a request with the WebSocket and authentication info
         const websocketRequest = new Request(`http://dummy/websocket`, {
             headers: {
-                'X-Player-ID': decodedPayload.sub,
+                'X-Player-ID': decodedPayload.userId,
                 'X-Username': decodedPayload.username,
                 'X-Table-ID': tableId,
+                'X-Roles': decodedPayload.roles?.join(',') || 'player',
                 'Upgrade': 'websocket'
             }
         });

@@ -6,7 +6,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useGameStore } from '@/stores/game-store'
-import { WebSocketClient } from '@/lib/websocket-client'
+import { WebSocketClient, gameWebSocket } from '@/lib/websocket-client'
 import { getWebSocketUrl } from '@/lib/config'
 
 // WebSocket connection hook
@@ -14,44 +14,62 @@ export function useWebSocketConnection() {
   const { user, token } = useAuthStore()
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const clientRef = useRef<WebSocketClient | null>(null)
 
   const connect = useCallback(async (tableId: string) => {
     console.log('WebSocket connect called with:', { tableId, hasToken: !!token, hasUser: !!user, inBrowser: typeof window !== 'undefined' })
     
-    if (!token || !user || typeof window === 'undefined') {
-      const errorMsg = 'Authentication required or not in browser'
-      console.error('WebSocket connection failed:', errorMsg, { hasToken: !!token, hasUser: !!user, inBrowser: typeof window !== 'undefined' })
+    if (typeof window === 'undefined') {
+      const errorMsg = 'Not in browser environment'
+      console.error('WebSocket connection failed:', errorMsg)
       setError(errorMsg)
       return null
     }
 
+    // For demo purposes, create a fallback user if not authenticated
+    let demoToken = token
+    let demoUser = user
+    
+    if (!token || !user) {
+      console.log('No authentication found, creating demo user for WebSocket connection')
+      demoToken = 'demo-token-' + Date.now()
+      demoUser = {
+        id: 'demo-user-' + Date.now(),
+        username: 'Demo Player',
+        email: 'demo@example.com',
+        chipCount: 10000
+      }
+    }
+
     try {
-      const wsUrl = getWebSocketUrl()
-      console.log('WebSocket connecting to:', wsUrl)
-      
-      if (!clientRef.current) {
-        clientRef.current = new WebSocketClient(wsUrl)
-        clientRef.current.setToken(token)
-        clientRef.current.setTableId(tableId)
+      // Use the singleton gameWebSocket instance that the auth store already configured
+      if (!gameWebSocket) {
+        throw new Error('GameWebSocket singleton not available')
       }
 
-      await clientRef.current.connect()
+      console.log('Using singleton gameWebSocket instance')
+      
+      // Ensure token and table ID are set (use demo token if needed)
+      gameWebSocket.setToken(demoToken)
+      gameWebSocket.setTableId(tableId)
+
+      await gameWebSocket.connect()
       setIsConnected(true)
       setError(null)
       
-      return clientRef.current
+      console.log('WebSocket connected successfully using singleton')
+      return gameWebSocket
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connection failed')
+      const errorMsg = err instanceof Error ? err.message : 'Connection failed'
+      console.error('WebSocket connection error:', errorMsg)
+      setError(errorMsg)
       setIsConnected(false)
       return null
     }
-  }, [token, user])
+  }, [token, user])  // We need to keep these dependencies to detect auth changes
 
   const disconnect = useCallback(() => {
-    if (clientRef.current) {
-      clientRef.current.disconnect()
-      clientRef.current = null
+    if (gameWebSocket) {
+      gameWebSocket.disconnect()
       setIsConnected(false)
     }
   }, [])
@@ -67,7 +85,7 @@ export function useWebSocketConnection() {
     disconnect,
     isConnected,
     error,
-    client: clientRef.current
+    client: gameWebSocket
   }
 }
 

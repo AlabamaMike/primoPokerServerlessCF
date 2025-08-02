@@ -194,9 +194,12 @@ let tableWebSocketInstance: WebSocketClient | null = null
 export const gameWebSocket = (() => {
   if (typeof window === 'undefined') return null
   if (!gameWebSocketInstance) {
-    gameWebSocketInstance = new WebSocketClient(
-      process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 'ws://localhost:8787'
-    )
+    // Use the proper WebSocket URL from config
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
+                  process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 
+                  'wss://primo-poker-server.alabamamike.workers.dev'
+    
+    gameWebSocketInstance = new WebSocketClient(wsUrl)
   }
   return gameWebSocketInstance
 })()
@@ -204,9 +207,12 @@ export const gameWebSocket = (() => {
 export const tableWebSocket = (() => {
   if (typeof window === 'undefined') return null
   if (!tableWebSocketInstance) {
-    tableWebSocketInstance = new WebSocketClient(
-      process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 'ws://localhost:8787'
-    )
+    // Use the proper WebSocket URL from config
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 
+                  process.env.NEXT_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') || 
+                  'wss://primo-poker-server.alabamamike.workers.dev'
+    
+    tableWebSocketInstance = new WebSocketClient(wsUrl)
   }
   return tableWebSocketInstance
 })()

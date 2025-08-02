@@ -41,8 +41,7 @@ export const useBankrollStore = create<BankrollState>()(
       })
     }),
     {
-      name: 'bankroll-storage',
-      getStorage: () => localStorage
+      name: 'bankroll-storage'
     }
   )
 )

@@ -1,0 +1,114 @@
+name: Create R2 Buckets
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to create buckets for'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - development
+
+jobs:
+  create-buckets:
+    name: Create R2 Buckets
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create R2 Buckets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "🪣 Creating R2 buckets for ${{ github.event.inputs.environment }}..."
+          
+          # Create main RNG audit bucket
+          echo "Creating primo-poker-rng-audit bucket..."
+          if npx wrangler r2 bucket create primo-poker-rng-audit; then
+            echo "✅ Successfully created primo-poker-rng-audit bucket"
+          else
+            echo "⚠️  Bucket primo-poker-rng-audit might already exist"
+          fi
+          
+          # Create preview bucket for development
+          echo "Creating primo-poker-rng-audit-preview bucket..."
+          if npx wrangler r2 bucket create primo-poker-rng-audit-preview; then
+            echo "✅ Successfully created primo-poker-rng-audit-preview bucket"
+          else
+            echo "⚠️  Bucket primo-poker-rng-audit-preview might already exist"
+          fi
+          
+          # List all R2 buckets to verify
+          echo ""
+          echo "📋 Current R2 buckets in account:"
+          npx wrangler r2 bucket list
+          
+          echo ""
+          echo "✅ R2 bucket setup complete!"
+
+      - name: Configure bucket lifecycle rules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "🔧 Configuring bucket lifecycle rules..."
+          
+          # Create lifecycle configuration for audit logs (keep for 90 days)
+          cat > lifecycle.json << EOF
+          {
+            "rules": [
+              {
+                "id": "delete-old-audit-logs",
+                "status": "Enabled",
+                "filter": {
+                  "prefix": "audit-logs/"
+                },
+                "expiration": {
+                  "days": 90
+                }
+              },
+              {
+                "id": "delete-old-security-alerts",
+                "status": "Enabled",
+                "filter": {
+                  "prefix": "security-alert/"
+                },
+                "expiration": {
+                  "days": 180
+                }
+              }
+            ]
+          }
+          EOF
+          
+          # Note: Wrangler doesn't support lifecycle rules yet, so we'd need to use the API directly
+          echo "ℹ️  Lifecycle rules prepared. Manual configuration may be required via Cloudflare dashboard."
+          
+      - name: Summary
+        run: |
+          echo "## 📝 Summary"
+          echo ""
+          echo "R2 buckets have been created/verified for the poker platform:"
+          echo "- primo-poker-rng-audit: For storing RNG audit logs"
+          echo "- primo-poker-rng-audit-preview: For development/preview environments"
+          echo ""
+          echo "### Next Steps:"
+          echo "1. Uncomment the AUDIT_BUCKET configuration in wrangler.toml"
+          echo "2. Deploy the application to enable full audit logging"
+          echo "3. (Optional) Configure lifecycle rules in Cloudflare dashboard for automatic cleanup"

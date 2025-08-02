@@ -314,7 +314,20 @@ export default function LobbyPage() {
           return
         } else {
           // Handle join failure (full table, wrong password, etc.)
-          const errorMessage = result.error?.message || result.error || 'Failed to join table'
+          let errorMessage = 'Failed to join table'
+          
+          if (result.error?.message) {
+            // Try to parse nested error message
+            try {
+              const nestedError = JSON.parse(result.error.message)
+              errorMessage = nestedError.error?.message || result.error.message
+            } catch {
+              errorMessage = result.error.message
+            }
+          } else if (result.error) {
+            errorMessage = result.error
+          }
+          
           alert(errorMessage)
           return
         }

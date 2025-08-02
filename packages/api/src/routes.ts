@@ -522,11 +522,36 @@ export class PokerAPIRoutes {
     if (!tableId || !request.user) {
       return this.errorResponse('Table ID and authentication required', 400);
     }
+    
+    if (!request.env?.GAME_TABLES) {
+      return this.errorResponse('Server configuration error', 500);
+    }
 
     try {
-      await this.tableManager.leaveTable(tableId, request.user.userId);
-      return this.successResponse({ message: 'Left table successfully' });
+      // Get the table's durable object
+      const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
+      const gameTable = request.env.GAME_TABLES.get(durableObjectId);
+      
+      // Send leave request to Durable Object
+      const leaveResponse = await gameTable.fetch(
+        new Request(`http://internal/leave`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Player-ID': request.user.userId,
+          },
+        })
+      );
+      
+      if (!leaveResponse.ok) {
+        const error = await leaveResponse.json();
+        return this.errorResponse(error.error || 'Failed to leave table', leaveResponse.status);
+      }
+      
+      const result = await leaveResponse.json();
+      return this.successResponse(result);
     } catch (error) {
+      console.error('Leave table error:', error);
       return this.errorResponse('Failed to leave table', 500);
     }
   }

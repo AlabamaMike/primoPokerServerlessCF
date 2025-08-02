@@ -17,8 +17,12 @@ export function useWebSocketConnection() {
   const clientRef = useRef<WebSocketClient | null>(null)
 
   const connect = useCallback(async (tableId: string) => {
+    console.log('WebSocket connect called with:', { tableId, hasToken: !!token, hasUser: !!user, inBrowser: typeof window !== 'undefined' })
+    
     if (!token || !user || typeof window === 'undefined') {
-      setError('Authentication required or not in browser')
+      const errorMsg = 'Authentication required or not in browser'
+      console.error('WebSocket connection failed:', errorMsg, { hasToken: !!token, hasUser: !!user, inBrowser: typeof window !== 'undefined' })
+      setError(errorMsg)
       return null
     }
 
@@ -74,12 +78,20 @@ export function useGameWebSocket(tableId?: string) {
   const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
-    if (!tableId || !webSocket.connect) return
+    if (!tableId || !webSocket.connect) {
+      console.log('WebSocket connect conditions not met:', { tableId, hasConnect: !!webSocket.connect })
+      return
+    }
 
     const connectToTable = async () => {
+      console.log(`Attempting to connect WebSocket to table: ${tableId}`)
       const client = await webSocket.connect(tableId)
-      if (!client) return
+      if (!client) {
+        console.error('Failed to establish WebSocket client connection')
+        return
+      }
 
+      console.log('WebSocket client connected successfully')
       setIsConnected(true)
 
       // Set up message handlers

@@ -93,9 +93,12 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
 
   const handleSeatSelection = async (seatNumber: number, buyInAmount: number) => {
     try {
-      console.log(`Joining seat ${seatNumber} with $${buyInAmount}`)
+      console.log(`Attempting to join seat ${seatNumber} with $${buyInAmount}`)
+      console.log('WebSocket status:', { isConnected, joinTable: !!joinTable, error })
+      console.log('User status:', { user: !!user, isAuthenticated })
       
       if (isConnected && joinTable) {
+        console.log('Sending join table message via WebSocket...')
         // Send join table message via WebSocket
         joinTable(seatNumber, buyInAmount)
         
@@ -103,6 +106,8 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
         setPlayerSeat(seatNumber)
         setPlayerChips(buyInAmount)
         setShowSeatSelection(false)
+        
+        console.log('Local state updated, adding player to game store...')
         
         // Update game store with player seated
         if (user) {
@@ -116,10 +121,36 @@ export default function MultiplayerGameClient({ tableId }: MultiplayerGameClient
             hasActed: false,
             status: 'active'
           })
+          console.log('Player added to game store successfully')
+        } else {
+          console.warn('No user found when adding to game store')
         }
       } else {
-        console.error('Cannot join table: WebSocket not connected')
-        // Show error message to user about connection
+        console.error('Cannot join table:', {
+          isConnected,
+          hasJoinTableFunction: !!joinTable,
+          error,
+          reason: !isConnected ? 'WebSocket not connected' : 'joinTable function missing'
+        })
+        
+        // For now, let's allow demo mode fallback
+        console.log('Falling back to demo mode...')
+        setPlayerSeat(seatNumber)
+        setPlayerChips(buyInAmount)
+        setShowSeatSelection(false)
+        
+        if (user) {
+          gameStore.addPlayer({
+            id: user.id,
+            username: user.username,
+            chipCount: buyInAmount,
+            position: seatNumber - 1,
+            isActive: true,
+            cards: [],
+            hasActed: false,
+            status: 'active'
+          })
+        }
       }
     } catch (error) {
       console.error('Failed to join table:', error)

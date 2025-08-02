@@ -71,7 +71,7 @@ interface LobbyTableConfig {
 
 export default function LobbyPage() {
   const router = useRouter()
-  const { user, isAuthenticated } = useAuthStore()
+  const { user, isAuthenticated, logout } = useAuthStore()
   
   // State management
   const [tables, setTables] = useState<TableListing[]>([])
@@ -292,6 +292,15 @@ export default function LobbyPage() {
     setJoinModalOpen(true)
   }
 
+  // Handle logout
+  const handleLogout = () => {
+    logout()
+    // Clear any stored tokens
+    localStorage.removeItem('auth_token')
+    // Redirect to login page
+    window.location.href = '/auth/login'
+  }
+
   // Join table handler
   const handleJoinTable = async (tableId: string, buyIn?: number, password?: string) => {
     try {
@@ -418,33 +427,55 @@ export default function LobbyPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-900 via-green-800 to-green-900 p-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Poker Lobby</h1>
-          <p className="text-green-200">Find your perfect table and start playing!</p>
-          
-          {/* Connection Status */}
-          <div className="flex items-center justify-center mt-4">
-            <div className={`w-3 h-3 rounded-full mr-2 ${
-              connectionStatus === 'connected' ? 'bg-green-400' : 
-              connectionStatus === 'connecting' ? 'bg-yellow-400' : 'bg-red-400'
-            }`}></div>
-            <span className="text-sm text-green-200">
-              {connectionStatus === 'connected' ? 'Live Updates Active' :
-               connectionStatus === 'connecting' ? 'Connecting...' : 'Using Demo Data'}
-            </span>
+        {/* Header with user info */}
+        <div className="flex justify-between items-start mb-8">
+          {/* Left side - Title and connection status */}
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold text-white mb-2">Poker Lobby</h1>
+            <p className="text-green-200">Find your perfect table and start playing!</p>
+            
+            {/* Connection Status */}
+            <div className="flex items-center mt-4">
+              <div className={`w-3 h-3 rounded-full mr-2 ${
+                connectionStatus === 'connected' ? 'bg-green-400' : 
+                connectionStatus === 'connecting' ? 'bg-yellow-400' : 'bg-red-400'
+              }`}></div>
+              <span className="text-sm text-green-200">
+                {connectionStatus === 'connected' ? 'Live Updates Active' :
+                 connectionStatus === 'connecting' ? 'Connecting...' : 'Using Demo Data'}
+              </span>
+            </div>
           </div>
           
-          {user && (
-            <div className="mt-2 text-green-200">
-              Welcome back, <span className="font-semibold text-white">{user.username}</span>!
-            </div>
-          )}
-          {!user && (
-            <div className="mt-2 text-yellow-200">
-              Demo Mode - <a href="/auth/login" className="underline">Login</a> for full features
-            </div>
-          )}
+          {/* Right side - User info and logout */}
+          <div className="text-right">
+            {user ? (
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                <div className="text-green-200 mb-2">
+                  Logged in as: <span className="font-semibold text-white">{user.username}</span>
+                </div>
+                <div className="text-sm text-green-300 mb-3">
+                  Balance: ${user.chipCount || 0}
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md transition-colors text-sm"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="bg-yellow-900/50 backdrop-blur-sm rounded-lg p-4 border border-yellow-600/50">
+                <div className="text-yellow-200 mb-2">Demo Mode</div>
+                <a 
+                  href="/auth/login" 
+                  className="inline-block px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md transition-colors text-sm"
+                >
+                  Login
+                </a>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Controls */}

@@ -6,25 +6,30 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Building packages in dependency order..."
 
+# Clean any stale dist directories
+echo "Cleaning stale dist directories..."
+find "$ROOT_DIR/packages" -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$ROOT_DIR/packages" -name "tsconfig.tsbuildinfo" -type f -exec rm {} + 2>/dev/null || true
+
 # Build shared first
 echo "Building @primo-poker/shared..."
-(cd "$ROOT_DIR/packages/shared" && npx tsc --build)
+(cd "$ROOT_DIR/packages/shared" && npx tsc)
 
 # Build security (depends on shared)
 echo "Building @primo-poker/security..."
-(cd "$ROOT_DIR/packages/security" && npx tsc --build)
+(cd "$ROOT_DIR/packages/security" && npx tsc)
 
 # Build core (depends on shared and security)
 echo "Building @primo-poker/core..."
-(cd "$ROOT_DIR/packages/core" && npx tsc --build)
+(cd "$ROOT_DIR/packages/core" && npx tsc)
 
 # Build persistence (depends on shared, core, and security)
 echo "Building @primo-poker/persistence..."
-(cd "$ROOT_DIR/packages/persistence" && npx tsc --build)
+(cd "$ROOT_DIR/packages/persistence" && npx tsc)
 
 # Build api (depends on all above)
 echo "Building @primo-poker/api..."
-(cd "$ROOT_DIR/packages/api" && npx tsc --build)
+(cd "$ROOT_DIR/packages/api" && npx tsc)
 
 # Build poker-server app
 echo "Building @primo-poker/poker-server..."

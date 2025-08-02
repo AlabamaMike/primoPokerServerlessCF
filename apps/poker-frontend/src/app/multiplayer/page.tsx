@@ -30,6 +30,7 @@ function MultiplayerLobbyContent() {
 
   // If table ID is provided, render the game client
   if (tableId) {
+    console.log('Multiplayer page rendering game client for table:', tableId)
     return <MultiplayerGameClient tableId={tableId} />
   }
 

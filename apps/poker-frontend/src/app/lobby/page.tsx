@@ -436,7 +436,7 @@ export default function LobbyPage() {
       // Map frontend config to backend TableConfig format
       const tableConfig = {
         name: config.name,
-        gameType: 'texas_holdem', // Always Texas Hold'em for now
+        gameType: config.gameVariant, // Use selected game variant
         bettingStructure: 'no_limit', // Always No Limit for now
         gameFormat: config.gameType === 'cash' ? 'cash' : config.gameType === 'tournament' ? 'tournament' : 'sit_n_go',
         maxPlayers: config.maxPlayers,
@@ -467,6 +467,7 @@ export default function LobbyPage() {
       if (result.success && result.data?.tableId) {
         setCreateTableOpen(false)
         // Redirect to the new table
+        console.log('Redirecting to table:', result.data.tableId)
         router.push(`/multiplayer?table=${result.data.tableId}`)
       } else {
         alert(result.error?.message || result.error || 'Failed to create table')
@@ -900,7 +901,7 @@ function CreateTableModal({ onClose, onCreateTable }: CreateTableModalProps) {
   const [config, setConfig] = useState({
     name: '',
     gameType: 'cash',
-    gameVariant: 'nlh',
+    gameVariant: 'texas_holdem',
     maxPlayers: 9,
     stakes: { smallBlind: 1, bigBlind: 2 },
     isPrivate: false,
@@ -951,6 +952,24 @@ function CreateTableModal({ onClose, onCreateTable }: CreateTableModalProps) {
               className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#3d3d3d] rounded text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#4CAF50]"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Game Type
+            </label>
+            <select
+              value={config.gameVariant}
+              onChange={(e) => setConfig(prev => ({...prev, gameVariant: e.target.value}))}
+              className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#3d3d3d] rounded text-white focus:outline-none focus:ring-2 focus:ring-[#4CAF50]"
+            >
+              <option value="texas_holdem">Texas Hold'em</option>
+              <option value="omaha">Omaha</option>
+              <option value="omaha_hi_lo">Omaha Hi-Lo</option>
+              <option value="seven_card_stud">7 Card Stud</option>
+              <option value="razz">Razz</option>
+              <option value="horse">H.O.R.S.E.</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

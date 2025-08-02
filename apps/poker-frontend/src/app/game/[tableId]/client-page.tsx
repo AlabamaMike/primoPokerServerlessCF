@@ -30,6 +30,8 @@ interface TableInfo {
 export default function MultiplayerGameClient({ tableId }: MultiplayerGameClientProps) {
   const router = useRouter()
   
+  console.log('MultiplayerGameClient rendering for table:', tableId)
+  
   const { user, isAuthenticated } = useAuthStore()
   const gameStore = useGameStore()
   const { isConnected, error, sendPlayerAction, sendChatMessage, joinTable } = useGameWebSocket(tableId)

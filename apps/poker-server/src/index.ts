@@ -162,55 +162,29 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     const gameTableId = env.GAME_TABLES.idFromName(tableId);
     const gameTable = env.GAME_TABLES.get(gameTableId);
 
-    // Accept WebSocket and handle via Durable Object
-    server.accept();
-    
-    // Forward WebSocket to the GameTable Durable Object for handling
-    try {
-      await gameTable.webSocketMessage(server, JSON.stringify({
-        type: 'connection_established',
-        payload: {
-          playerId: decodedPayload.sub,
-          username: decodedPayload.username,
-          tableId: tableId,
-          timestamp: Date.now()
-        }
-      }));
-    } catch (error) {
-      console.error('Error establishing WebSocket connection with Durable Object:', error);
-    }
-    
-    // Set up message forwarding to the Durable Object
-    server.addEventListener('message', async (event) => {
-      try {
-        const messageData = JSON.parse(event.data);
-        
-        // Add authentication info to the message
-        messageData.playerId = decodedPayload.sub;
-        messageData.username = decodedPayload.username;
-        messageData.tableId = tableId;
-        messageData.timestamp = Date.now();
-        
-        // Forward the message to the GameTable Durable Object
-        await gameTable.webSocketMessage(server, JSON.stringify(messageData));
-        
-      } catch (error) {
-        console.error('Error processing WebSocket message:', error);
-        server.send(JSON.stringify({
-          type: 'error',
-          payload: { error: 'Failed to process message' }
-        }));
+    // Forward WebSocket connection to the GameTable Durable Object
+    // We need to create a request with the WebSocket and authentication info
+    const websocketRequest = new Request(`http://dummy/websocket`, {
+      headers: {
+        'X-Player-ID': decodedPayload.sub,
+        'X-Username': decodedPayload.username,
+        'X-Table-ID': tableId,
+        'Upgrade': 'websocket'
       }
     });
 
-    server.addEventListener('close', () => {
-      console.log(`WebSocket closed for player ${decodedPayload.sub}`);
-    });
-
-    return new Response(null, {
-      status: 101,
-      webSocket: client || null,
-    });
+    // Forward to Durable Object - the DO will handle accepting the WebSocket
+    const response = await gameTable.fetch(websocketRequest);
+    
+    if (response.webSocket) {
+      // The Durable Object handled the WebSocket, return it
+      return new Response(null, {
+        status: 101,
+        webSocket: response.webSocket,
+      });
+    } else {
+      return new Response('WebSocket handling failed', { status: 500 });
+    }
 
   } catch (error) {
     console.error('WebSocket upgrade error:', error);

@@ -129,6 +129,74 @@ export class GameTableDurableObject {
   }
 
   /**
+   * Handle HTTP requests and WebSocket upgrades
+   */
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    
+    // Handle WebSocket upgrade
+    if (request.headers.get('Upgrade') === 'websocket') {
+      return this.handleWebSocketUpgrade(request);
+    }
+    
+    // Handle other HTTP requests if needed
+    return new Response('Not found', { status: 404 });
+  }
+
+  /**
+   * Handle WebSocket upgrade
+   */
+  private async handleWebSocketUpgrade(request: Request): Promise<Response> {
+    // Extract authentication info from headers
+    const playerId = request.headers.get('X-Player-ID');
+    const username = request.headers.get('X-Username');
+    const tableId = request.headers.get('X-Table-ID');
+    
+    if (!playerId || !username || !tableId) {
+      return new Response('Missing authentication headers', { status: 400 });
+    }
+
+    // Create WebSocket pair
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = Object.values(webSocketPair);
+
+    if (!server) {
+      return new Response('WebSocket creation failed', { status: 500 });
+    }
+
+    // Accept the WebSocket connection
+    server.accept();
+
+    // Store the connection and send initial connection message
+    await this.handleConnectionEstablished(server, {
+      playerId,
+      username,
+      tableId
+    });
+
+    // Set up message handling
+    server.addEventListener('message', async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        await this.webSocketMessage(server, JSON.stringify(data));
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+        this.sendError(server, 'Failed to process message');
+      }
+    });
+
+    server.addEventListener('close', async (event) => {
+      await this.webSocketClose(server, event.code, event.reason);
+    });
+
+    // Return the client side of the WebSocket to be sent to the user
+    return new Response(null, {
+      status: 101,
+      webSocket: client || null,
+    });
+  }
+
+  /**
    * Handle WebSocket connection to the table
    */
   async webSocketMessage(websocket: WebSocket, message: string): Promise<void> {

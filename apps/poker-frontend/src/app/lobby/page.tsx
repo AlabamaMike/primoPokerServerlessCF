@@ -477,6 +477,13 @@ export default function LobbyPage() {
     }
   }
 
+  // Handle logout
+  const handleLogout = () => {
+    logout() // Clear auth store
+    localStorage.removeItem('auth_token') // Clear stored token
+    window.location.href = '/auth/login' // Redirect to login
+  }
+
   // Table counts by type
   const tableCounts = {
     cash: tables.filter(t => t.gameType === 'cash').length,
@@ -492,15 +499,44 @@ export default function LobbyPage() {
       <header className="bg-[#2d2d2d] px-5 py-3 flex justify-between items-center border-b-2 border-[#3d3d3d]">
         <div className="text-2xl font-bold text-[#4CAF50]">PokerRoom Pro</div>
         <div className="flex items-center gap-5">
-          <div className="bg-[#3d3d3d] px-4 py-2 rounded-full text-sm">
-            Balance: <span className="text-[#4CAF50] font-bold">${user?.chipCount?.toFixed(2) || '1,234.56'}</span>
-          </div>
-          <button className="border border-[#4CAF50] text-[#4CAF50] px-4 py-2 rounded hover:bg-[#4CAF50] hover:text-white transition-colors">
-            Cashier
-          </button>
-          <div className="w-8 h-8 bg-[#4CAF50] rounded-full flex items-center justify-center text-sm font-bold">
-            {user?.username?.slice(0, 2).toUpperCase() || 'JD'}
-          </div>
+          {user ? (
+            <>
+              <div className="text-sm text-gray-300">
+                Welcome, <span className="text-white font-semibold">{user.username}</span>
+              </div>
+              <div className="bg-[#3d3d3d] px-4 py-2 rounded-full text-sm">
+                Balance: <span className="text-[#4CAF50] font-bold">${user.chipCount?.toFixed(2) || '0.00'}</span>
+              </div>
+              <button className="border border-[#4CAF50] text-[#4CAF50] px-4 py-2 rounded hover:bg-[#4CAF50] hover:text-white transition-colors">
+                Cashier
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors"
+              >
+                Logout
+              </button>
+              <div className="w-8 h-8 bg-[#4CAF50] rounded-full flex items-center justify-center text-sm font-bold">
+                {user.username.slice(0, 2).toUpperCase()}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm text-yellow-300">Demo Mode</div>
+              <a 
+                href="/auth/login" 
+                className="bg-[#4CAF50] hover:bg-[#45a049] text-white px-4 py-2 rounded transition-colors"
+              >
+                Login
+              </a>
+              <a 
+                href="/auth/register" 
+                className="border border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white px-4 py-2 rounded transition-colors"
+              >
+                Register
+              </a>
+            </>
+          )}
         </div>
       </header>
 

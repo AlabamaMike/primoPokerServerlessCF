@@ -35,7 +35,7 @@ export default function RegisterPage() {
 
     try {
       await register(username, email, password)
-      router.push("/lobby")
+      router.push("/multiplayer")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.")
     } finally {

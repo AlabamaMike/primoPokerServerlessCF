@@ -413,14 +413,9 @@ export default function LobbyPage() {
       console.error('Failed to join table:', error)
     }
     
-    // For demo tables, go to demo page
+    // Always go to game page for any table
     setJoinModalOpen(false)
-    if (tableId.startsWith('demo-')) {
-      router.push('/demo/table')
-    } else {
-      // For real tables, try game page
-      router.push(`/game/${tableId}`)
-    }
+    router.push(`/game/${tableId}`)
   }
 
   // Quick seat functionality
@@ -503,7 +498,14 @@ export default function LobbyPage() {
     <div className="min-h-screen bg-[#1a1a1a] text-white flex flex-col">
       {/* Header */}
       <header className="bg-[#2d2d2d] px-5 py-3 flex justify-between items-center border-b-2 border-[#3d3d3d]">
-        <div className="text-2xl font-bold text-[#4CAF50]">Primo Poker Club</div>
+        <div className="flex items-center gap-4">
+          <div className="text-2xl font-bold text-[#4CAF50]">Primo Poker Club</div>
+          {connectionStatus === 'disconnected' && (
+            <div className="bg-yellow-600/20 border border-yellow-600 px-3 py-1 rounded text-yellow-400 text-sm">
+              Demo Mode - Showing sample tables
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-5">
           {user ? (
             <>
@@ -663,6 +665,14 @@ export default function LobbyPage() {
             className="w-full mt-3 bg-[#2196F3] text-white py-3 rounded-md text-base font-semibold hover:bg-[#1976D2] transition-colors"
           >
             Create Table
+          </button>
+          
+          {/* Navigate to Multiplayer */}
+          <button
+            onClick={() => router.push('/multiplayer')}
+            className="w-full mt-3 bg-[#9C27B0] text-white py-3 rounded-md text-base font-semibold hover:bg-[#7B1FA2] transition-colors"
+          >
+            Enter Multiplayer
           </button>
         </aside>
 

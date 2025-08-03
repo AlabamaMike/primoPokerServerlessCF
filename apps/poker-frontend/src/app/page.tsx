@@ -15,7 +15,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
-        router.push('/lobby')
+        router.push('/multiplayer')
       } else {
         router.push('/login')
       }

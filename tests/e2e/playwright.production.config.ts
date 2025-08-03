@@ -12,7 +12,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: process.env.PRODUCTION_URL || 'https://primo-poker.com',
+    baseURL: process.env.PRODUCTION_URL || 'https://6e77d385.primo-poker-frontend.pages.dev',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

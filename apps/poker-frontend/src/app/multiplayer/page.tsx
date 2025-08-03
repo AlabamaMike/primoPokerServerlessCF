@@ -81,8 +81,9 @@ function MultiplayerLobbyContent() {
       if (isConnected) {
         createTable(config)
       } else {
-        // Fallback to demo mode
-        router.push('/demo/table')
+        // Show error if not connected
+        console.error('WebSocket not connected')
+        alert('Unable to create table. Please check your connection.')
       }
     } catch (error) {
       console.error('Failed to create table:', error)
@@ -96,10 +97,10 @@ function MultiplayerLobbyContent() {
     try {
       if (isConnected) {
         joinTable(tableId)
-        router.push(`/multiplayer?table=${tableId}`)
+        router.push(`/game/${tableId}`)
       } else {
-        // Fallback to demo mode
-        router.push('/demo/table')
+        // Navigate to game page anyway for spectator mode
+        router.push(`/game/${tableId}`)
       }
     } catch (error) {
       console.error('Failed to join table:', error)

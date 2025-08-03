@@ -43,6 +43,14 @@ export interface HandHistoryEntry {
   keyActions: string[]
 }
 
+export interface SeatInfo {
+  seatIndex: number
+  available: boolean
+  reserved: boolean
+  playerId?: string
+  username?: string
+}
+
 export interface GameState {
   // Table info
   tableId: string
@@ -65,6 +73,9 @@ export interface GameState {
   bigBlind: number
   maxPlayers: number
   currentUserId?: string
+  
+  // Seats
+  seatAvailability: SeatInfo[]
   
   // Spectators
   spectatorCount: number
@@ -94,6 +105,8 @@ export interface GameState {
   setHandHistoryVisible: (visible: boolean) => void
   setSpectatorCount: (count: number) => void
   setSpectatorMode: (isSpectating: boolean) => void
+  setSeatAvailability: (seats: SeatInfo[]) => void
+  updateSeatAvailability: (seatIndex: number, updates: Partial<SeatInfo>) => void
   
   // Game actions
   playerAction: (playerId: string, action: Player['lastAction'], amount?: number) => void
@@ -237,6 +250,13 @@ export const useGameStore = create<GameState>()(
     // Spectators
     spectatorCount: 0,
     isSpectating: false,
+    
+    // Seats - initialize 9 empty seats
+    seatAvailability: Array.from({ length: 9 }, (_, i) => ({
+      seatIndex: i,
+      available: true,
+      reserved: false
+    })),
 
     // WebSocket methods
     connectToTable: async (tableId: string) => {
@@ -323,6 +343,14 @@ export const useGameStore = create<GameState>()(
     setSpectatorCount: (count) => set({ spectatorCount: count }),
     
     setSpectatorMode: (isSpectating) => set({ isSpectating }),
+    
+    setSeatAvailability: (seats) => set({ seatAvailability: seats }),
+    
+    updateSeatAvailability: (seatIndex, updates) => set((state) => ({
+      seatAvailability: state.seatAvailability.map(seat => 
+        seat.seatIndex === seatIndex ? { ...seat, ...updates } : seat
+      )
+    })),
 
     addToHandHistory: (entry) => set((state) => ({ 
       handHistory: [entry, ...state.handHistory].slice(0, 50) // Keep last 50 hands

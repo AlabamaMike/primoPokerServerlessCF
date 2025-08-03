@@ -53,6 +53,7 @@ export function WalletDisplay({ compact = false, showHistory = true }: WalletDis
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] px-4 py-2 rounded-lg transition-colors"
+          data-testid="wallet-display"
         >
           <Wallet className="w-4 h-4 text-[#4CAF50]" />
           <span className="font-bold text-white">

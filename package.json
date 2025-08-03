@@ -19,6 +19,8 @@
     "test:integration": "jest --config jest.config.phase-3b2.js tests/integration",
     "test:e2e": "cd tests/e2e && npx playwright test",
     "test:e2e:ci": "cd tests/e2e && npx playwright test --reporter=html",
+    "test:e2e:production": "cd tests/e2e && ./run-production-tests.sh",
+    "test:e2e:production:headed": "cd tests/e2e && PWDEBUG=1 npx playwright test --config=playwright.production.config.ts --headed tests/user-journey.spec.ts",
     "test:phase-3b2": "node run-phase-3b2-tests.js",
     "validate-tests": "node validate-test-setup.js",
     "lint": "eslint \"packages/*/src/**/*.ts\" \"apps/*/src/**/*.ts\"",

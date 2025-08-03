@@ -141,6 +141,7 @@ This document outlines the implementation plan to complete the end-to-end user j
    - Table full scenarios
 
 ## Technical Considerations
+- E2E tests must be completed against production endpoints through browser tests 
 
 ### State Management
 - Use single source of truth for table state

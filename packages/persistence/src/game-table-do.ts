@@ -467,6 +467,33 @@ export class GameTableDurableObject {
       const { type, payload } = data
 
       console.log(`GameTable received message: ${type}`, payload)
+      
+      // Check for reconnection
+      if (payload?.playerId) {
+        const existingConnection = this.state.connections.get(payload.playerId)
+        if (existingConnection && !existingConnection.isConnected) {
+          // Player is reconnecting
+          existingConnection.websocket = websocket
+          existingConnection.isConnected = true
+          existingConnection.lastHeartbeat = Date.now()
+          
+          // Update player status if they were disconnected
+          const player = this.state.players.get(payload.playerId)
+          if (player && player.status === PlayerStatus.DISCONNECTED) {
+            player.status = PlayerStatus.ACTIVE
+            
+            // Broadcast reconnection
+            await this.broadcastPlayerStateTransition(payload.playerId, {
+              from: 'disconnected',
+              to: 'player',
+              reason: 'reconnected'
+            })
+          }
+          
+          // Send state sync on reconnection
+          await this.handleStateSync(websocket, payload)
+        }
+      }
 
       switch (type) {
         case 'join_table':
@@ -505,6 +532,10 @@ export class GameTableDurableObject {
           await this.handleChatMessage(websocket, payload)
           break
           
+        case 'request_state_sync':
+          await this.handleStateSync(websocket, payload)
+          break
+          
         default:
           console.warn(`Unknown message type: ${type}`)
           this.sendError(websocket, `Unknown message type: ${type}`)
@@ -541,10 +572,34 @@ export class GameTableDurableObject {
             }
           })
         } else if (this.state.players.has(playerId)) {
+          // Mark player as disconnected
+          const player = this.state.players.get(playerId)
+          if (player) {
+            player.status = PlayerStatus.DISCONNECTED
+          }
+          
+          // Broadcast player disconnection
+          await this.broadcastPlayerStateTransition(playerId, {
+            from: 'player',
+            to: 'disconnected',
+            reason: 'websocket_closed',
+            details: { code, reason }
+          })
+          
           // Give player 30 seconds to reconnect before removing from game
-          setTimeout(() => {
-            if (!connection.isConnected) {
-              this.removePlayerFromTable(playerId)
+          setTimeout(async () => {
+            const currentConnection = this.state.connections.get(playerId)
+            if (!currentConnection || !currentConnection.isConnected) {
+              // Player didn't reconnect, remove them
+              await this.removePlayerFromTable(playerId)
+              
+              // Broadcast final state transition
+              await this.broadcastPlayerStateTransition(playerId, {
+                from: 'disconnected',
+                to: 'spectator',
+                reason: 'timeout',
+                details: { timeoutDuration: 30000 }
+              })
             }
           }, 30000)
         }
@@ -649,6 +704,38 @@ export class GameTableDurableObject {
         position: player.position,
         chipCount: player.chips
       }
+    })
+    
+    // Send wallet balance update
+    this.sendMessage(websocket, {
+      type: 'wallet_balance_update',
+      data: {
+        playerId,
+        changeAmount: -chipCount,
+        changeType: 'buy_in',
+        tableId: this.state.tableId,
+        description: `Bought in for ${chipCount} chips`
+      }
+    })
+    
+    // Broadcast seat availability update
+    await this.broadcastMessage({
+      type: 'seat_availability_update',
+      data: {
+        seatIndex,
+        available: false,
+        reserved: false,
+        playerId,
+        username
+      }
+    })
+    
+    // Broadcast player state transition
+    await this.broadcastPlayerStateTransition(playerId, {
+      from: 'spectator',
+      to: 'player',
+      reason: 'joined_table',
+      details: { seatIndex, chipCount }
     })
 
     // Start game if we have enough players and no game in progress
@@ -764,6 +851,9 @@ export class GameTableDurableObject {
         spectatorCount: this.state.spectators.size
       }
     })
+    
+    // Send seat availability to new spectator
+    await this.broadcastSeatAvailability()
 
     // Broadcast spectator count update to all
     await this.broadcastMessage({
@@ -889,6 +979,75 @@ export class GameTableDurableObject {
   }
 
   /**
+   * Broadcast player state transition
+   */
+  private async broadcastPlayerStateTransition(
+    playerId: string,
+    transition: {
+      from: 'spectator' | 'player' | 'disconnected',
+      to: 'spectator' | 'player' | 'disconnected',
+      reason?: string,
+      details?: any
+    }
+  ): Promise<void> {
+    await this.broadcastMessage({
+      type: 'player_state_transition',
+      data: {
+        playerId,
+        transition,
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  /**
+   * Broadcast seat availability for all seats
+   */
+  private async broadcastSeatAvailability(): Promise<void> {
+    const seatStatus = []
+    
+    // Check all 9 seats
+    for (let i = 0; i < 9; i++) {
+      let available = true
+      let reserved = false
+      let playerId = undefined
+      let username = undefined
+      
+      // Check if seat is occupied
+      for (const [pid, player] of this.state.players) {
+        if (player.position?.seat === i) {
+          available = false
+          playerId = pid
+          username = player.username
+          break
+        }
+      }
+      
+      // Check if seat is reserved
+      const reservation = this.state.seatReservations.get(i)
+      if (reservation && reservation.expiresAt > Date.now()) {
+        reserved = true
+        available = false
+      }
+      
+      seatStatus.push({
+        seatIndex: i,
+        available,
+        reserved,
+        playerId,
+        username
+      })
+    }
+    
+    await this.broadcastMessage({
+      type: 'seat_availability_bulk',
+      data: {
+        seats: seatStatus
+      }
+    })
+  }
+
+  /**
    * Handle player standing up from table
    */
   private async handleStandUp(websocket: WebSocket, payload: any): Promise<void> {
@@ -928,6 +1087,18 @@ export class GameTableDurableObject {
       }
     })
     
+    // Send wallet balance update
+    this.sendMessage(websocket, {
+      type: 'wallet_balance_update',
+      data: {
+        playerId,
+        changeAmount: chipCount,
+        changeType: 'cash_out',
+        tableId: this.state.tableId,
+        description: `Cashed out ${chipCount} chips from table`
+      }
+    })
+    
     // Broadcast table update
     await this.broadcastTableState()
     
@@ -940,6 +1111,26 @@ export class GameTableDurableObject {
         seatIndex,
         chipCount
       }
+    })
+    
+    // Broadcast seat availability update
+    if (seatIndex !== undefined) {
+      await this.broadcastMessage({
+        type: 'seat_availability_update',
+        data: {
+          seatIndex,
+          available: true,
+          reserved: false
+        }
+      })
+    }
+    
+    // Broadcast player state transition
+    await this.broadcastPlayerStateTransition(playerId, {
+      from: 'player',
+      to: 'spectator',
+      reason: 'stood_up',
+      details: { chipCount, seatIndex }
     })
     
     // Update spectator count
@@ -987,6 +1178,49 @@ export class GameTableDurableObject {
       type: 'heartbeat_ack',
       data: { timestamp: Date.now() }
     })
+  }
+
+  /**
+   * Handle state synchronization request
+   */
+  private async handleStateSync(websocket: WebSocket, payload: any): Promise<void> {
+    const { playerId } = payload
+    
+    // Get connection to determine if player or spectator
+    const connection = this.state.connections.get(playerId)
+    if (!connection) {
+      return this.sendError(websocket, 'Not connected to table')
+    }
+    
+    // Send complete table state
+    const tableState = await this.getTableStateForClient()
+    
+    this.sendMessage(websocket, {
+      type: 'state_sync_response',
+      data: {
+        tableState,
+        isPlayer: this.state.players.has(playerId),
+        isSpectator: this.state.spectators.has(playerId),
+        playerData: this.state.players.get(playerId) || null,
+        timestamp: Date.now()
+      }
+    })
+    
+    // Send seat availability
+    await this.broadcastSeatAvailability()
+    
+    // Send current player's hole cards if they're a player and game is active
+    if (this.state.players.has(playerId) && this.state.game && this.state.game.phase !== GamePhase.WAITING) {
+      const player = this.state.players.get(playerId)
+      if (player && player.holeCards) {
+        this.sendMessage(websocket, {
+          type: 'hole_cards',
+          data: {
+            cards: player.holeCards
+          }
+        })
+      }
+    }
   }
 
   /**

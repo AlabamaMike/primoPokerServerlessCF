@@ -246,6 +246,52 @@ export function useGameWebSocket(tableId?: string) {
       client.on('error', (message) => {
         console.error('WebSocket error:', message.payload)
       })
+      
+      // New message handlers for Phase 5
+      client.on('seat_availability_update', (message) => {
+        console.log('Seat availability update:', message.payload)
+        if (message.payload) {
+          const { seatIndex, available, reserved, playerId, username } = message.payload
+          gameStore.updateSeatAvailability(seatIndex, { available, reserved, playerId, username })
+        }
+      })
+      
+      client.on('seat_availability_bulk', (message) => {
+        console.log('Bulk seat availability update:', message.payload)
+        if (message.payload?.seats) {
+          gameStore.setSeatAvailability(message.payload.seats)
+        }
+      })
+      
+      client.on('wallet_balance_update', (message) => {
+        console.log('Wallet balance update:', message.payload)
+        // Wallet updates are handled directly in the handlers above
+      })
+      
+      client.on('player_state_transition', (message) => {
+        console.log('Player state transition:', message.payload)
+        if (message.payload) {
+          const { playerId, transition } = message.payload
+          // Could add UI notifications for player state changes
+          console.log(`Player ${playerId} transitioned from ${transition.from} to ${transition.to}`)
+        }
+      })
+      
+      client.on('state_sync_response', (message) => {
+        console.log('State sync response:', message.payload)
+        if (message.payload) {
+          const { tableState, isPlayer, isSpectator } = message.payload
+          // Update complete table state
+          if (tableState) {
+            gameStore.setGamePhase(tableState.gameState?.phase || 'waiting')
+            gameStore.setPot(tableState.gameState?.pot || 0)
+            gameStore.setCommunityCards(tableState.gameState?.communityCards || [])
+            gameStore.setPlayers(tableState.players || [])
+            gameStore.setActivePlayer(tableState.gameState?.currentPlayer)
+            gameStore.setSpectatorMode(!isPlayer)
+          }
+        }
+      })
 
       // Don't auto-join the table here - let the UI control when to join
       // client.send('join_table', { tableId })
@@ -328,6 +374,16 @@ export function useGameWebSocket(tableId?: string) {
       })
     }
   }, [webSocket.client])
+  
+  const requestStateSync = useCallback(() => {
+    if (webSocket.client && webSocket.isConnected) {
+      const { user } = useAuthStore.getState()
+      
+      webSocket.client.send('request_state_sync', {
+        playerId: user?.id || `guest-${Date.now()}`
+      })
+    }
+  }, [webSocket.client])
 
   return {
     isConnected: isConnected && webSocket.isConnected,
@@ -337,7 +393,8 @@ export function useGameWebSocket(tableId?: string) {
     joinTable,
     joinAsSpectator,
     leaveSpectator,
-    standUp
+    standUp,
+    requestStateSync
   }
 }
 

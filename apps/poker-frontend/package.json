@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build && npx @cloudflare/next-on-pages",
+    "build": "next build",
+    "build:cloudflare": "next build && npx @cloudflare/next-on-pages",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",

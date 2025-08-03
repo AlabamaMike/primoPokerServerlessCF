@@ -70,7 +70,11 @@ export default function SimplifiedMultiplayerPage() {
       
       if (response.success && response.data) {
         // Navigate to the newly created table
-        const tableId = response.data.id || response.data.tableId
+        const tableId = response.data.tableId
+        if (!tableId) {
+          console.error('No tableId in response:', response.data)
+          throw new Error('Table created but no ID returned')
+        }
         console.log('Navigating to table:', tableId)
         router.push(`/game/${tableId}`)
       } else {

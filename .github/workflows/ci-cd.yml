@@ -300,6 +300,9 @@ jobs:
             node_modules
           key: build-${{ github.sha }}
 
+      - name: Install monorepo dependencies
+        run: npm ci
+          
       - name: Deploy to Cloudflare Pages
         run: |
           cd apps/poker-frontend

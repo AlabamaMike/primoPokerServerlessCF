@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { apiClient } from '@/lib/api-client'
 import { gameWebSocket, tableWebSocket } from '@/lib/websocket-client'
+import { TokenManager } from '@/lib/token-manager'
 
 interface User {
   id: string
@@ -13,6 +14,8 @@ interface User {
 interface AuthState {
   user: User | null
   token: string | null
+  refreshToken: string | null
+  tokenExpiresAt: Date | null
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
@@ -22,6 +25,7 @@ interface AuthState {
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => void
   clearError: () => void
+  refreshTokens: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -29,6 +33,8 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
@@ -42,6 +48,8 @@ export const useAuthStore = create<AuthState>()(
           if (response.success && response.data) {
             const { user, tokens } = response.data
             const accessToken = tokens.accessToken
+            const refreshToken = tokens.refreshToken
+            const expiresAt = new Date(tokens.expiresAt)
             
             // Set token in API client
             apiClient.setToken(accessToken)
@@ -50,9 +58,14 @@ export const useAuthStore = create<AuthState>()(
             gameWebSocket.setToken(accessToken)
             tableWebSocket.setToken(accessToken)
             
+            // Set up auto-refresh
+            TokenManager.setupAutoRefresh(expiresAt, () => get().refreshTokens())
+            
             set({
               user: user,
               token: accessToken,
+              refreshToken: refreshToken,
+              tokenExpiresAt: expiresAt,
               isAuthenticated: true,
               isLoading: false,
               error: null
@@ -76,6 +89,8 @@ export const useAuthStore = create<AuthState>()(
           if (response.success && response.data) {
             const { tokens } = response.data
             const accessToken = tokens.accessToken
+            const refreshToken = tokens.refreshToken
+            const expiresAt = new Date(tokens.expiresAt)
             
             // Set token in API client
             apiClient.setToken(accessToken)
@@ -88,9 +103,14 @@ export const useAuthStore = create<AuthState>()(
             const profileResponse = await apiClient.getProfile()
             
             if (profileResponse.success && profileResponse.data) {
+              // Set up auto-refresh
+              TokenManager.setupAutoRefresh(expiresAt, () => get().refreshTokens())
+              
               set({
                 user: profileResponse.data,
                 token: accessToken,
+                refreshToken: refreshToken,
+                tokenExpiresAt: expiresAt,
                 isAuthenticated: true,
                 isLoading: false,
                 error: null
@@ -110,6 +130,9 @@ export const useAuthStore = create<AuthState>()(
         // Clear API client token
         apiClient.clearToken()
         
+        // Clear auto-refresh
+        TokenManager.clearAutoRefresh()
+        
         // Disconnect WebSocket connections
         gameWebSocket.disconnect()
         tableWebSocket.disconnect()
@@ -117,9 +140,51 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           token: null,
+          refreshToken: null,
+          tokenExpiresAt: null,
           isAuthenticated: false,
           error: null
         })
+      },
+      
+      refreshTokens: async () => {
+        const state = get()
+        if (!state.refreshToken) {
+          console.error('No refresh token available')
+          return
+        }
+        
+        try {
+          const response = await apiClient.refreshToken(state.refreshToken)
+          
+          if (response.success && response.data) {
+            const tokens = response.data
+            const accessToken = tokens.accessToken
+            const refreshToken = tokens.refreshToken
+            const expiresAt = new Date(tokens.expiresAt)
+            
+            // Update tokens
+            apiClient.setToken(accessToken)
+            gameWebSocket.setToken(accessToken)
+            tableWebSocket.setToken(accessToken)
+            
+            // Set up new auto-refresh
+            TokenManager.setupAutoRefresh(expiresAt, () => get().refreshTokens())
+            
+            set({
+              token: accessToken,
+              refreshToken: refreshToken,
+              tokenExpiresAt: expiresAt
+            })
+          } else {
+            // Refresh failed, logout
+            get().logout()
+          }
+        } catch (error) {
+          console.error('Token refresh failed:', error)
+          // Refresh failed, logout
+          get().logout()
+        }
       },
 
       clearError: () => {
@@ -128,10 +193,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      // Only persist user and token, not loading states
+      // Only persist user and tokens, not loading states
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        refreshToken: state.refreshToken,
+        tokenExpiresAt: state.tokenExpiresAt,
         isAuthenticated: state.isAuthenticated
       }),
       // Rehydrate the API client and WebSocket on store load
@@ -140,6 +207,18 @@ export const useAuthStore = create<AuthState>()(
           apiClient.setToken(state.token)
           gameWebSocket.setToken(state.token)
           tableWebSocket.setToken(state.token)
+          
+          // Check if token needs refresh
+          if (state.tokenExpiresAt) {
+            const expiresAt = new Date(state.tokenExpiresAt)
+            if (TokenManager.isTokenExpiringSoon(expiresAt)) {
+              // Refresh immediately
+              state.refreshTokens()
+            } else {
+              // Set up auto-refresh
+              TokenManager.setupAutoRefresh(expiresAt, () => state.refreshTokens())
+            }
+          }
         }
       }
     }

@@ -60,6 +60,15 @@ export class ApiClient {
       const data = await response.json()
       
       if (!response.ok) {
+        // Handle JWT expiration
+        if (response.status === 401 && data.error?.message?.includes('JWT expired')) {
+          // Clear the expired token
+          this.clearToken()
+          // Redirect to login
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login'
+          }
+        }
         throw new Error(data.error?.message || 'API Error')
       }
 
@@ -93,6 +102,17 @@ export class ApiClient {
     })
   }
 
+  async refreshToken(refreshToken: string) {
+    return this.request<{ 
+      accessToken: string; 
+      refreshToken: string;
+      expiresAt: string;
+    }>('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    })
+  }
+
   // Table endpoints
   async getTables() {
     return this.request<any[]>('/api/tables')
@@ -100,6 +120,13 @@ export class ApiClient {
 
   async getTable(tableId: string) {
     return this.request<any>(`/api/tables/${tableId}`)
+  }
+
+  async createTable(config: { name: string; maxPlayers: number; blinds: { small: number; big: number }; buyIn: number }) {
+    return this.request<any>('/api/tables', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    })
   }
 
   async joinTable(tableId: string, buyIn: number) {

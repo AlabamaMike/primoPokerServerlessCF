@@ -145,13 +145,13 @@
   "suites": [],
   "errors": [
     {
-      "message": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments.",
-      "stack": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments."
+      "message": "Error: Process from config.webServer was not able to start. Exit code: 135",
+      "stack": "Error: Process from config.webServer was not able to start. Exit code: 135"
     }
   ],
   "stats": {
-    "startTime": "2025-08-02T05:48:55.574Z",
-    "duration": 3975.745,
+    "startTime": "2025-08-03T00:23:16.839Z",
+    "duration": 2926.2450000000003,
     "expected": 0,
     "skipped": 0,
     "unexpected": 0,

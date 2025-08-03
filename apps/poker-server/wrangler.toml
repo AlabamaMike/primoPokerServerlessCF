@@ -5,9 +5,9 @@ compatibility_flags = ["nodejs_compat"]
 
 # Environment variables
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 JWT_SECRET = "your-super-secret-jwt-key-for-development-only-change-in-production"
-ALLOWED_ORIGINS = "https://localhost:3000"
+ALLOWED_ORIGINS = "https://localhost:3000,https://0f9cd26c.primo-poker-frontend.pages.dev,https://primo-poker-frontend.pages.dev"
 
 # D1 Database
 [[d1_databases]]

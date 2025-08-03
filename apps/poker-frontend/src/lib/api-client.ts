@@ -123,9 +123,25 @@ export class ApiClient {
   }
 
   async createTable(config: { name: string; maxPlayers: number; blinds: { small: number; big: number }; buyIn: number }) {
+    // Convert frontend config to backend TableConfig format
+    const tableConfig = {
+      name: config.name,
+      gameType: 'texas_holdem',
+      bettingStructure: 'no_limit',
+      gameFormat: 'cash',
+      maxPlayers: config.maxPlayers,
+      minBuyIn: config.buyIn / 2, // Min buy-in is half of default
+      maxBuyIn: config.buyIn * 2, // Max buy-in is double of default
+      smallBlind: config.blinds.small,
+      bigBlind: config.blinds.big,
+      ante: 0,
+      timeBank: 30,
+      isPrivate: false
+    }
+    
     return this.request<any>('/api/tables', {
       method: 'POST',
-      body: JSON.stringify(config),
+      body: JSON.stringify(tableConfig),
     })
   }
 

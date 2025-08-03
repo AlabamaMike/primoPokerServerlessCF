@@ -63,7 +63,7 @@ jobs:
           path: |
             packages/*/dist
             apps/poker-server/dist
-            apps/poker-frontend/out
+            apps/poker-frontend/dist
             apps/poker-frontend/.next
             node_modules
           key: build-${{ github.sha }}
@@ -93,7 +93,7 @@ jobs:
           path: |
             packages/*/dist
             apps/poker-server/dist
-            apps/poker-frontend/out
+            apps/poker-frontend/dist
             apps/poker-frontend/.next
             node_modules
           key: build-${{ github.sha }}
@@ -133,7 +133,7 @@ jobs:
           path: |
             packages/*/dist
             apps/poker-server/dist
-            apps/poker-frontend/out
+            apps/poker-frontend/dist
             apps/poker-frontend/.next
             node_modules
           key: build-${{ github.sha }}
@@ -178,7 +178,7 @@ jobs:
           path: |
             packages/*/dist
             apps/poker-server/dist
-            apps/poker-frontend/out
+            apps/poker-frontend/dist
             apps/poker-frontend/.next
             node_modules
           key: build-${{ github.sha }}
@@ -255,7 +255,7 @@ jobs:
           path: |
             packages/*/dist
             apps/poker-server/dist
-            apps/poker-frontend/out
+            apps/poker-frontend/dist
             apps/poker-frontend/.next
             node_modules
           key: build-${{ github.sha }}
@@ -295,7 +295,7 @@ jobs:
           path: |
             packages/*/dist
             apps/poker-server/dist
-            apps/poker-frontend/out
+            apps/poker-frontend/dist
             apps/poker-frontend/.next
             node_modules
           key: build-${{ github.sha }}
@@ -303,7 +303,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         run: |
           cd apps/poker-frontend
-          npx wrangler pages deploy out --project-name=primo-poker-frontend
+          npx wrangler pages deploy dist --project-name=primo-poker-frontend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

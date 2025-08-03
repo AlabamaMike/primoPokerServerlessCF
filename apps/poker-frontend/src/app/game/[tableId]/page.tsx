@@ -1,6 +1,4 @@
-// Configure dynamic paths for game tables
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// Dynamic route for game tables
 
 import MultiplayerGameClient from './client-page'
 

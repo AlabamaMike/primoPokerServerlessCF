@@ -567,12 +567,12 @@ export class PokerAPIRoutes {
       const body = await request.json() as { action: string; amount?: number };
       
       // Get the table's durable object
-      if (!request.env?.TABLE_OBJECTS) {
+      if (!request.env?.GAME_TABLES) {
         return this.errorResponse('Service unavailable', 503);
       }
 
-      const tableObjectId = request.env.TABLE_OBJECTS.idFromName(tableId);
-      const tableObject = request.env.TABLE_OBJECTS.get(tableObjectId);
+      const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
+      const gameTable = request.env.GAME_TABLES.get(durableObjectId);
       
       const actionRequest = new Request(`https://table-object/action`, {
         method: 'POST',
@@ -584,7 +584,7 @@ export class PokerAPIRoutes {
         }),
       });
 
-      const response = await tableObject.fetch(actionRequest);
+      const response = await gameTable.fetch(actionRequest);
       const result = await response.json();
 
       return new Response(JSON.stringify(result), {

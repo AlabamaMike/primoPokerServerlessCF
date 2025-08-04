@@ -121,18 +121,36 @@ export class GameTableDurableObject {
    * Save state to storage with proper serialization
    */
   private async saveState(): Promise<void> {
-    const stateToSave = {
-      ...this.state,
-      players: Array.from(this.state.players.entries()),
-      connections: [], // Don't persist connections
-      spectators: Array.from(this.state.spectators.entries()),
-      seatReservations: Array.from(this.state.seatReservations.entries())
-    }
+    console.log('💾 saveState() - Starting state serialization...')
     
     try {
+      const stateToSave = {
+        ...this.state,
+        players: Array.from(this.state.players.entries()),
+        connections: [], // Don't persist connections
+        spectators: Array.from(this.state.spectators.entries()),
+        seatReservations: Array.from(this.state.seatReservations.entries())
+      }
+      
+      console.log('🔄 State serialized successfully. Size check:')
+      console.log('  - Players:', stateToSave.players.length)
+      console.log('  - Spectators:', stateToSave.spectators.length)
+      console.log('  - Seat reservations:', stateToSave.seatReservations.length)
+      console.log('  - Config exists:', !!stateToSave.config)
+      console.log('  - Table ID:', stateToSave.tableId)
+      
+      console.log('🔐 Calling durableObjectState.storage.put...')
       await this.durableObjectState.storage.put('tableState', stateToSave)
+      console.log('✅ storage.put completed successfully')
+      
     } catch (error) {
-      console.error('Failed to save table state:', error)
+      console.error('❌ CRITICAL ERROR in saveState:', error)
+      console.error('🔍 Save error name:', error?.name)
+      console.error('🔍 Save error message:', error?.message)
+      console.error('🔍 Save error stack:', error?.stack)
+      console.error('🔧 durableObjectState exists:', !!this.durableObjectState)
+      console.error('🔧 durableObjectState.storage exists:', !!this.durableObjectState?.storage)
+      
       throw error
     }
   }
@@ -254,36 +272,80 @@ export class GameTableDurableObject {
    * Handle table creation via REST
    */
   private async handleCreateTable(request: Request): Promise<Response> {
-    console.log('GameTableDO - handleCreateTable called')
+    console.log('🚀 GameTableDO - handleCreateTable called at', new Date().toISOString())
+    console.log('📝 Request headers:', Object.fromEntries([...request.headers.entries()]))
+    
     try {
+      console.log('📖 Parsing request body...')
       const body = await request.json() as { config: TableConfig }
       const creatorId = request.headers.get('X-Creator-ID')
       const creatorUsername = request.headers.get('X-Creator-Username')
-      console.log('GameTableDO - handleCreateTable - Body:', JSON.stringify(body))
+      
+      console.log('✅ Successfully parsed body:', JSON.stringify(body, null, 2))
+      console.log('👤 Creator ID:', creatorId)
+      console.log('👤 Creator Username:', creatorUsername)
+      console.log('🔧 Current state before update:', JSON.stringify({
+        tableId: this.state.tableId,
+        initialized: this.initialized,
+        playersCount: this.state.players.size,
+        connectionsCount: this.state.connections.size
+      }, null, 2))
 
       // Update table configuration
+      console.log('🔄 Updating table configuration...')
       this.state.config = body.config
       this.state.tableId = body.config.id
       this.state.createdAt = Date.now()
       this.state.lastActivity = Date.now()
+      
+      console.log('💾 State updated, preparing to save...')
+      console.log('🆔 Table ID:', this.state.tableId)
+      console.log('⚙️ Config:', JSON.stringify(this.state.config, null, 2))
 
       // Save state using helper method
+      console.log('🔐 Calling saveState()...')
       await this.saveState()
+      console.log('✅ saveState() completed successfully')
 
-      return new Response(JSON.stringify({
+      console.log('🎉 Preparing success response...')
+      const successResponse = {
         success: true,
         tableId: this.state.tableId,
         config: this.state.config,
         createdBy: creatorUsername,
         createdAt: this.state.createdAt
-      }), {
+      }
+      
+      console.log('📤 Success response:', JSON.stringify(successResponse, null, 2))
+      
+      return new Response(JSON.stringify(successResponse), {
         headers: { 'Content-Type': 'application/json' }
       })
     } catch (error) {
-      return new Response(JSON.stringify({
+      console.error('❌ CRITICAL ERROR in handleCreateTable:', error)
+      console.error('🔍 Error name:', error?.name)
+      console.error('🔍 Error message:', error?.message)  
+      console.error('🔍 Error stack:', error?.stack)
+      console.error('🔍 Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
+      console.error('🔧 State at time of error:', JSON.stringify({
+        tableId: this.state?.tableId,
+        initialized: this.initialized,
+        hasConfig: !!this.state?.config,
+        playersSize: this.state?.players?.size,
+        connectionsSize: this.state?.connections?.size
+      }))
+      
+      const errorResponse = {
         success: false,
-        error: 'Failed to create table'
-      }), {
+        error: 'Failed to create table',
+        details: error?.message || 'Unknown error',
+        timestamp: new Date().toISOString(),
+        errorType: error?.name || 'UnknownError'
+      }
+      
+      console.error('📤 Error response:', JSON.stringify(errorResponse, null, 2))
+      
+      return new Response(JSON.stringify(errorResponse), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       })

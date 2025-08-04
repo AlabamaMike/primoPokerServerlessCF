@@ -380,36 +380,59 @@ export class PokerAPIRoutes {
   }
 
   private async handleCreateTable(request: AuthenticatedRequest): Promise<Response> {
+    console.log('🚀 API - handleCreateTable called at', new Date().toISOString())
+    
     if (!request.user) {
+      console.error('❌ User not authenticated')
       return this.errorResponse('Not authenticated', 401);
     }
+    console.log('👤 User authenticated:', JSON.stringify({ userId: request.user.userId, username: request.user.username }))
 
     if (!request.env?.GAME_TABLES) {
+      console.error('❌ GAME_TABLES namespace not available')
       return this.errorResponse('Server configuration error', 500);
     }
+    console.log('✅ GAME_TABLES namespace available')
 
     try {
+      console.log('📖 Parsing request body...')
       const body = await request.json() as Record<string, any>;
+      console.log('✅ Body parsed successfully:', JSON.stringify(body, null, 2))
       
       // Validate table configuration
+      console.log('🔧 Creating table config...')
       const config = {
         ...body,
         id: RandomUtils.generateUUID(),
       };
+      console.log('🆔 Generated table ID:', config.id)
+      console.log('⚙️ Full config:', JSON.stringify(config, null, 2))
 
+      console.log('🔍 Validating config with TableConfigSchema...')
       const configResult = TableConfigSchema.safeParse(config);
 
       if (!configResult.success) {
-        console.error('Table config validation failed:', configResult.error.format());
+        console.error('❌ Table config validation failed:', configResult.error.format());
+        console.error('❌ Failed config:', JSON.stringify(config, null, 2))
         return this.errorResponse('Invalid table configuration', 400);
       }
+      console.log('✅ Config validation passed')
 
       // Create table using Durable Object
       const tableId = config.id;
+      console.log('🎯 Creating Durable Object for table:', tableId)
+      
       const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
+      console.log('🔑 Durable Object ID created')
+      
       const gameTable = request.env.GAME_TABLES.get(durableObjectId);
+      console.log('📦 Durable Object instance retrieved')
 
       // Send create request to Durable Object
+      console.log('📡 Sending create request to Durable Object...')
+      const requestPayload = { config: configResult.data };
+      console.log('📦 Request payload:', JSON.stringify(requestPayload, null, 2))
+      
       const createResponse = await gameTable.fetch(
         new Request(`http://internal/create`, {
           method: 'POST',
@@ -418,24 +441,39 @@ export class PokerAPIRoutes {
             'X-Creator-ID': request.user.userId,
             'X-Creator-Username': request.user.username,
           },
-          body: JSON.stringify({ config: configResult.data }),
+          body: JSON.stringify(requestPayload),
         })
       );
+      
+      console.log('📡 Durable Object response received - Status:', createResponse.status)
+      console.log('📡 Response headers:', Object.fromEntries([...createResponse.headers.entries()]))
 
       if (!createResponse.ok) {
+        console.error('❌ Durable Object returned error status')
         const error = await createResponse.text();
+        console.error('❌ Error response body:', error)
         return this.errorResponse(error || 'Failed to create table', createResponse.status);
       }
 
+      console.log('📄 Reading success response body...')
       const tableData = await createResponse.json() as any;
+      console.log('✅ Table data received:', JSON.stringify(tableData, null, 2))
       
-      return this.successResponse({
+      const finalResponse = {
         tableId: tableId,
         ...tableData,
-      });
+      };
+      console.log('🎉 Final API response:', JSON.stringify(finalResponse, null, 2))
+      
+      return this.successResponse(finalResponse);
     } catch (error) {
-      console.error('Table creation error:', error);
-      return this.errorResponse('Failed to create table', 500);
+      console.error('❌ CRITICAL ERROR in API handleCreateTable:', error);
+      console.error('🔍 API Error name:', error?.name);
+      console.error('🔍 API Error message:', error?.message);
+      console.error('🔍 API Error stack:', error?.stack);
+      console.error('🔍 API Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      
+      return this.errorResponse(`Failed to create table: ${error?.message || 'Unknown error'}`, 500);
     }
   }
 

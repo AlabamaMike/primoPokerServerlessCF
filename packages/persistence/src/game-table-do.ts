@@ -273,7 +273,12 @@ export class GameTableDurableObject {
    */
   private async handleCreateTable(request: Request): Promise<Response> {
     console.log('🚀 GameTableDO - handleCreateTable called at', new Date().toISOString())
-    console.log('📝 Request headers:', Object.fromEntries(Array.from(request.headers.entries())))
+    // Log headers for debugging
+    const headerEntries: [string, string][] = [];
+    request.headers.forEach((value, key) => {
+      headerEntries.push([key, value]);
+    });
+    console.log('📝 Request headers:', Object.fromEntries(headerEntries))
     
     try {
       console.log('📖 Parsing request body...')

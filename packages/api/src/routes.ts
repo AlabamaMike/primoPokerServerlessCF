@@ -446,7 +446,12 @@ export class PokerAPIRoutes {
       );
       
       console.log('📡 Durable Object response received - Status:', createResponse.status)
-      console.log('📡 Response headers:', Object.fromEntries(Array.from(createResponse.headers.entries())))
+      // Log response headers for debugging
+      const responseHeaders: [string, string][] = [];
+      createResponse.headers.forEach((value, key) => {
+        responseHeaders.push([key, value]);
+      });
+      console.log('📡 Response headers:', Object.fromEntries(responseHeaders))
 
       if (!createResponse.ok) {
         console.error('❌ Durable Object returned error status')

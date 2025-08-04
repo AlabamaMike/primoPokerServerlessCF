@@ -158,32 +158,52 @@ export class GameTableDurableObject {
 
     // Handle WebSocket upgrade
     if (request.headers.get('Upgrade') === 'websocket') {
-      const pair = new WebSocketPair()
-      const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
-      
-      // Accept the WebSocket connection
-      this.durableObjectState.acceptWebSocket(server)
-      
-      // Extract player info from headers
-      const playerId = request.headers.get('X-Player-ID')
-      const username = request.headers.get('X-Username')
-      
-      if (playerId && username) {
-        // Store connection info
-        const connection: PlayerConnection = {
-          websocket: server,
-          playerId,
-          username,
-          isConnected: true,
-          lastHeartbeat: Date.now()
+      try {
+        const pair = new WebSocketPair()
+        const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
+        
+        // Accept the WebSocket connection
+        this.durableObjectState.acceptWebSocket(server)
+        
+        // Extract player info from headers
+        const playerId = request.headers.get('X-Player-ID')
+        const username = request.headers.get('X-Username')
+        const tableId = request.headers.get('X-Table-ID')
+        
+        console.log('[DO WS] WebSocket connection:', { playerId, username, tableId })
+        
+        if (playerId && username) {
+          // Store connection info
+          const connection: PlayerConnection = {
+            websocket: server,
+            playerId,
+            username,
+            isConnected: true,
+            lastHeartbeat: Date.now()
+          }
+          this.state.connections.set(playerId, connection)
+          
+          // Send initial connection success message
+          server.send(JSON.stringify({
+            type: 'connection_established',
+            payload: {
+              playerId,
+              tableId: this.state.tableId,
+              message: 'Connected to game table'
+            }
+          }))
+        } else {
+          console.error('[DO WS] Missing player info in WebSocket upgrade')
         }
-        this.state.connections.set(playerId, connection)
+        
+        return new Response(null, {
+          status: 101,
+          webSocket: client,
+        })
+      } catch (error) {
+        console.error('[DO WS] WebSocket upgrade error:', error)
+        return new Response('WebSocket upgrade failed', { status: 500 })
       }
-      
-      return new Response(null, {
-        status: 101,
-        webSocket: client,
-      })
     }
 
     // Handle REST API endpoints
@@ -466,7 +486,7 @@ export class GameTableDurableObject {
       const data = JSON.parse(message)
       const { type, payload } = data
 
-      console.log(`GameTable received message: ${type}`, payload)
+      console.log(`[DO WS] GameTable received message: ${type}`, payload)
       
       // Check for reconnection
       if (payload?.playerId) {

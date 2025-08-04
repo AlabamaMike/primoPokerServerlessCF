@@ -2,3 +2,27 @@
 . "$(dirname -- "$0")/_/husky.sh"
 
 npm run lint-staged
+
+# Run tests for changed packages
+echo "🧪 Running tests for changed files..."
+
+# Check if security package has changes
+if git diff --cached --name-only | grep -q "packages/security/"; then
+  echo "📦 Running security tests..."
+  npm test -w @primo-poker/security -- --bail --findRelatedTests
+fi
+
+# Check if persistence package has changes
+if git diff --cached --name-only | grep -q "packages/persistence/"; then
+  echo "📦 Running persistence tests..."
+  npm test -w @primo-poker/persistence -- --bail --findRelatedTests
+fi
+
+# Check if any critical files were changed
+CRITICAL_FILES="wallet-manager|secure-shuffle|authentication|crypto-helpers"
+if git diff --cached --name-only | grep -qE "$CRITICAL_FILES"; then
+  echo "🚨 Critical files changed - running full test suite..."
+  npm test -- --bail
+fi
+
+echo "✅ Pre-commit checks passed!"

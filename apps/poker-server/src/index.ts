@@ -165,6 +165,12 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     return new Response('Missing tableId parameter', { status: 400 });
   }
 
+  // Validate tableId is not a special route
+  if (tableId === 'lobby' || tableId === 'undefined' || tableId === 'null') {
+    console.error('[WS] Invalid tableId:', tableId);
+    return new Response(`Invalid tableId: ${tableId}. WebSocket connections are only supported for game tables.`, { status: 400 });
+  }
+
   // Validate JWT token using AuthenticationManager
   let decodedPayload: any;
   

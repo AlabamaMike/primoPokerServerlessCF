@@ -1,0 +1,210 @@
+{
+  "config": {
+    "configFile": "/workspaces/primoPokerServerlessCF/tests/e2e/playwright.production.config.ts",
+    "rootDir": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke",
+    "forbidOnly": true,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "playwright-report-production"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/production-results.json"
+        }
+      ],
+      [
+        "list",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-production",
+        "name": "chromium-production",
+        "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 300000
+      },
+      {
+        "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox-production",
+        "name": "firefox-production",
+        "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 300000
+      },
+      {
+        "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-production",
+        "name": "webkit-production",
+        "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 300000
+      },
+      {
+        "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile-chrome-production",
+        "name": "mobile-chrome-production",
+        "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 300000
+      },
+      {
+        "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile-safari-production",
+        "name": "mobile-safari-production",
+        "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 300000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.54.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "check-game-page-error.spec.ts",
+      "file": "check-game-page-error.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Check Game Page Error",
+          "file": "check-game-page-error.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Check game page with dummy table ID",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 300000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-production",
+                  "projectName": "chromium-production",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4430,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Loading game page with dummy table ID: test-table-123\n"
+                        },
+                        {
+                          "text": "Page content: Internal Server Error\n"
+                        },
+                        {
+                          "text": "\n=== SUMMARY ===\n"
+                        },
+                        {
+                          "text": "Console logs: \u001b[33m0\u001b[39m\n"
+                        },
+                        {
+                          "text": "Network errors: \u001b[33m0\u001b[39m\n"
+                        },
+                        {
+                          "text": "❌ Page shows an error\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-08-04T21:26:45.746Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "9afedfeeae77d0727fcd-a9ac915341a877b64d88",
+              "file": "check-game-page-error.spec.ts",
+              "line": 4,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-08-04T21:26:45.066Z",
+    "duration": 5260.938,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

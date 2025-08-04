@@ -20,6 +20,7 @@ export default function LoginPage() {
     setError("")
 
     try {
+      // Backend expects username, so use email as username for now
       await login(email, password)
       router.push("/multiplayer")
     } catch (err) {

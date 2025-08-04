@@ -145,12 +145,23 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
   const token = url.searchParams.get('token');
   const tableId = url.searchParams.get('tableId');
 
+  console.log('[WS] Upgrade request received:', {
+    url: url.toString(),
+    hasToken: !!token,
+    tokenLength: token?.length,
+    tableId,
+    origin: request.headers.get('origin'),
+    upgrade: request.headers.get('upgrade')
+  });
+
   // Validate required parameters
   if (!token) {
+    console.error('[WS] Missing token parameter');
     return new Response('Missing token parameter', { status: 400 });
   }
 
   if (!tableId) {
+    console.error('[WS] Missing tableId parameter');
     return new Response('Missing tableId parameter', { status: 400 });
   }
 
@@ -158,7 +169,7 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
   let decodedPayload: any;
   
   try {
-    console.log('WebSocket upgrade request received for table:', tableId);
+    console.log('[WS] Validating token for table:', tableId);
     
     // Initialize authentication manager
     const authManager = new (await import('@primo-poker/security')).AuthenticationManager(env.JWT_SECRET);
@@ -167,16 +178,18 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     const verifyResult = await authManager.verifyAccessToken(token);
     
     if (!verifyResult.valid || !verifyResult.payload) {
-      console.error('Token verification failed:', verifyResult.error);
+      console.error('[WS] Token verification failed:', verifyResult.error);
       return new Response(verifyResult.error || 'Invalid token', { status: 401 });
     }
     
     decodedPayload = verifyResult.payload;
-    console.log('Token verified for user:', decodedPayload.userId);
+    console.log('[WS] Token verified for user:', decodedPayload.userId, 'username:', decodedPayload.username);
 
     // Get or create GameTable Durable Object
     const gameTableId = env.GAME_TABLES.idFromName(tableId);
     const gameTable = env.GAME_TABLES.get(gameTableId);
+
+    console.log('[WS] Forwarding to GameTable Durable Object:', gameTableId.toString());
 
     // Forward WebSocket upgrade request to the GameTable Durable Object
     // We need to preserve the WebSocket upgrade headers and add authentication info
@@ -188,19 +201,31 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     headers.set('Upgrade', 'websocket')
     headers.set('Connection', 'Upgrade')
     
+    // Add CORS headers for WebSocket
+    headers.set('Access-Control-Allow-Origin', env.ALLOWED_ORIGINS || '*')
+    headers.set('Access-Control-Allow-Credentials', 'true')
+    
     const websocketRequest = new Request(request.url, {
       method: 'GET',
       headers
     });
 
+    console.log('[WS] Forwarding request to Durable Object with headers:', {
+      playerId: decodedPayload.userId,
+      username: decodedPayload.username,
+      tableId
+    });
+
     // Forward to Durable Object - it will handle the WebSocket upgrade
     const response = await gameTable.fetch(websocketRequest);
+    
+    console.log('[WS] Durable Object response status:', response.status);
     
     // Return the response from the Durable Object
     return response;
 
   } catch (error) {
-    console.error('WebSocket upgrade error:', error);
+    console.error('[WS] WebSocket upgrade error:', error);
     return new Response('Authentication failed', { status: 401 });
   }
 }

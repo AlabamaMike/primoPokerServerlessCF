@@ -14,6 +14,8 @@ export class WebSocketClient {
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000
+  private maxReconnectDelay = 30000
+  private reconnectTimer: NodeJS.Timeout | null = null
   private eventHandlers: Map<string, WebSocketEventHandler[]> = new Map()
   private messageQueue: WebSocketMessage[] = []
   private isConnected = false
@@ -92,10 +94,11 @@ export class WebSocketClient {
         this.ws.onclose = (event) => {
           console.log('WebSocket closed:', event.code, event.reason)
           this.isConnected = false
+          this.isConnecting = false
           this.stopHeartbeat()
           
           // Attempt reconnection if not a normal closure
-          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+          if (event.code !== 1000 && event.code !== 1001 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.attemptReconnect()
           }
         }
@@ -142,12 +145,21 @@ export class WebSocketClient {
       return
     }
 
-    this.reconnectAttempts++
-    const delay = this.reconnectDelay * this.reconnectAttempts
+    // Clear any existing reconnect timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+    }
 
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`)
+    this.reconnectAttempts++
+    // Exponential backoff with jitter
+    const baseDelay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectDelay)
+    const jitter = Math.random() * 0.3 * baseDelay // Add 0-30% jitter
+    const delay = Math.floor(baseDelay + jitter)
+
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
     
-    setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
       this.connect().catch((error) => {
         console.error('Reconnection failed:', error)
       })
@@ -206,6 +218,16 @@ export class WebSocketClient {
 
   disconnect() {
     this.stopHeartbeat()
+    
+    // Clear any reconnect timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    
+    // Reset reconnect attempts
+    this.reconnectAttempts = 0
+    
     if (this.ws) {
       this.ws.close(1000, 'Normal closure')
       this.ws = null

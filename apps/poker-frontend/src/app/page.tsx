@@ -17,7 +17,7 @@ export default function HomePage() {
       if (isAuthenticated) {
         router.push('/multiplayer')
       } else {
-        router.push('/login')
+        router.push('/auth/login')
       }
     }
   }, [isAuthenticated, isLoading, router])

@@ -26,6 +26,13 @@ export function useWebSocketConnection() {
       return null
     }
 
+    // Don't connect to invalid table IDs
+    if (!tableId || tableId === 'lobby' || tableId === 'undefined') {
+      console.warn('Invalid tableId for WebSocket connection:', tableId)
+      setError('Invalid table ID')
+      return null
+    }
+
     // Get token from auth store or localStorage
     let authToken = token
     const authUser = user

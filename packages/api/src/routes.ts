@@ -25,6 +25,7 @@ interface WorkerEnv {
   TABLE_OBJECTS: DurableObjectNamespace;
   GAME_TABLES: DurableObjectNamespace;
   JWT_SECRET: string;
+  ENVIRONMENT?: string;
 }
 
 export class PokerAPIRoutes {
@@ -653,9 +654,28 @@ export class PokerAPIRoutes {
 
   // Health check
   private async handleHealthCheck(request: AuthenticatedRequest): Promise<Response> {
+    const env = request.env;
+    const websocketUrl = env?.ENVIRONMENT === 'production' 
+      ? 'wss://primo-poker-server.alabamamike.workers.dev'
+      : 'ws://localhost:8787';
+    
     return this.successResponse({ 
       status: 'healthy', 
-      timestamp: new Date().toISOString() 
+      timestamp: new Date().toISOString(),
+      environment: env?.ENVIRONMENT || 'development',
+      services: {
+        database: 'D1',
+        session: 'KV',
+        tables: 'Durable Objects',
+        files: 'R2',
+        websocket: 'Available'
+      },
+      websocket: {
+        url: websocketUrl,
+        status: 'ready',
+        upgrade: 'Supported via WebSocket upgrade header',
+        authentication: 'Required (JWT token in query parameter)'
+      }
     });
   }
 

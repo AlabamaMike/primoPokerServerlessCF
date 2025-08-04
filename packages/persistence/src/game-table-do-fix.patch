@@ -1,0 +1,25 @@
+--- game-table-do.ts.orig
++++ game-table-do.ts
+@@ -247,8 +247,20 @@
+       this.state.createdAt = Date.now()
+       this.state.lastActivity = Date.now()
+ 
+-      // Save state
+-      await this.durableObjectState.storage.put('tableState', this.state)
++      // Save state - convert Maps to arrays for serialization
++      const stateToSave = {
++        ...this.state,
++        players: Array.from(this.state.players.entries()),
++        connections: [], // Don't save connections
++        spectators: Array.from(this.state.spectators.entries()),
++        seatReservations: Array.from(this.state.seatReservations.entries())
++      }
++      
++      try {
++        await this.durableObjectState.storage.put('tableState', stateToSave)
++      } catch (error) {
++        console.error('Failed to save table state:', error)
++      }
+ 
+       return new Response(JSON.stringify({
+         success: true,

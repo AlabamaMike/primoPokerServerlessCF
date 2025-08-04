@@ -118,6 +118,26 @@ export class GameTableDurableObject {
   }
 
   /**
+   * Save state to storage with proper serialization
+   */
+  private async saveState(): Promise<void> {
+    const stateToSave = {
+      ...this.state,
+      players: Array.from(this.state.players.entries()),
+      connections: [], // Don't persist connections
+      spectators: Array.from(this.state.spectators.entries()),
+      seatReservations: Array.from(this.state.seatReservations.entries())
+    }
+    
+    try {
+      await this.durableObjectState.storage.put('tableState', stateToSave)
+    } catch (error) {
+      console.error('Failed to save table state:', error)
+      throw error
+    }
+  }
+
+  /**
    * Initialize state from storage if not already done
    */
   private async initializeState(): Promise<void> {
@@ -247,8 +267,8 @@ export class GameTableDurableObject {
       this.state.createdAt = Date.now()
       this.state.lastActivity = Date.now()
 
-      // Save state
-      await this.durableObjectState.storage.put('tableState', this.state)
+      // Save state using helper method
+      await this.saveState()
 
       return new Response(JSON.stringify({
         success: true,
@@ -336,8 +356,8 @@ export class GameTableDurableObject {
       this.state.players.set(playerId, player)
       this.state.lastActivity = Date.now()
 
-      // Save state
-      await this.durableObjectState.storage.put('tableState', this.state)
+      // Save state using helper method
+      await this.saveState()
 
       // Broadcast to all connected players
       await this.broadcastTableState()

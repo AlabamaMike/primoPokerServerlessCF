@@ -52,7 +52,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 300000
+        "timeout": 60000
       },
       {
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
@@ -68,7 +68,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 300000
+        "timeout": 60000
       },
       {
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
@@ -84,7 +84,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 300000
+        "timeout": 60000
       },
       {
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
@@ -100,7 +100,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 300000
+        "timeout": 60000
       },
       {
         "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results",
@@ -116,7 +116,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 300000
+        "timeout": 60000
       }
     ],
     "shard": null,
@@ -128,25 +128,25 @@
   },
   "suites": [
     {
-      "title": "check-game-page-error.spec.ts",
-      "file": "check-game-page-error.spec.ts",
+      "title": "test-spectator-flow.spec.ts",
+      "file": "test-spectator-flow.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "Check Game Page Error",
-          "file": "check-game-page-error.spec.ts",
+          "title": "Spectator Flow Test",
+          "file": "test-spectator-flow.spec.ts",
           "line": 3,
           "column": 6,
           "specs": [
             {
-              "title": "Check game page with dummy table ID",
-              "ok": true,
+              "title": "User can join table as spectator and then sit down",
+              "ok": false,
               "tags": [],
               "tests": [
                 {
-                  "timeout": 300000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "chromium-production",
@@ -155,42 +155,331 @@
                     {
                       "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 4430,
-                      "errors": [],
+                      "status": "failed",
+                      "duration": 5347,
+                      "error": {
+                        "message": "ReferenceError: getChipsModal is not defined",
+                        "stack": "ReferenceError: getChipsModal is not defined\n    at /workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts:110:43",
+                        "location": {
+                          "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                          "column": 43,
+                          "line": 110
+                        },
+                        "snippet": "  108 |     console.log('3. Create table:', tableId ? '✅' : '❌');\n  109 |     console.log('4. Auto-join as spectator:', spectatorStatus ? '✅' : '❌');\n> 110 |     console.log('5. Click seat to join:', getChipsModal ? '✅' : '❌');\n      |                                           ^\n  111 |   });\n  112 | });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                            "column": 43,
+                            "line": 110
+                          },
+                          "message": "ReferenceError: getChipsModal is not defined\n\n  108 |     console.log('3. Create table:', tableId ? '✅' : '❌');\n  109 |     console.log('4. Auto-join as spectator:', spectatorStatus ? '✅' : '❌');\n> 110 |     console.log('5. Click seat to join:', getChipsModal ? '✅' : '❌');\n      |                                           ^\n  111 |   });\n  112 | });\n    at /workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts:110:43"
+                        }
+                      ],
                       "stdout": [
                         {
-                          "text": "Loading game page with dummy table ID: test-table-123\n"
+                          "text": "Testing spectator flow on: https://primo-poker-frontend.pages.dev\n"
                         },
                         {
-                          "text": "Page content: Internal Server Error\n"
+                          "text": "✅ Logged in successfully\n"
                         },
                         {
-                          "text": "\n=== SUMMARY ===\n"
+                          "text": "✅ On multiplayer page\n"
                         },
                         {
-                          "text": "Console logs: \u001b[33m0\u001b[39m\n"
+                          "text": "Clicked Create Table button\n"
                         },
                         {
-                          "text": "Network errors: \u001b[33m0\u001b[39m\n"
+                          "text": "✅ Table created with ID: 65d38922-5425-462f-8ce0-133c0a5b79fe\n"
                         },
                         {
-                          "text": "❌ Page shows an error\n"
+                          "text": "❌ Not in spectator mode\n"
+                        },
+                        {
+                          "text": "Found 0 empty seats\n"
+                        },
+                        {
+                          "text": "❌ No empty seats found or seats not clickable\n"
+                        },
+                        {
+                          "text": "Game elements visible:\n"
+                        },
+                        {
+                          "text": "- Poker table: ❌\n"
+                        },
+                        {
+                          "text": "- Community cards area: ❌\n"
+                        },
+                        {
+                          "text": "\n=== SPECTATOR FLOW TEST SUMMARY ===\n"
+                        },
+                        {
+                          "text": "1. Login: ✅\n"
+                        },
+                        {
+                          "text": "2. Navigate to multiplayer: ✅\n"
+                        },
+                        {
+                          "text": "3. Create table: ✅\n"
+                        },
+                        {
+                          "text": "4. Auto-join as spectator: ❌\n"
                         }
                       ],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-08-04T21:26:45.746Z",
+                      "startTime": "2025-08-04T21:37:51.043Z",
                       "annotations": [],
-                      "attachments": []
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                        "column": 43,
+                        "line": 110
+                      }
+                    },
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 4929,
+                      "error": {
+                        "message": "ReferenceError: getChipsModal is not defined",
+                        "stack": "ReferenceError: getChipsModal is not defined\n    at /workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts:110:43",
+                        "location": {
+                          "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                          "column": 43,
+                          "line": 110
+                        },
+                        "snippet": "  108 |     console.log('3. Create table:', tableId ? '✅' : '❌');\n  109 |     console.log('4. Auto-join as spectator:', spectatorStatus ? '✅' : '❌');\n> 110 |     console.log('5. Click seat to join:', getChipsModal ? '✅' : '❌');\n      |                                           ^\n  111 |   });\n  112 | });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                            "column": 43,
+                            "line": 110
+                          },
+                          "message": "ReferenceError: getChipsModal is not defined\n\n  108 |     console.log('3. Create table:', tableId ? '✅' : '❌');\n  109 |     console.log('4. Auto-join as spectator:', spectatorStatus ? '✅' : '❌');\n> 110 |     console.log('5. Click seat to join:', getChipsModal ? '✅' : '❌');\n      |                                           ^\n  111 |   });\n  112 | });\n    at /workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts:110:43"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "Testing spectator flow on: https://primo-poker-frontend.pages.dev\n"
+                        },
+                        {
+                          "text": "✅ Logged in successfully\n"
+                        },
+                        {
+                          "text": "✅ On multiplayer page\n"
+                        },
+                        {
+                          "text": "Clicked Create Table button\n"
+                        },
+                        {
+                          "text": "✅ Table created with ID: 843007cc-64a8-45ea-8a55-058d45582d1e\n"
+                        },
+                        {
+                          "text": "❌ Not in spectator mode\n"
+                        },
+                        {
+                          "text": "Found 0 empty seats\n"
+                        },
+                        {
+                          "text": "❌ No empty seats found or seats not clickable\n"
+                        },
+                        {
+                          "text": "Game elements visible:\n"
+                        },
+                        {
+                          "text": "- Poker table: ❌\n"
+                        },
+                        {
+                          "text": "- Community cards area: ❌\n"
+                        },
+                        {
+                          "text": "\n=== SPECTATOR FLOW TEST SUMMARY ===\n"
+                        },
+                        {
+                          "text": "1. Login: ✅\n"
+                        },
+                        {
+                          "text": "2. Navigate to multiplayer: ✅\n"
+                        },
+                        {
+                          "text": "3. Create table: ✅\n"
+                        },
+                        {
+                          "text": "4. Auto-join as spectator: ❌\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2025-08-04T21:37:57.195Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry1/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                        "column": 43,
+                        "line": 110
+                      }
+                    },
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 4709,
+                      "error": {
+                        "message": "ReferenceError: getChipsModal is not defined",
+                        "stack": "ReferenceError: getChipsModal is not defined\n    at /workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts:110:43",
+                        "location": {
+                          "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                          "column": 43,
+                          "line": 110
+                        },
+                        "snippet": "  108 |     console.log('3. Create table:', tableId ? '✅' : '❌');\n  109 |     console.log('4. Auto-join as spectator:', spectatorStatus ? '✅' : '❌');\n> 110 |     console.log('5. Click seat to join:', getChipsModal ? '✅' : '❌');\n      |                                           ^\n  111 |   });\n  112 | });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                            "column": 43,
+                            "line": 110
+                          },
+                          "message": "ReferenceError: getChipsModal is not defined\n\n  108 |     console.log('3. Create table:', tableId ? '✅' : '❌');\n  109 |     console.log('4. Auto-join as spectator:', spectatorStatus ? '✅' : '❌');\n> 110 |     console.log('5. Click seat to join:', getChipsModal ? '✅' : '❌');\n      |                                           ^\n  111 |   });\n  112 | });\n    at /workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts:110:43"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "Testing spectator flow on: https://primo-poker-frontend.pages.dev\n"
+                        },
+                        {
+                          "text": "✅ Logged in successfully\n"
+                        },
+                        {
+                          "text": "✅ On multiplayer page\n"
+                        },
+                        {
+                          "text": "Clicked Create Table button\n"
+                        },
+                        {
+                          "text": "✅ Table created with ID: a1fd3b92-bb38-4c0e-ab60-df64b6ab2285\n"
+                        },
+                        {
+                          "text": "❌ Not in spectator mode\n"
+                        },
+                        {
+                          "text": "Found 0 empty seats\n"
+                        },
+                        {
+                          "text": "❌ No empty seats found or seats not clickable\n"
+                        },
+                        {
+                          "text": "Game elements visible:\n"
+                        },
+                        {
+                          "text": "- Poker table: ❌\n"
+                        },
+                        {
+                          "text": "- Community cards area: ❌\n"
+                        },
+                        {
+                          "text": "\n=== SPECTATOR FLOW TEST SUMMARY ===\n"
+                        },
+                        {
+                          "text": "1. Login: ✅\n"
+                        },
+                        {
+                          "text": "2. Navigate to multiplayer: ✅\n"
+                        },
+                        {
+                          "text": "3. Create table: ✅\n"
+                        },
+                        {
+                          "text": "4. Auto-join as spectator: ❌\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2025-08-04T21:38:02.944Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry2/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry2/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/workspaces/primoPokerServerlessCF/tests/e2e/test-results/test-spectator-flow-Specta-30a13-spectator-and-then-sit-down-chromium-production-retry2/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/workspaces/primoPokerServerlessCF/tests/e2e/production-smoke/test-spectator-flow.spec.ts",
+                        "column": 43,
+                        "line": 110
+                      }
                     }
                   ],
-                  "status": "expected"
+                  "status": "unexpected"
                 }
               ],
-              "id": "9afedfeeae77d0727fcd-a9ac915341a877b64d88",
-              "file": "check-game-page-error.spec.ts",
-              "line": 4,
+              "id": "e6debd3a3b2db4d98f53-a6b4c5bf23568793c253",
+              "file": "test-spectator-flow.spec.ts",
+              "line": 7,
               "column": 7
             }
           ]
@@ -200,11 +489,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2025-08-04T21:26:45.066Z",
-    "duration": 5260.938,
-    "expected": 1,
+    "startTime": "2025-08-04T21:37:50.439Z",
+    "duration": 17441.18,
+    "expected": 0,
     "skipped": 0,
-    "unexpected": 0,
+    "unexpected": 1,
     "flaky": 0
   }
 }

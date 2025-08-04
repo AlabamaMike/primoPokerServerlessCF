@@ -446,7 +446,7 @@ export class PokerAPIRoutes {
       );
       
       console.log('📡 Durable Object response received - Status:', createResponse.status)
-      console.log('📡 Response headers:', Object.fromEntries([...createResponse.headers.entries()]))
+      console.log('📡 Response headers:', Object.fromEntries(Array.from(createResponse.headers.entries())))
 
       if (!createResponse.ok) {
         console.error('❌ Durable Object returned error status')
@@ -466,7 +466,7 @@ export class PokerAPIRoutes {
       console.log('🎉 Final API response:', JSON.stringify(finalResponse, null, 2))
       
       return this.successResponse(finalResponse);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ CRITICAL ERROR in API handleCreateTable:', error);
       console.error('🔍 API Error name:', error?.name);
       console.error('🔍 API Error message:', error?.message);

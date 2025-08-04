@@ -143,7 +143,7 @@ export class GameTableDurableObject {
       await this.durableObjectState.storage.put('tableState', stateToSave)
       console.log('✅ storage.put completed successfully')
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ CRITICAL ERROR in saveState:', error)
       console.error('🔍 Save error name:', error?.name)
       console.error('🔍 Save error message:', error?.message)
@@ -273,7 +273,7 @@ export class GameTableDurableObject {
    */
   private async handleCreateTable(request: Request): Promise<Response> {
     console.log('🚀 GameTableDO - handleCreateTable called at', new Date().toISOString())
-    console.log('📝 Request headers:', Object.fromEntries([...request.headers.entries()]))
+    console.log('📝 Request headers:', Object.fromEntries(Array.from(request.headers.entries())))
     
     try {
       console.log('📖 Parsing request body...')
@@ -321,7 +321,7 @@ export class GameTableDurableObject {
       return new Response(JSON.stringify(successResponse), {
         headers: { 'Content-Type': 'application/json' }
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ CRITICAL ERROR in handleCreateTable:', error)
       console.error('🔍 Error name:', error?.name)
       console.error('🔍 Error message:', error?.message)  

@@ -187,9 +187,11 @@ export class PokerGame implements IPokerGame {
       case GameType.TEXAS_HOLDEM:
         return 2;
       case GameType.OMAHA:
+        return 4;
       case GameType.OMAHA_HI_LO:
         return 4;
       case GameType.SEVEN_CARD_STUD:
+        return 2;
       case GameType.SEVEN_CARD_STUD_HI_LO:
         return 2; // Initial down cards
       default:

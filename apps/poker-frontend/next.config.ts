@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  trailingSlash: true,
+  // Remove trailingSlash to fix 404 issues with dynamic routes in production
   images: {
     unoptimized: true
   },

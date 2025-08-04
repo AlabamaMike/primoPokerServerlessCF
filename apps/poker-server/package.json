@@ -9,7 +9,7 @@
     "clean": "rimraf dist",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:ci": "jest --ci --coverage --passWithNoTests",
     "type-check": "tsc --noEmit"
   },

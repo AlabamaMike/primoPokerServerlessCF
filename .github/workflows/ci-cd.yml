@@ -324,7 +324,6 @@ jobs:
             echo "Deploying to Cloudflare Pages..."
             npx wrangler pages deploy .vercel/output/static \
               --project-name=primo-poker-frontend \
-              --compatibility-date=2024-01-17 \
               --branch=main \
               --commit-hash="${GITHUB_SHA}"
           else

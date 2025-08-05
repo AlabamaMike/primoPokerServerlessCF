@@ -7,7 +7,7 @@
     "dev": "tauri dev",
     "dev:vite": "vite",
     "build": "tauri build",
-    "build:vite": "tsc && vite build",
+    "build:vite": "vite build",
     "tauri": "tauri",
     "test": "vitest",
     "test:lobby": "jest --config jest.config.lobby.js",

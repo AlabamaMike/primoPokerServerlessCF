@@ -32,11 +32,11 @@
       }
     },
     "updater": {
-      "active": true,
+      "active": false,
       "endpoints": [
         "https://primo-poker-updates.s3.amazonaws.com/latest.json"
       ],
-      "dialog": true,
+      "dialog": false,
       "pubkey": ""
     },
     "bundle": {

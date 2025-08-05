@@ -1,4 +1,5 @@
 // Dynamic route for game tables
+// This page handles multiplayer poker game sessions
 
 import MultiplayerGameClient from './client-page'
 

@@ -2,7 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
 use keyring::Entry;
 use chrono::{DateTime, Utc, Duration};
 use reqwest::{Client, header};
@@ -270,8 +269,9 @@ async fn get_user() -> Result<Option<User>, String> {
     match get_token_from_keyring() {
         Ok(_) => Ok(Some(User {
             id: "user123".to_string(),
+            username: "testuser".to_string(),
             email: "test@example.com".to_string(),
-            name: "Test User".to_string(),
+            name: Some("Test User".to_string()),
         })),
         Err(_) => Ok(None),
     }
@@ -389,6 +389,7 @@ fn main() {
         .setup(|app| {
             #[cfg(debug_assertions)]
             {
+                use tauri::Manager;
                 let window = app.get_window("main").unwrap();
                 window.open_devtools();
             }

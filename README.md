@@ -1,20 +1,20 @@
 # 🃏 Primo Poker - Professional Serverless Poker Platform
 
-> **Current Status: Phase 4 Complete** ✅  
-> Production-ready platform with full multiplayer support, spectator mode, seat selection, and wallet integration
+> **Current Status: Desktop Client Migration** 🖥️  
+> Moving from browser-based to standalone desktop application for enhanced security and performance
 
-A comprehensive serverless poker platform built on Cloudflare Workers with interactive frontend, real-time multiplayer capabilities, complete hand evaluation system, bankroll management, and modern web technologies.
+A comprehensive serverless poker platform built on Cloudflare Workers with a secure desktop client, real-time multiplayer capabilities, complete hand evaluation system, bankroll management, and modern technologies.
 
-## 🚀 Live Production Deployment
-**Frontend**: [https://21613f51.primo-poker-frontend.pages.dev](https://21613f51.primo-poker-frontend.pages.dev)
+## 🚀 Production Backend
 **Backend API**: [https://primo-poker-server.alabamamike.workers.dev](https://primo-poker-server.alabamamike.workers.dev)
+**Desktop Client**: Tauri-based application in `apps/poker-desktop`
 
-### Recent Achievements (Aug 2, 2025): Multiplayer Implementation ✅
-- **WebSocket Fixes**: Resolved connection errors and proper WebSocket upgrade handling
-- **Spectator Mode**: Automatic spectator join with real-time count tracking
-- **Seat Selection**: Enhanced UI with hover effects and reservation system
-- **Stand Up Feature**: Players can leave table with chip return to bankroll
-- **Wallet Integration**: Complete bankroll system with transaction history
+### Recent Achievements (Aug 5, 2025): Desktop Client Development 🖥️
+- **Tauri Integration**: Built secure desktop application with React + Rust
+- **OS Keyring Storage**: Secure token storage using system credentials
+- **Production Connectivity**: Full API compatibility with Cloudflare backend
+- **E2E Testing**: Comprehensive test suite passing against production
+- **Frontend Decommission**: Removed browser-based client for security
 
 ### Available Features
 - **Full Multiplayer Support**: Real-time gameplay with multiple players

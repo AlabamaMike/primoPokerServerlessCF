@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use keyring::Entry;
 use chrono::{DateTime, Utc, Duration};
-use reqwest::Client;
+use reqwest::{Client, header};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ConnectionStatus {
@@ -119,22 +119,52 @@ struct BlindsConfig {
     big: u32,
 }
 
+// Helper function to create a properly configured HTTP client
+fn create_http_client() -> Result<Client, String> {
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        header::USER_AGENT,
+        header::HeaderValue::from_static("Primo-Poker-Desktop/1.0")
+    );
+    headers.insert(
+        header::ACCEPT,
+        header::HeaderValue::from_static("application/json")
+    );
+    
+    Client::builder()
+        .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        // Use native TLS for better compatibility
+        .use_native_tls()
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))
+}
+
 // Check backend connection
 #[tauri::command]
 async fn check_backend_connection(api_url: String) -> Result<ConnectionStatus, String> {
     let start = std::time::Instant::now();
     
-    match reqwest::get(&format!("{}/api/health", api_url)).await {
+    let client = create_http_client()?;
+    
+    match client.get(&format!("{}/api/health", api_url)).send().await {
         Ok(response) => {
             let latency_ms = start.elapsed().as_millis() as u32;
+            let is_success = response.status().is_success();
+            
+            // Log response details for debugging
+            eprintln!("Health check response: status={}, latency={}ms", response.status(), latency_ms);
+            
             Ok(ConnectionStatus {
-                connected: response.status().is_success(),
+                connected: is_success,
                 backend_url: api_url,
                 latency_ms: Some(latency_ms),
             })
         }
         Err(e) => {
             eprintln!("Backend connection error: {}", e);
+            eprintln!("URL attempted: {}/api/health", api_url);
             Ok(ConnectionStatus {
                 connected: false,
                 backend_url: api_url,
@@ -147,9 +177,10 @@ async fn check_backend_connection(api_url: String) -> Result<ConnectionStatus, S
 // Login user
 #[tauri::command]
 async fn login(api_url: String, email: String, password: String) -> Result<LoginResponse, String> {
-    let client = reqwest::Client::new();
+    let client = create_http_client()?;
     let response = client
         .post(&format!("{}/api/auth/login", api_url))
+        .header(header::CONTENT_TYPE, "application/json")
         .json(&LoginRequest { username: email.clone(), password })
         .send()
         .await
@@ -262,7 +293,7 @@ fn get_token_from_keyring() -> Result<String, String> {
 // Get tables from backend
 #[tauri::command]
 async fn get_tables(api_url: String) -> Result<Vec<Table>, String> {
-    let client = Client::new();
+    let client = create_http_client()?;
     
     // Get token from keyring if available
     let token = match get_token_from_keyring() {
@@ -294,7 +325,7 @@ async fn get_tables(api_url: String) -> Result<Vec<Table>, String> {
 // Create a new table
 #[tauri::command]
 async fn create_table(api_url: String, config: TableConfig) -> Result<Table, String> {
-    let client = Client::new();
+    let client = create_http_client()?;
     
     // Get token from keyring
     let token = get_token_from_keyring()
@@ -325,7 +356,7 @@ async fn create_table(api_url: String, config: TableConfig) -> Result<Table, Str
 // Join a table
 #[tauri::command]
 async fn join_table(api_url: String, table_id: String, buy_in: u32) -> Result<serde_json::Value, String> {
-    let client = Client::new();
+    let client = create_http_client()?;
     
     // Get token from keyring
     let token = get_token_from_keyring()

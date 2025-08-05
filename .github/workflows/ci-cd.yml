@@ -322,7 +322,11 @@ jobs:
             echo "Directory contents:"
             ls -la .vercel/output/static | head -20
             echo "Deploying to Cloudflare Pages..."
-            npx wrangler pages deploy .vercel/output/static --project-name=primo-poker-frontend --compatibility-date=2024-01-17
+            npx wrangler pages deploy .vercel/output/static \
+              --project-name=primo-poker-frontend \
+              --compatibility-date=2024-01-17 \
+              --branch=main \
+              --commit-hash="${GITHUB_SHA}"
           else
             echo "❌ Error: .vercel/output/static directory not found!"
             echo "Current directory structure:"

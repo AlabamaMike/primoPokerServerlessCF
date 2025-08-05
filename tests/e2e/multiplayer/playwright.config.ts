@@ -1,0 +1,51 @@
+/**
+ * Playwright configuration for multiplayer poker tests
+ */
+
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: '.',
+  
+  // Test timeout
+  timeout: 5 * 60 * 1000, // 5 minutes per test
+  
+  // Expect timeout
+  expect: {
+    timeout: 30000,
+  },
+  
+  // Fail on console errors
+  use: {
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+
+  // Configure projects
+  projects: [
+    {
+      name: 'multiplayer',
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    },
+  ],
+
+  // Reporter configuration
+  reporter: [
+    ['html', { open: 'never' }],
+    ['list'],
+    ['json', { outputFile: 'test-results/results.json' }],
+  ],
+
+  // Retry failed tests once
+  retries: 1,
+
+  // Run tests in parallel
+  workers: 1, // Single worker for multiplayer coordination
+  
+  // Global setup/teardown
+  globalSetup: require.resolve('./global-setup.ts'),
+  globalTeardown: require.resolve('./global-teardown.ts'),
+});

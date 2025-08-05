@@ -1,0 +1,308 @@
+{
+  "config": {
+    "configFile": "/workspaces/primoPokerServerlessCF/tests/e2e/multiplayer/playwright.config.ts",
+    "rootDir": "/workspaces/primoPokerServerlessCF/tests/e2e/multiplayer",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/workspaces/primoPokerServerlessCF/tests/e2e/multiplayer/global-setup.ts",
+    "globalTeardown": "/workspaces/primoPokerServerlessCF/tests/e2e/multiplayer/global-teardown.ts",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "open": "never"
+        }
+      ],
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/workspaces/primoPokerServerlessCF/tests/e2e/multiplayer/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "multiplayer",
+        "name": "multiplayer",
+        "testDir": "/workspaces/primoPokerServerlessCF/tests/e2e/multiplayer",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 300000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.54.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "simple-game.spec.ts",
+      "file": "simple-game.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Simple Game Flow Test",
+          "file": "simple-game.spec.ts",
+          "line": 7,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Basic 2-player game",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 300000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "multiplayer",
+                  "projectName": "multiplayer",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6542,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[000.000] \n============================================================\n"
+                        },
+                        {
+                          "text": "[000.000] 🚀 TEST: Basic 2-player game\n"
+                        },
+                        {
+                          "text": "[000.001] ============================================================\n\n"
+                        },
+                        {
+                          "text": "[000.092] Starting simple 2-player game test\n"
+                        },
+                        {
+                          "text": "[000.092] Setting up player: e2e_test_1754187899779\n"
+                        },
+                        {
+                          "text": "[000.092] [DEBUG] Logging in user: e2e_test_1754187899779\n"
+                        },
+                        {
+                          "text": "[000.491] [DEBUG] e2e_test_1754187899779 logged in successfully\n"
+                        },
+                        {
+                          "text": "[000.585] Setting up player: TestPlayer2\n"
+                        },
+                        {
+                          "text": "[000.585] [DEBUG] Logging in user: TestPlayer2\n"
+                        },
+                        {
+                          "text": "[000.802] [DEBUG] TestPlayer2 logged in successfully\n"
+                        },
+                        {
+                          "text": "[000.894] Created 2 test players\n"
+                        },
+                        {
+                          "text": "[000.895] Creating table: Test Table 1754410566373\n"
+                        },
+                        {
+                          "text": "[001.263] Created table: 1f19ecf0-6a51-4e7d-be80-7f27ce82b697\n"
+                        },
+                        {
+                          "text": "[001.263] [DEBUG] Joining table 1f19ecf0-6a51-4e7d-be80-7f27ce82b697 with buy-in 500\n"
+                        },
+                        {
+                          "text": "[001.331] 🔌 Connecting e2e_test_1754187899779 to table 1f19ecf0-6a51-4e7d-be80-7f27ce82b697...\n"
+                        },
+                        {
+                          "text": "[001.373] ✅ e2e_test_1754187899779 connected\n"
+                        },
+                        {
+                          "text": "[001.373] e2e_test_1754187899779 joined table\n"
+                        },
+                        {
+                          "text": "[001.373] [DEBUG] Joining table 1f19ecf0-6a51-4e7d-be80-7f27ce82b697 with buy-in 500\n"
+                        },
+                        {
+                          "text": "[001.376] [DEBUG] ← WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"connection_established\",\n  \"payload\": {\n    \"playerId\": \"67345289-ede5-43c7-baa7-97244348531c\",\n    \"tableId\": \"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",\n    \"message\": \"Connected to game table\"\n  },\n  \"timestamp\": 1754410566855\n}\n"
+                        },
+                        {
+                          "text": "[001.376] [DEBUG] e2e_test_1754187899779 received: connection_established\n"
+                        },
+                        {
+                          "text": "[001.727] [DEBUG] ← WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"table_state_update\",\n  \"payload\": {\n    \"tableId\": \"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",\n    \"players\": [\n      {\n        \"id\": \"67345289-ede5-43c7-baa7-97244348531c\",\n        \"username\": \"e2e_test_1754187899779\",\n        \"email\": \"\",\n        \"chipCount\": 500,\n        \"chips\": 500,\n        \"status\": \"active\",\n        \"isDealer\": false,\n        \"timeBank\": 30,\n        \"position\": {\n          \"seat\": 0,\n          \"isButton\": false,\n          \"isSmallBlind\": false,\n          \"isBigBlind\": false\n        },\n        \"isFolded\": false,\n        \"currentBet\": 0,\n        \"hasActed\": false,\n        \"holeCards\": []\n      },\n      {\n        \"id\": \"59b52c91-5561-4d2c-b90a-f23ac70c635d\",\n        \"username\": \"TestPlayer2\",\n        \"email\": \"\",\n        \"chipCount\": 500,\n        \"chips\": 500,\n        \"status\": \"active\",\n        \"isDealer\": false,\n        \"timeBank\": 30,\n        \"position\": {\n          \"seat\": 1,\n          \"isButton\": false,\n          \"isSmallBlind\": false,\n          \"isBigBlind\": false\n        },\n        \"isFolded\": false,\n        \"currentBet\": 0,\n        \"hasActed\": false,\n        \"holeCards\": []\n      }\n    ],\n    \"spectatorCount\": 0,\n    \"gameState\": null,\n    \"timestamp\": 1754410567163\n  },\n  \"timestamp\": 1754410567206\n}\n"
+                        },
+                        {
+                          "text": "[001.727] [DEBUG] e2e_test_1754187899779 received: table_state_update\n"
+                        },
+                        {
+                          "text": "[001.727] [DEBUG] ← WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"game_started\",\n  \"payload\": {\n    \"gameId\": \"e9ea0ca8-48bf-4bb9-bde5-166fa745605e\",\n    \"phase\": \"pre_flop\",\n    \"pot\": 30,\n    \"dealerId\": \"67345289-ede5-43c7-baa7-97244348531c\",\n    \"smallBlindId\": \"67345289-ede5-43c7-baa7-97244348531c\",\n    \"bigBlindId\": \"59b52c91-5561-4d2c-b90a-f23ac70c635d\",\n    \"activePlayerId\": \"67345289-ede5-43c7-baa7-97244348531c\",\n    \"players\": [\n      {\n        \"id\": \"67345289-ede5-43c7-baa7-97244348531c\",\n        \"username\": \"e2e_test_1754187899779\",\n        \"chipCount\": 490,\n        \"position\": {\n          \"seat\": 0,\n          \"isButton\": false,\n          \"isSmallBlind\": false,\n          \"isBigBlind\": false\n        },\n        \"currentBet\": 10,\n        \"isFolded\": false,\n        \"isDealer\": true,\n        \"isSmallBlind\": true,\n        \"isBigBlind\": false\n      },\n      {\n        \"id\": \"59b52c91-5561-4d2c-b90a-f23ac70c635d\",\n        \"username\": \"TestPlayer2\",\n        \"chipCount\": 480,\n        \"position\": {\n          \"seat\": 1,\n          \"isButton\": false,\n          \"isSmallBlind\": false,\n          \"isBigBlind\": false\n        },\n        \"currentBet\": 20,\n        \"isFolded\": false,\n        \"isDealer\": false,\n        \"isSmallBlind\": false,\n        \"isBigBlind\": true\n      }\n    ]\n  },\n  \"timestamp\": 1754410567206\n}\n"
+                        },
+                        {
+                          "text": "[001.727] [DEBUG] e2e_test_1754187899779 received: game_started\n"
+                        },
+                        {
+                          "text": "[001.728] [DEBUG] ← WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"hole_cards\",\n  \"payload\": {\n    \"cards\": [\n      {\n        \"suit\": \"diamonds\",\n        \"rank\": \"J\"\n      },\n      {\n        \"suit\": \"diamonds\",\n        \"rank\": \"8\"\n      }\n    ]\n  },\n  \"timestamp\": 1754410567207\n}\n"
+                        },
+                        {
+                          "text": "[001.728] [DETAIL] e2e_test_1754187899779 received hole cards: Jd 8d\n"
+                        },
+                        {
+                          "text": "[001.728] [DEBUG] e2e_test_1754187899779 received: hole_cards\n"
+                        },
+                        {
+                          "text": "[001.728] [DEBUG] ← WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"table_state_update\",\n  \"payload\": {\n    \"tableId\": \"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",\n    \"players\": [\n      {\n        \"id\": \"67345289-ede5-43c7-baa7-97244348531c\",\n        \"username\": \"e2e_test_1754187899779\",\n        \"email\": \"\",\n        \"chipCount\": 500,\n        \"chips\": 490,\n        \"status\": \"active\",\n        \"isDealer\": false,\n        \"timeBank\": 30,\n        \"position\": {\n          \"seat\": 0,\n          \"isButton\": false,\n          \"isSmallBlind\": false,\n          \"isBigBlind\": false\n        },\n        \"isFolded\": false,\n        \"currentBet\": 10,\n        \"hasActed\": false,\n        \"holeCards\": [\n          {\n            \"suit\": \"diamonds\",\n            \"rank\": \"J\"\n          },\n          {\n            \"suit\": \"diamonds\",\n            \"rank\": \"8\"\n          }\n        ]\n      },\n      {\n        \"id\": \"59b52c91-5561-4d2c-b90a-f23ac70c635d\",\n        \"username\": \"TestPlayer2\",\n        \"email\": \"\",\n        \"chipCount\": 500,\n        \"chips\": 480,\n        \"status\": \"active\",\n        \"isDealer\": false,\n        \"timeBank\": 30,\n        \"position\": {\n          \"seat\": 1,\n          \"isButton\": false,\n          \"isSmallBlind\": false,\n          \"isBigBlind\": false\n        },\n        \"isFolded\": false,\n        \"currentBet\": 20,\n        \"hasActed\": false,\n        \"holeCards\": [\n          {\n            \"suit\": \"diamonds\",\n            \"rank\": \"6\"\n          },\n          {\n            \"suit\": \"diamonds\",\n            \"rank\": \"K\"\n          }\n        ]\n      }\n    ],\n    \"spectatorCount\": 0,\n    \"gameState\": {\n      \"phase\": \"pre_flop\",\n      \"currentPlayer\": \"67345289-ede5-43c7-baa7-97244348531c\",\n      \"currentBet\": 20,\n      \"pot\": 30,\n      \"communityCards\": []\n    },\n    \"timestamp\": 1754410567163\n  },\n  \"timestamp\": 1754410567207\n}\n"
+                        },
+                        {
+                          "text": "[001.728] [DEBUG] e2e_test_1754187899779 received: table_state_update\n"
+                        },
+                        {
+                          "text": "[001.758] 🔌 Connecting TestPlayer2 to table 1f19ecf0-6a51-4e7d-be80-7f27ce82b697...\n"
+                        },
+                        {
+                          "text": "[001.836] ✅ TestPlayer2 connected\n"
+                        },
+                        {
+                          "text": "[001.836] TestPlayer2 joined table\n"
+                        },
+                        {
+                          "text": "[001.837] [DEBUG] ← WS [59b52c91-5561-4d2c-b90a-f23ac70c635d]: {\n  \"type\": \"connection_established\",\n  \"payload\": {\n    \"playerId\": \"59b52c91-5561-4d2c-b90a-f23ac70c635d\",\n    \"tableId\": \"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",\n    \"message\": \"Connected to game table\"\n  },\n  \"timestamp\": 1754410567316\n}\n"
+                        },
+                        {
+                          "text": "[001.837] [DEBUG] TestPlayer2 received: connection_established\n"
+                        },
+                        {
+                          "text": "[003.975] Table state after joins:\n"
+                        },
+                        {
+                          "text": "[003.975]   Phase: pre_flop\n"
+                        },
+                        {
+                          "text": "[003.975]   Players: 2\n"
+                        },
+                        {
+                          "text": "[003.975]   Current bet: undefined\n"
+                        },
+                        {
+                          "text": "[003.975] \nMessages received by players:\n"
+                        },
+                        {
+                          "text": "[003.975] \ne2e_test_1754187899779 received 5 messages:\n"
+                        },
+                        {
+                          "text": "[003.975]   - connection_established: {\"playerId\":\"67345289-ede5-43c7-baa7-97244348531c\",\"tableId\":\"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",...\n"
+                        },
+                        {
+                          "text": "[003.975]   - table_state_update: {\"tableId\":\"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",\"players\":[{\"id\":\"67345289-ede5-43c7-baa7-97244348...\n"
+                        },
+                        {
+                          "text": "[003.975]   - game_started: {\"gameId\":\"e9ea0ca8-48bf-4bb9-bde5-166fa745605e\",\"phase\":\"pre_flop\",\"pot\":30,\"dealerId\":\"67345289-ed...\n"
+                        },
+                        {
+                          "text": "[003.975]   - hole_cards: {\"cards\":[{\"suit\":\"diamonds\",\"rank\":\"J\"},{\"suit\":\"diamonds\",\"rank\":\"8\"}]}...\n"
+                        },
+                        {
+                          "text": "[003.975]   - table_state_update: {\"tableId\":\"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",\"players\":[{\"id\":\"67345289-ede5-43c7-baa7-97244348...\n"
+                        },
+                        {
+                          "text": "[003.975] \nTestPlayer2 received 1 messages:\n"
+                        },
+                        {
+                          "text": "[003.975]   - connection_established: {\"playerId\":\"59b52c91-5561-4d2c-b90a-f23ac70c635d\",\"tableId\":\"1f19ecf0-6a51-4e7d-be80-7f27ce82b697\",...\n"
+                        },
+                        {
+                          "text": "[003.976] \nGame is in pre_flop, attempting to play...\n"
+                        },
+                        {
+                          "text": "[003.976] Game state from WS: currentPlayer=67345289-ede5-43c7-baa7-97244348531c, pot=30\n"
+                        },
+                        {
+                          "text": "[003.976] It's e2e_test_1754187899779's turn\n"
+                        },
+                        {
+                          "text": "[004.476] [DEBUG] → WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"player_action\",\n  \"payload\": {\n    \"action\": \"call\"\n  }\n}\n"
+                        },
+                        {
+                          "text": "[004.477] e2e_test_1754187899779 sent call action\n"
+                        },
+                        {
+                          "text": "[004.508] [DEBUG] ← WS [67345289-ede5-43c7-baa7-97244348531c]: {\n  \"type\": \"error\",\n  \"payload\": {\n    \"error\": \"Player not at table\",\n    \"timestamp\": 1754410569962\n  },\n  \"timestamp\": 1754410569987\n}\n"
+                        },
+                        {
+                          "text": "[004.508] [DEBUG] e2e_test_1754187899779 received: error\n"
+                        },
+                        {
+                          "text": "[006.541] \nTable state after action:\n"
+                        },
+                        {
+                          "text": "[006.541]   Phase: pre_flop\n"
+                        },
+                        {
+                          "text": "[006.541]   Current bet: undefined\n"
+                        },
+                        {
+                          "text": "[006.541]   Pot: 30\n"
+                        },
+                        {
+                          "text": "[006.541] \n✅ Simple game test completed\n"
+                        },
+                        {
+                          "text": "[006.545] \n✅ TEST PASSED in 6.54s\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-08-05T16:16:05.471Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "01f7133068075e44a53b-edca87b94c6fbcdca773",
+              "file": "simple-game.spec.ts",
+              "line": 8,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-08-05T16:16:00.082Z",
+    "duration": 11962.127,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

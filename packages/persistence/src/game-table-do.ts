@@ -63,6 +63,13 @@ export interface GameTableState {
   handNumber: number
 }
 
+export interface WebSocketMessage {
+  type: string
+  payload?: any
+  error?: string
+  timestamp: number
+}
+
 export class GameTableDurableObject {
   private state: GameTableState
   private heartbeatInterval: number | null = null
@@ -222,14 +229,11 @@ export class GameTableDurableObject {
           this.state.connections.set(playerId, connection)
           
           // Send initial connection success message
-          server.send(JSON.stringify({
-            type: 'connection_established',
-            payload: {
-              playerId,
-              tableId: this.state.tableId,
-              message: 'Connected to game table'
-            }
-          }))
+          server.send(JSON.stringify(this.buildMessage('connection_established', {
+            playerId,
+            tableId: this.state.tableId,
+            message: 'Connected to game table'
+          })))
         } else {
           console.error('[DO WS] Missing player info in WebSocket upgrade')
         }
@@ -671,13 +675,10 @@ export class GameTableDurableObject {
           this.state.connections.delete(playerId)
           
           // Broadcast spectator count update
-          await this.broadcastMessage({
-            type: 'spectator_count_update',
-            data: {
+          await this.broadcastMessage(this.buildMessage('spectator_count_update', {
               count: this.state.spectators.size,
               spectators: Array.from(this.state.spectators.values())
-            }
-          })
+            }))
         } else if (this.state.players.has(playerId)) {
           // Mark player as disconnected
           const player = this.state.players.get(playerId)
@@ -804,38 +805,29 @@ export class GameTableDurableObject {
     console.log(`Player ${username} joined table. Players: ${this.state.players.size}`)
 
     // Send join confirmation
-    this.sendMessage(websocket, {
-      type: 'join_table_success',
-      data: {
+    this.sendMessage(websocket, this.buildMessage('join_table_success', {
         tableId: this.state.tableId,
         position: player.position,
         chipCount: player.chips
-      }
-    })
+      }))
     
     // Send wallet balance update
-    this.sendMessage(websocket, {
-      type: 'wallet_balance_update',
-      data: {
-        playerId,
-        changeAmount: -chipCount,
-        changeType: 'buy_in',
-        tableId: this.state.tableId,
-        description: `Bought in for ${chipCount} chips`
-      }
-    })
+    this.sendMessage(websocket, this.buildMessage('wallet_balance_update', {
+      playerId,
+      changeAmount: -chipCount,
+      changeType: 'buy_in',
+      tableId: this.state.tableId,
+      description: `Bought in for ${chipCount} chips`
+    }))
     
     // Broadcast seat availability update
-    await this.broadcastMessage({
-      type: 'seat_availability_update',
-      data: {
+    await this.broadcastMessage(this.buildMessage('seat_availability_update', {
         seatIndex,
         available: false,
         reserved: false,
         playerId,
         username
-      }
-    })
+      }))
     
     // Broadcast player state transition
     await this.broadcastPlayerStateTransition(playerId, {
@@ -866,10 +858,7 @@ export class GameTableDurableObject {
 
     await this.removePlayerFromTable(playerId)
     
-    this.sendMessage(websocket, {
-      type: 'leave_table_success',
-      data: { tableId: this.state.tableId }
-    })
+    this.sendMessage(websocket, this.buildMessage('leave_table_success', { tableId: this.state.tableId }))
   }
 
   /**
@@ -898,14 +887,11 @@ export class GameTableDurableObject {
       }
 
       // Send action confirmation to acting player
-      this.sendMessage(websocket, {
-        type: 'action_success',
-        data: {
+      this.sendMessage(websocket, this.buildMessage('action_success', {
           action,
           amount,
           newChipCount: this.state.players.get(playerId)?.chips
-        }
-      })
+        }))
 
       // Broadcast action to all players
       await this.broadcastPlayerAction(playerId, action, amount)
@@ -950,26 +936,20 @@ export class GameTableDurableObject {
     this.state.connections.set(playerId, connection)
 
     // Send success with current table state
-    this.sendMessage(websocket, {
-      type: 'spectator_joined',
-      data: {
+    this.sendMessage(websocket, this.buildMessage('spectator_joined', {
         tableId: this.state.tableId,
         tableState: await this.getTableStateForClient(),
         spectatorCount: this.state.spectators.size
-      }
-    })
+      }))
     
     // Send seat availability to new spectator
     await this.broadcastSeatAvailability()
 
     // Broadcast spectator count update to all
-    await this.broadcastMessage({
-      type: 'spectator_count_update',
-      data: {
+    await this.broadcastMessage(this.buildMessage('spectator_count_update', {
         count: this.state.spectators.size,
         spectators: Array.from(this.state.spectators.values())
-      }
-    })
+      }))
   }
 
   /**
@@ -983,19 +963,13 @@ export class GameTableDurableObject {
     this.state.connections.delete(playerId)
     
     // Notify spectator they've left
-    this.sendMessage(websocket, {
-      type: 'left_table',
-      data: { tableId: this.state.tableId }
-    })
+    this.sendMessage(websocket, this.buildMessage('left_table', { tableId: this.state.tableId }))
     
     // Broadcast updated spectator count
-    await this.broadcastMessage({
-      type: 'spectator_count_update',
-      data: {
+    await this.broadcastMessage(this.buildMessage('spectator_count_update', {
         count: this.state.spectators.size,
         spectators: Array.from(this.state.spectators.values())
-      }
-    })
+      }))
   }
 
   /**
@@ -1010,25 +984,19 @@ export class GameTableDurableObject {
     )
     
     if (seatOccupied) {
-      return this.sendMessage(websocket, {
-        type: 'seat_unavailable',
-        data: {
+      return this.sendMessage(websocket, this.buildMessage('seat_unavailable', {
           seatIndex,
           reason: 'Seat is already occupied'
-        }
-      })
+        }))
     }
     
     // Check if seat is already reserved
     const existingReservation = this.state.seatReservations.get(seatIndex)
     if (existingReservation && existingReservation.expiresAt > Date.now()) {
-      return this.sendMessage(websocket, {
-        type: 'seat_unavailable',
-        data: {
+      return this.sendMessage(websocket, this.buildMessage('seat_unavailable', {
           seatIndex,
           reason: 'Seat is reserved by another player'
-        }
-      })
+        }))
     }
     
     // Remove any existing reservations by this player
@@ -1050,25 +1018,19 @@ export class GameTableDurableObject {
     this.state.seatReservations.set(seatIndex, reservation)
     
     // Send confirmation to player
-    this.sendMessage(websocket, {
-      type: 'seat_reserved',
-      data: {
+    this.sendMessage(websocket, this.buildMessage('seat_reserved', {
         seatIndex,
         reservation,
         expiresIn: 60
-      }
-    })
+      }))
     
     // Broadcast reservation to all
-    await this.broadcastMessage({
-      type: 'seat_reservation_update',
-      data: {
+    await this.broadcastMessage(this.buildMessage('seat_reservation_update', {
         seatIndex,
         reserved: true,
         playerId,
         expiresAt: reservation.expiresAt
-      }
-    })
+      }))
     
     // Set timer to expire reservation
     setTimeout(() => {
@@ -1077,10 +1039,7 @@ export class GameTableDurableObject {
         this.state.seatReservations.delete(seatIndex)
         
         // Broadcast expiration
-        this.broadcastMessage({
-          type: 'seat_reservation_expired',
-          data: { seatIndex }
-        })
+        this.broadcastMessage(this.buildMessage('seat_reservation_expired', { seatIndex }))
       }
     }, 60000)
   }
@@ -1097,14 +1056,11 @@ export class GameTableDurableObject {
       details?: any
     }
   ): Promise<void> {
-    await this.broadcastMessage({
-      type: 'player_state_transition',
-      data: {
+    await this.broadcastMessage(this.buildMessage('player_state_transition', {
         playerId,
         transition,
         timestamp: Date.now()
-      }
-    })
+      }))
   }
 
   /**
@@ -1146,12 +1102,9 @@ export class GameTableDurableObject {
       })
     }
     
-    await this.broadcastMessage({
-      type: 'seat_availability_bulk',
-      data: {
+    await this.broadcastMessage(this.buildMessage('seat_availability_bulk', {
         seats: seatStatus
-      }
-    })
+      }))
   }
 
   /**
@@ -1185,51 +1138,39 @@ export class GameTableDurableObject {
     })
     
     // Send confirmation with chip count
-    this.sendMessage(websocket, {
-      type: 'stand_up_success',
-      data: {
+    this.sendMessage(websocket, this.buildMessage('stand_up_success', {
         chipCount,
         returnedToBankroll: true,
         seatIndex
-      }
-    })
+      }))
     
     // Send wallet balance update
-    this.sendMessage(websocket, {
-      type: 'wallet_balance_update',
-      data: {
-        playerId,
-        changeAmount: chipCount,
-        changeType: 'cash_out',
-        tableId: this.state.tableId,
-        description: `Cashed out ${chipCount} chips from table`
-      }
-    })
+    this.sendMessage(websocket, this.buildMessage('wallet_balance_update', {
+      playerId,
+      changeAmount: chipCount,
+      changeType: 'cash_out',
+      tableId: this.state.tableId,
+      description: `Cashed out ${chipCount} chips from table`
+    }))
     
     // Broadcast table update
     await this.broadcastTableState()
     
     // Broadcast spectator update
-    await this.broadcastMessage({
-      type: 'player_stood_up',
-      data: {
+    await this.broadcastMessage(this.buildMessage('player_stood_up', {
         playerId,
         username: player.username,
         seatIndex,
         chipCount
-      }
-    })
+      }))
     
     // Broadcast seat availability update
     if (seatIndex !== undefined) {
-      await this.broadcastMessage({
-        type: 'seat_availability_update',
-        data: {
+      await this.broadcastMessage(this.buildMessage('seat_availability_update', {
           seatIndex,
           available: true,
           reserved: false
-        }
-      })
+        }))
     }
     
     // Broadcast player state transition
@@ -1241,13 +1182,10 @@ export class GameTableDurableObject {
     })
     
     // Update spectator count
-    await this.broadcastMessage({
-      type: 'spectator_count_update',
-      data: {
+    await this.broadcastMessage(this.buildMessage('spectator_count_update', {
         count: this.state.spectators.size,
         spectators: Array.from(this.state.spectators.values())
-      }
-    })
+      }))
     
     console.log(`Player ${player.username} stood up from seat ${seatIndex} with ${chipCount} chips`)
   }
@@ -1281,10 +1219,7 @@ export class GameTableDurableObject {
       connection.isConnected = true
     }
 
-    this.sendMessage(websocket, {
-      type: 'heartbeat_ack',
-      data: { timestamp: Date.now() }
-    })
+    this.sendMessage(websocket, this.buildMessage('heartbeat_ack', { timestamp: Date.now() }))
   }
 
   /**
@@ -1302,16 +1237,13 @@ export class GameTableDurableObject {
     // Send complete table state
     const tableState = await this.getTableStateForClient()
     
-    this.sendMessage(websocket, {
-      type: 'state_sync_response',
-      data: {
+    this.sendMessage(websocket, this.buildMessage('state_sync_response', {
         tableState,
         isPlayer: this.state.players.has(playerId),
         isSpectator: this.state.spectators.has(playerId),
         playerData: this.state.players.get(playerId) || null,
         timestamp: Date.now()
-      }
-    })
+      }))
     
     // Send seat availability
     await this.broadcastSeatAvailability()
@@ -1320,12 +1252,9 @@ export class GameTableDurableObject {
     if (this.state.players.has(playerId) && this.state.game && this.state.game.phase !== GamePhase.WAITING) {
       const player = this.state.players.get(playerId)
       if (player && player.holeCards) {
-        this.sendMessage(websocket, {
-          type: 'hole_cards',
-          data: {
+        this.sendMessage(websocket, this.buildMessage('hole_cards', {
             cards: player.holeCards
-          }
-        })
+          }))
       }
     }
   }
@@ -1584,12 +1513,9 @@ export class GameTableDurableObject {
     for (const [playerId, connection] of this.state.connections.entries()) {
       const player = this.state.players.get(playerId)
       if (player && connection.isConnected) {
-        this.sendMessage(connection.websocket, {
-          type: 'hole_cards',
-          data: {
+        this.sendMessage(connection.websocket, this.buildMessage('hole_cards', {
             cards: player.holeCards
-          }
-        })
+          }))
       }
     }
   }
@@ -1784,16 +1710,13 @@ export class GameTableDurableObject {
       communityCards: this.state.game.communityCards || []
     } : null
 
-    await this.broadcastMessage({
-      type: 'table_state_update',
-      data: {
+    await this.broadcastMessage(this.buildMessage('table_state_update', {
         tableId: this.state.tableId,
         players: Array.from(this.state.players.values()),
         spectatorCount: this.state.spectators.size,
         gameState,
         timestamp: Date.now()
-      }
-    })
+      }))
   }
 
   /**
@@ -1803,31 +1726,25 @@ export class GameTableDurableObject {
     const player = this.state.players.get(playerId)
     if (!player) return
 
-    await this.broadcastMessage({
-      type: 'player_action',
-      data: {
+    await this.broadcastMessage(this.buildMessage('player_action', {
         playerId,
         username: player.username,
         action,
         amount,
         timestamp: Date.now()
-      }
-    })
+      }))
   }
 
   /**
    * Broadcast chat message to all players
    */
   private async broadcastChatMessage(playerId: string, username: string, message: string): Promise<void> {
-    await this.broadcastMessage({
-      type: 'chat_message',
-      data: {
+    await this.broadcastMessage(this.buildMessage('chat_message', {
         playerId,
         username,
         message,
         timestamp: Date.now()
-      }
-    })
+      }))
   }
 
   /**
@@ -1839,6 +1756,18 @@ export class GameTableDurableObject {
       total += player.currentBet
     }
     return total
+  }
+
+  /**
+   * Build a standardized WebSocket message
+   */
+  private buildMessage(type: string, payload?: any, error?: string): WebSocketMessage {
+    return {
+      type,
+      payload,
+      error,
+      timestamp: Date.now()
+    }
   }
 
   /**
@@ -1856,9 +1785,6 @@ export class GameTableDurableObject {
    * Send error message to specific WebSocket
    */
   private sendError(websocket: WebSocket, error: string): void {
-    this.sendMessage(websocket, {
-      type: 'error',
-      data: { error, timestamp: Date.now() }
-    })
+    this.sendMessage(websocket, this.buildMessage('error', undefined, error))
   }
 }

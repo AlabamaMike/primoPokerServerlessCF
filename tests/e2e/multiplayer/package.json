@@ -1,0 +1,25 @@
+{
+  "name": "@primo-poker/multiplayer-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Comprehensive multiplayer poker engine tests",
+  "scripts": {
+    "test": "playwright test",
+    "test:full-table": "playwright test full-table.spec.ts",
+    "test:button": "playwright test button-rotation.spec.ts",
+    "test:betting": "playwright test betting-rounds.spec.ts",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "test:minimal": "TEST_LOG_LEVEL=minimal playwright test",
+    "test:detailed": "TEST_LOG_LEVEL=detailed SAVE_HAND_HISTORIES=true playwright test",
+    "test:debug-logs": "TEST_LOG_LEVEL=debug LOG_WS_MESSAGES=true playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.0.0",
+    "ws": "^8.0.0"
+  }
+}

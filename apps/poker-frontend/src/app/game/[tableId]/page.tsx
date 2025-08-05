@@ -1,17 +1,9 @@
 // Dynamic route for game tables
 // This page handles multiplayer poker game sessions
 
-import dynamic from 'next/dynamic'
-
-// Dynamically import the client component with no SSR
-const MultiplayerGameClient = dynamic(() => import('./client-page'), {
-  ssr: false,
-  loading: () => <div>Loading game...</div>
-})
-
-// Required for Cloudflare Pages deployment
-export const runtime = 'edge'
+import MultiplayerGameClient from './client-page'
 
 export default function MultiplayerGamePage({ params }: { params: { tableId: string } }) {
+  // Simple page without Edge Runtime - let Cloudflare Pages handle it
   return <MultiplayerGameClient tableId={params.tableId} />
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import ConnectionStatus from "./components/ConnectionStatus";
 import LoginForm from "./components/LoginForm";
+import Lobby from "./components/Lobby";
 import { useAuthStore } from "./stores/auth-store";
 import "./App.css";
 
@@ -16,6 +17,8 @@ const BACKEND_URL = import.meta.env.VITE_API_URL || "https://primo-poker-server.
 function App() {
   const [connectionStatus, setConnectionStatus] = useState<BackendStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLobby, setShowLobby] = useState(false);
+  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
   const { user, isAuthenticated, checkAuth } = useAuthStore();
 
   useEffect(() => {
@@ -65,6 +68,33 @@ function App() {
                 // Navigate to lobby after login
               }}
             />
+          ) : showLobby ? (
+            <div className="authenticated-content" data-testid="authenticated-content">
+              <div className="mb-4 flex justify-between items-center">
+                <button
+                  onClick={() => setShowLobby(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  ← Back
+                </button>
+                <button 
+                  onClick={() => useAuthStore.getState().logout()}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
+                  data-testid="logout-button"
+                >
+                  Logout
+                </button>
+              </div>
+              
+              <Lobby 
+                apiUrl={BACKEND_URL} 
+                onJoinTable={(tableId) => {
+                  setCurrentTableId(tableId);
+                  // TODO: Navigate to game view
+                  console.log('Joining table:', tableId);
+                }}
+              />
+            </div>
           ) : (
             <div className="authenticated-content" data-testid="authenticated-content">
               <div className="bg-black/50 border border-gray-600 rounded p-6">
@@ -75,6 +105,7 @@ function App() {
                 
                 <div className="flex gap-4">
                   <button 
+                    onClick={() => setShowLobby(true)}
                     className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-semibold transition-colors"
                     data-testid="play-button"
                   >

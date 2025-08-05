@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use keyring::Entry;
 use chrono::{DateTime, Utc, Duration};
+use reqwest::Client;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ConnectionStatus {
@@ -38,6 +39,75 @@ struct User {
     id: String,
     email: String,
     name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ApiResponse<T> {
+    success: bool,
+    data: Option<T>,
+    error: Option<ApiError>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ApiError {
+    message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TableConfig {
+    name: String,
+    #[serde(rename = "gameType")]
+    game_type: String,
+    #[serde(rename = "bettingStructure")]
+    betting_structure: String,
+    #[serde(rename = "gameFormat")]
+    game_format: String,
+    #[serde(rename = "maxPlayers")]
+    max_players: u8,
+    #[serde(rename = "minBuyIn")]
+    min_buy_in: u32,
+    #[serde(rename = "maxBuyIn")]
+    max_buy_in: u32,
+    #[serde(rename = "smallBlind")]
+    small_blind: u32,
+    #[serde(rename = "bigBlind")]
+    big_blind: u32,
+    ante: u32,
+    #[serde(rename = "timeBank")]
+    time_bank: u32,
+    #[serde(rename = "isPrivate")]
+    is_private: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Table {
+    id: String,
+    name: String,
+    #[serde(rename = "playerCount")]
+    player_count: u8,
+    #[serde(rename = "maxPlayers")]
+    max_players: u8,
+    #[serde(rename = "gamePhase")]
+    game_phase: String,
+    pot: u32,
+    blinds: BlindsConfig,
+    config: Option<TableConfigResponse>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TableConfigResponse {
+    #[serde(rename = "maxPlayers")]
+    max_players: u8,
+    #[serde(rename = "smallBlind")]
+    small_blind: u32,
+    #[serde(rename = "bigBlind")]
+    big_blind: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BlindsConfig {
+    small: u32,
+    big: u32,
 }
 
 // Check backend connection
@@ -147,6 +217,128 @@ async fn logout() -> Result<(), String> {
     }
 }
 
+// Get user from stored token
+#[tauri::command]
+async fn get_user() -> Result<Option<User>, String> {
+    // For now, return a mock user if we have a token
+    // In a real app, this would decode the JWT or fetch user info
+    match get_token_from_keyring() {
+        Ok(_) => Ok(Some(User {
+            id: "user123".to_string(),
+            email: "test@example.com".to_string(),
+            name: "Test User".to_string(),
+        })),
+        Err(_) => Ok(None),
+    }
+}
+
+fn get_token_from_keyring() -> Result<String, String> {
+    let entry = Entry::new("primo-poker", "auth-token")
+        .map_err(|e| format!("Keyring error: {}", e))?;
+    
+    let token_json = entry.get_password()
+        .map_err(|e| format!("Failed to get token: {}", e))?;
+    
+    let token: AuthToken = serde_json::from_str(&token_json)
+        .map_err(|e| format!("Failed to parse token: {}", e))?;
+    
+    Ok(token.access_token)
+}
+
+// Get tables from backend
+#[tauri::command]
+async fn get_tables(api_url: String) -> Result<Vec<Table>, String> {
+    let client = Client::new();
+    
+    // Get token from keyring if available
+    let token = match get_token_from_keyring() {
+        Ok(token) => Some(token),
+        Err(_) => None,
+    };
+    
+    let mut request = client.get(format!("{}/api/tables", api_url));
+    
+    if let Some(token) = token {
+        request = request.header("Authorization", format!("Bearer {}", token));
+    }
+    
+    let response = request.send().await.map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        return Err("Failed to fetch tables".to_string());
+    }
+    
+    let api_response: ApiResponse<Vec<Table>> = response.json().await.map_err(|e| e.to_string())?;
+    
+    if api_response.success {
+        Ok(api_response.data.unwrap_or_default())
+    } else {
+        Err(api_response.error.map(|e| e.message).unwrap_or_else(|| "Unknown error".to_string()))
+    }
+}
+
+// Create a new table
+#[tauri::command]
+async fn create_table(api_url: String, config: TableConfig) -> Result<Table, String> {
+    let client = Client::new();
+    
+    // Get token from keyring
+    let token = get_token_from_keyring()
+        .map_err(|_| "Not authenticated".to_string())?;
+    
+    let response = client.post(format!("{}/api/tables", api_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&config)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(format!("Failed to create table: {}", error_text));
+    }
+    
+    let api_response: ApiResponse<Table> = response.json().await.map_err(|e| e.to_string())?;
+    
+    if api_response.success {
+        Ok(api_response.data.ok_or_else(|| "No table data returned".to_string())?)
+    } else {
+        Err(api_response.error.map(|e| e.message).unwrap_or_else(|| "Unknown error".to_string()))
+    }
+}
+
+// Join a table
+#[tauri::command]
+async fn join_table(api_url: String, table_id: String, buy_in: u32) -> Result<serde_json::Value, String> {
+    let client = Client::new();
+    
+    // Get token from keyring
+    let token = get_token_from_keyring()
+        .map_err(|_| "Not authenticated".to_string())?;
+    
+    let response = client.post(format!("{}/api/tables/{}/join", api_url, table_id))
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "buyIn": buy_in }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(format!("Failed to join table: {}", error_text));
+    }
+    
+    let api_response: ApiResponse<serde_json::Value> = response.json().await.map_err(|e| e.to_string())?;
+    
+    if api_response.success {
+        Ok(api_response.data.unwrap_or(serde_json::json!({})))
+    } else {
+        Err(api_response.error.map(|e| e.message).unwrap_or_else(|| "Unknown error".to_string()))
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -161,7 +353,11 @@ fn main() {
             check_backend_connection,
             login,
             logout,
-            get_auth_token
+            get_auth_token,
+            get_user,
+            get_tables,
+            create_table,
+            join_table
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -53,10 +53,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # Install root dependencies first
           cd ../..
-          npm ci
+          npm install
+          
+          # Install desktop app dependencies
           cd apps/poker-desktop
-          npm ci
+          npm install
 
       - name: Run tests
         run: npm test

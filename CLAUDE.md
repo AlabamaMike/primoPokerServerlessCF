@@ -76,6 +76,13 @@ Real-time game updates via WebSocket messages with typed payloads for game updat
 3. **API Compatibility**: Fixed HTTPS/TLS issues for production backend
 4. **E2E Testing**: All tests pass against production backend
 5. **Frontend Removal**: Decommissioned browser-based Next.js frontend
+6. **Multiplayer Engine Fixes** (August 2025): Comprehensive backend fixes for 6+ player games
+   - Fixed WebSocket message format standardization (payload vs data fields)
+   - Resolved "Player not at table" authentication errors
+   - Implemented proper player state synchronization
+   - Fixed button rotation and dealer position tracking
+   - Added automatic hand completion and new game triggering
+   - Enhanced game state validation for complex multiplayer scenarios
 
 ## Test Credentials
 - Email: e2e_test_1754187899779@example.com
@@ -85,3 +92,5 @@ Real-time game updates via WebSocket messages with typed payloads for game updat
 - Backend health: `curl https://primo-poker-server.alabamamike.workers.dev/api/health`
 - Desktop app: `cd apps/poker-desktop && npm run tauri dev`
 - E2E tests: `cd apps/poker-desktop && npm test`
+- Multiplayer tests: `cd tests/e2e/multiplayer && npm test simple-game.spec.ts`
+- Button rotation test: `cd tests/e2e/multiplayer && npm test button-rotation.spec.ts`

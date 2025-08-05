@@ -61,12 +61,13 @@ export interface GameTableState {
   createdAt: number
   lastActivity: number
   handNumber: number
+  buttonPosition: number  // Track button position for proper rotation
 }
 
 export interface WebSocketMessage {
   type: string
   payload?: any
-  error?: string
+  error?: string | undefined
   timestamp: number
 }
 
@@ -110,7 +111,8 @@ export class GameTableDurableObject {
       seatReservations: new Map(),
       createdAt: Date.now(),
       lastActivity: Date.now(),
-      handNumber: 0
+      handNumber: 0,
+      buttonPosition: -1  // -1 means no button position set yet
     }
 
     // Initialize game engines
@@ -218,6 +220,12 @@ export class GameTableDurableObject {
         console.log('[DO WS] WebSocket connection:', { playerId, username, tableId })
         
         if (playerId && username) {
+          // Verify player has joined table via API
+          if (!this.state.players.has(playerId) && !this.state.spectators.has(playerId)) {
+            server.close(1008, 'Must join table before connecting WebSocket')
+            return new Response('Must join table first', { status: 403 })
+          }
+          
           // Store connection info
           const connection: PlayerConnection = {
             websocket: server,
@@ -234,6 +242,16 @@ export class GameTableDurableObject {
             tableId: this.state.tableId,
             message: 'Connected to game table'
           })))
+          
+          // Send current table state
+          const tableState = await this.getTableStateForClient()
+          this.sendMessage(server, this.buildMessage('table_state_update', {
+            tableId: this.state.tableId,
+            players: this.getPlayersDTO(playerId),
+            spectatorCount: this.state.spectators.size,
+            gameState: this.getCurrentGameState(),
+            timestamp: Date.now()
+          }))
         } else {
           console.error('[DO WS] Missing player info in WebSocket upgrade')
         }
@@ -518,15 +536,7 @@ export class GameTableDurableObject {
     return new Response(JSON.stringify({
       tableId: this.state.tableId,
       config: this.state.config,
-      players: Array.from(this.state.players.values()).map(p => ({
-        id: p.id,
-        username: p.username,
-        chipCount: p.chips,
-        position: p.position,
-        status: p.status,
-        currentBet: p.currentBet,
-        isFolded: p.isFolded
-      })),
+      players: this.getPlayersDTO(),
       gameState: this.state.gameState,
       playerCount: this.state.players.size,
       isActive: this.state.game !== null,
@@ -865,15 +875,30 @@ export class GameTableDurableObject {
    * Handle player action (fold, check, call, bet, raise)
    */
   private async handlePlayerAction(websocket: WebSocket, payload: any): Promise<void> {
-    const { playerId, action, amount } = payload
+    const { action, amount } = payload
+    
+    // Get playerId from WebSocket connection
+    const playerId = this.getPlayerIdFromWebSocket(websocket)
+    
+    if (!playerId) {
+      this.sendError(websocket, 'WebSocket not associated with player')
+      return
+    }
 
     if (!this.state.game) {
       this.sendError(websocket, 'No game in progress')
       return
     }
 
+    // Check both connections AND players map
     if (!this.state.players.has(playerId)) {
-      this.sendError(websocket, 'Player not at table')
+      this.sendError(websocket, 'Player not seated at table')
+      return
+    }
+    
+    const player = this.state.players.get(playerId)
+    if (!player || player.status !== 'active') {
+      this.sendError(websocket, 'Player not active in game')
       return
     }
 
@@ -1370,18 +1395,6 @@ export class GameTableDurableObject {
     return { success: true }
   }
 
-  /**
-   * Find next available seat position
-   */
-  private findNextAvailableSeat(): number {
-    for (let i = 0; i < this.state.config.maxPlayers; i++) {
-      const seatTaken = Array.from(this.state.players.values()).some(p => p.position?.seat === i)
-      if (!seatTaken) {
-        return i
-      }
-    }
-    return 0 // Should not happen if table not full
-  }
 
   /**
    * Remove player from table
@@ -1414,9 +1427,21 @@ export class GameTableDurableObject {
 
     // Create new game state
     const playerArray = Array.from(this.state.players.values())
+      .sort((a, b) => (a.position?.seat ?? 0) - (b.position?.seat ?? 0)) // Sort by seat position
     if (playerArray.length < 2) return
     
-    const dealerIndex = Math.floor(Math.random() * playerArray.length)
+    // Determine dealer position
+    let dealerIndex: number
+    if (this.state.buttonPosition === -1) {
+      // First game - randomly assign button
+      dealerIndex = Math.floor(Math.random() * playerArray.length)
+      this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+    } else {
+      // Find next active player clockwise from current button
+      dealerIndex = this.findNextDealerIndex(playerArray)
+      this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+    }
+    
     const dealer = playerArray[dealerIndex]!
     
     // In heads-up (2 players), dealer is small blind
@@ -1483,31 +1508,21 @@ export class GameTableDurableObject {
     console.log(`Started new game with ${this.state.players.size} players`)
     console.log(`Dealer: ${dealer.username}, SB: ${smallBlind.username}, BB: ${bigBlind.username}`)
     
-    await this.broadcastMessage({
-      type: 'game_started',
-      data: {
-        gameId: this.state.game.gameId,
-        phase: this.state.game.phase,
-        pot: this.state.game.pot,
-        dealerId: dealer.id,
-        smallBlindId: smallBlind.id,
-        bigBlindId: bigBlind.id,
-        activePlayerId: this.state.game.activePlayerId,
-        players: Array.from(this.state.players.values()).map(p => ({
-          id: p.id,
-          username: p.username,
-          chipCount: p.chips,
-          position: p.position,
-          currentBet: p.currentBet,
-          isFolded: p.isFolded,
-          isDealer: p.id === dealer.id,
-          isSmallBlind: p.id === smallBlind.id,
-          isBigBlind: p.id === bigBlind.id,
-          // Only send hole cards to the player themselves
-          holeCards: undefined // Will be sent separately
-        }))
-      }
-    })
+    await this.broadcastMessage(this.buildMessage('game_started', {
+      gameId: this.state.game.gameId,
+      phase: this.state.game.phase,
+      pot: this.state.game.pot,
+      dealerId: dealer.id,
+      smallBlindId: smallBlind.id,
+      bigBlindId: bigBlind.id,
+      activePlayerId: this.state.game.activePlayerId,
+      players: this.getPlayersDTO().map(p => ({
+        ...p,
+        isDealer: p.id === dealer.id,
+        isSmallBlind: p.id === smallBlind.id,
+        isBigBlind: p.id === bigBlind.id
+      }))
+    }))
     
     // Send hole cards privately to each player
     for (const [playerId, connection] of this.state.connections.entries()) {
@@ -1531,6 +1546,13 @@ export class GameTableDurableObject {
     if (activePlayers.length <= 1) {
       // Only one player left, end hand
       this.state.game.phase = GamePhase.FINISHED
+      // Trigger new game start after a short delay
+      setTimeout(async () => {
+        if (this.state.game?.phase === GamePhase.FINISHED) {
+          await this.startNewGame()
+          await this.broadcastTableState()
+        }
+      }, 2000)
       return
     }
 
@@ -1591,12 +1613,23 @@ export class GameTableDurableObject {
       case GamePhase.RIVER:
         this.state.game.phase = GamePhase.SHOWDOWN
         break
+      case GamePhase.SHOWDOWN:
+        this.state.game.phase = GamePhase.FINISHED
+        // Trigger new game start after a short delay
+        setTimeout(async () => {
+          if (this.state.game?.phase === GamePhase.FINISHED) {
+            await this.startNewGame()
+            await this.broadcastTableState()
+          }
+        }, 2000)
+        break
     }
 
-    // Reset player actions for new betting round
+    // Reset player actions and bets for new betting round
     for (const player of this.state.players.values()) {
       if (!player.isFolded) {
         player.hasActed = false
+        player.currentBet = 0  // Reset current bet for new betting round
       }
     }
 
@@ -1628,6 +1661,14 @@ export class GameTableDurableObject {
     // TODO: Integrate with actual hand evaluator
     
     this.state.game.phase = GamePhase.FINISHED
+    
+    // Trigger new game start after a short delay
+    setTimeout(async () => {
+      if (this.state.game?.phase === GamePhase.FINISHED) {
+        await this.startNewGame()
+        await this.broadcastTableState()
+      }
+    }, 2000)
   }
 
   /**
@@ -1681,16 +1722,7 @@ export class GameTableDurableObject {
     return {
       tableId: this.state.tableId,
       config: this.state.config,
-      players: Array.from(this.state.players.values()).map(p => ({
-        id: p.id,
-        username: p.username,
-        position: p.position,
-        chipCount: p.chips,
-        status: p.status,
-        isDealer: p.isDealer,
-        isFolded: p.isFolded,
-        currentBet: p.currentBet
-      })),
+      players: this.getPlayersDTO(),
       spectatorCount: this.state.spectators.size,
       spectators: Array.from(this.state.spectators.values()),
       gameState,
@@ -1707,14 +1739,20 @@ export class GameTableDurableObject {
       currentPlayer: this.state.game.activePlayerId,
       currentBet: this.state.game.currentBet,
       pot: this.calculatePot(),
-      communityCards: this.state.game.communityCards || []
+      communityCards: this.state.game.communityCards || [],
+      buttonPosition: this.state.buttonPosition >= 0 ? this.state.buttonPosition : 0,
+      dealerId: this.state.game.dealerId,
+      smallBlindId: this.state.game.smallBlindId,
+      bigBlindId: this.state.game.bigBlindId,
+      players: this.getPlayersDTO() // Include players in game state
     } : null
 
     await this.broadcastMessage(this.buildMessage('table_state_update', {
         tableId: this.state.tableId,
-        players: Array.from(this.state.players.values()),
+        players: this.getPlayersDTO(),
         spectatorCount: this.state.spectators.size,
         gameState,
+        buttonPosition: this.state.buttonPosition >= 0 ? this.state.buttonPosition : 0,
         timestamp: Date.now()
       }))
   }
@@ -1786,5 +1824,129 @@ export class GameTableDurableObject {
    */
   private sendError(websocket: WebSocket, error: string): void {
     this.sendMessage(websocket, this.buildMessage('error', undefined, error))
+  }
+
+  /**
+   * Get player ID from WebSocket connection
+   */
+  private getPlayerIdFromWebSocket(websocket: WebSocket): string | null {
+    for (const [playerId, connection] of this.state.connections.entries()) {
+      if (connection.websocket === websocket) {
+        return playerId
+      }
+    }
+    return null
+  }
+
+  /**
+   * Find next available seat at the table
+   */
+  private findNextAvailableSeat(): number {
+    const occupiedSeats = new Set(
+      Array.from(this.state.players.values())
+        .map(p => p.position?.seat)
+        .filter(seat => seat !== undefined)
+    )
+    
+    for (let i = 0; i < this.state.config.maxPlayers; i++) {
+      if (!occupiedSeats.has(i)) {
+        return i
+      }
+    }
+    
+    // This shouldn't happen if we check table capacity first
+    throw new Error('No available seats')
+  }
+
+  /**
+   * Find next dealer index by rotating button clockwise
+   */
+  private findNextDealerIndex(sortedPlayers: GameTablePlayer[]): number {
+    if (sortedPlayers.length === 0) return 0
+    
+    // Find current button holder
+    const currentButtonIndex = sortedPlayers.findIndex(
+      p => p.position?.seat === this.state.buttonPosition
+    )
+    
+    // If button position not found, start at 0
+    if (currentButtonIndex === -1) {
+      return 0
+    }
+    
+    // Move to next player clockwise
+    let nextIndex = (currentButtonIndex + 1) % sortedPlayers.length
+    let attempts = 0
+    
+    // Skip inactive players
+    while (sortedPlayers[nextIndex]?.status !== 'active' && attempts < sortedPlayers.length) {
+      nextIndex = (nextIndex + 1) % sortedPlayers.length
+      attempts++
+    }
+    
+    return nextIndex
+  }
+
+  /**
+   * Get current game state for client
+   */
+  private getCurrentGameState(): any {
+    const game = this.state.game
+    if (!game) {
+      return null
+    }
+    
+    return {
+      phase: game.phase,
+      pot: game.pot,
+      currentBet: game.currentBet,
+      currentPlayer: game.activePlayerId,
+      communityCards: game.communityCards || [],
+      buttonPosition: this.state.buttonPosition >= 0 ? this.state.buttonPosition : 0,
+      dealerId: game.dealerId,
+      smallBlindId: game.smallBlindId,
+      bigBlindId: game.bigBlindId,
+      players: this.getPlayersDTO() // Always include players in game state
+    }
+  }
+
+  /**
+   * Get player at specific index
+   */
+  private getPlayerAtIndex(index: number): GameTablePlayer | undefined {
+    const players = Array.from(this.state.players.values())
+    return players[index]
+  }
+
+  /**
+   * Convert player to client-safe DTO
+   */
+  private playerToDTO(player: GameTablePlayer, includeHoleCards: boolean = false): any {
+    const isButton = player.position?.seat === this.state.buttonPosition
+    return {
+      id: player.id,
+      username: player.username,
+      chipCount: player.chips,
+      chips: player.chips, // Include both for compatibility
+      status: player.status,
+      position: player.position?.seat ?? 0, // Return just the seat number for validator compatibility
+      currentBet: player.currentBet || 0,
+      isFolded: player.isFolded,
+      hasActed: player.hasActed,
+      isAllIn: player.chips === 0 && player.status === 'active',
+      timeBank: player.timeBank,
+      isButton,
+      isDealer: isButton, // For compatibility
+      holeCards: includeHoleCards ? player.holeCards : undefined
+    }
+  }
+
+  /**
+   * Get all players as DTOs
+   */
+  private getPlayersDTO(currentPlayerId?: string): any[] {
+    return Array.from(this.state.players.values()).map(player => 
+      this.playerToDTO(player, player.id === currentPlayerId)
+    )
   }
 }

@@ -69,6 +69,7 @@ test.describe('Full Table Multiplayer Poker Tests', () => {
     
     // Play hands for full button rotation
     const handsToPlay = players.length + 2; // Full rotation plus 2 extra
+    let lastGameId = '';
     
     for (let handNum = 1; handNum <= handsToPlay; handNum++) {
       logger.minimal(`\n--- Hand ${handNum} of ${handsToPlay} ---`);
@@ -84,19 +85,42 @@ test.describe('Full Table Multiplayer Poker Tests', () => {
         
         let gameState = stateMsg?.payload?.gameState || gameStartMsg?.payload;
         
-        if (!gameState || gameState.phase === 'waiting') {
+        if (!gameState || gameState.phase === 'waiting' || gameState.phase === 'finished') {
           logger.log('Waiting for hand to start...');
-          // Wait for next hand
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          continue;
+          
+          // Wait for game_started message
+          let retries = 0;
+          let gameStarted = false;
+          while (retries < 10 && !gameStarted) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const recentMessages = wsHelper.getMessages(players[0].id);
+            const newGameMsg = recentMessages.reverse().find(m => 
+              m.type === 'game_started' && 
+              m.payload?.gameId !== lastGameId
+            );
+            
+            if (newGameMsg) {
+              gameState = newGameMsg.payload;
+              lastGameId = newGameMsg.payload.gameId;
+              gameStarted = true;
+              logger.log(`New game started: ${newGameMsg.payload.gameId}`);
+            }
+            retries++;
+          }
+          
+          if (!gameStarted) {
+            logger.log('No new game started, skipping...');
+            continue;
+          }
         }
         
         // Track button position from game state
-        const dealerId = gameState.dealerId;
-        const dealerPlayer = gameState.players?.find((p: any) => p.id === dealerId);
-        const currentButton = dealerPlayer?.position?.seat || 0;
+        const currentButton = gameState.buttonPosition ?? 0;
         
-        buttonPositions.push(currentButton);
+        // Only track if it's a new hand
+        if (buttonPositions.length === 0 || currentButton !== buttonPositions[buttonPositions.length - 1]) {
+          buttonPositions.push(currentButton);
+        }
         logger.log(`Button at seat: ${currentButton}`);
         
         // Play the hand

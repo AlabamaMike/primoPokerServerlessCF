@@ -93,8 +93,8 @@ export class GameValidator {
     const sbPosition = this.getSmallBlindPosition(buttonPosition, activePlayers);
     const bbPosition = this.getBigBlindPosition(buttonPosition, activePlayers);
 
-    const sbPlayer = activePlayers.find(p => p.position === sbPosition);
-    const bbPlayer = activePlayers.find(p => p.position === bbPosition);
+    const sbPlayer = activePlayers.find(p => (typeof p.position === 'object' ? p.position.seat : p.position) === sbPosition);
+    const bbPlayer = activePlayers.find(p => (typeof p.position === 'object' ? p.position.seat : p.position) === bbPosition);
 
     // Validate small blind
     if (!sbPlayer) {
@@ -123,10 +123,14 @@ export class GameValidator {
     activePlayers: any[]
   ): boolean {
     // Sort players by position
-    const sortedPlayers = [...activePlayers].sort((a, b) => a.position - b.position);
+    const sortedPlayers = [...activePlayers].sort((a, b) => {
+      const aPos = typeof a.position === 'object' ? a.position.seat : a.position;
+      const bPos = typeof b.position === 'object' ? b.position.seat : b.position;
+      return aPos - bPos;
+    });
     
     // Find previous button player index
-    const prevIndex = sortedPlayers.findIndex(p => p.position === previousButton);
+    const prevIndex = sortedPlayers.findIndex(p => (typeof p.position === 'object' ? p.position.seat : p.position) === previousButton);
     if (prevIndex === -1) {
       this.logger.error(`Previous button position ${previousButton} not found`);
       return false;
@@ -134,7 +138,8 @@ export class GameValidator {
 
     // Expected next button is the next active player
     const expectedIndex = (prevIndex + 1) % sortedPlayers.length;
-    const expectedButton = sortedPlayers[expectedIndex].position;
+    const expectedPlayer = sortedPlayers[expectedIndex];
+    const expectedButton = typeof expectedPlayer.position === 'object' ? expectedPlayer.position.seat : expectedPlayer.position;
 
     if (currentButton !== expectedButton) {
       this.logger.error(`Button movement incorrect: expected ${expectedButton}, got ${currentButton}`);
@@ -237,10 +242,11 @@ export class GameValidator {
 
     for (const player of state.players) {
       // Check for duplicate positions
-      if (positions.has(player.position)) {
-        result.errors.push(`Duplicate position ${player.position}`);
+      const playerPosition = typeof player.position === 'object' ? player.position.seat : player.position;
+      if (positions.has(playerPosition)) {
+        result.errors.push(`Duplicate position ${playerPosition}`);
       }
-      positions.add(player.position);
+      positions.add(playerPosition);
 
       // Check for duplicate IDs
       if (playerIds.has(player.id)) {
@@ -272,11 +278,11 @@ export class GameValidator {
   }
 
   private validateButton(state: GameStateValidation, result: ValidationResult) {
-    const activePlayerPositions = state.players
+    const activePlayerSeats = state.players
       .filter(p => p.status === 'active')
-      .map(p => p.position);
+      .map(p => typeof p.position === 'object' ? p.position.seat : p.position);
 
-    if (activePlayerPositions.length > 0 && !activePlayerPositions.includes(state.buttonPosition)) {
+    if (activePlayerSeats.length > 0 && !activePlayerSeats.includes(state.buttonPosition)) {
       result.errors.push(`Button position ${state.buttonPosition} not held by active player`);
     }
   }
@@ -334,7 +340,11 @@ export class GameValidator {
   private getSmallBlindPosition(buttonPosition: number, players: any[]): number {
     const activePlayers = players
       .filter(p => p.status === 'active')
-      .sort((a, b) => a.position - b.position);
+      .sort((a, b) => {
+        const aPos = typeof a.position === 'object' ? a.position.seat : a.position;
+        const bPos = typeof b.position === 'object' ? b.position.seat : b.position;
+        return aPos - bPos;
+      });
 
     if (activePlayers.length === 2) {
       // Heads up: button is small blind
@@ -342,37 +352,49 @@ export class GameValidator {
     }
 
     // Find next active player after button
-    const buttonIndex = activePlayers.findIndex(p => p.position === buttonPosition);
+    const buttonIndex = activePlayers.findIndex(p => (typeof p.position === 'object' ? p.position.seat : p.position) === buttonPosition);
     const sbIndex = (buttonIndex + 1) % activePlayers.length;
-    return activePlayers[sbIndex].position;
+    const sbPlayer = activePlayers[sbIndex];
+    return typeof sbPlayer.position === 'object' ? sbPlayer.position.seat : sbPlayer.position;
   }
 
   private getBigBlindPosition(buttonPosition: number, players: any[]): number {
     const activePlayers = players
       .filter(p => p.status === 'active')
-      .sort((a, b) => a.position - b.position);
+      .sort((a, b) => {
+        const aPos = typeof a.position === 'object' ? a.position.seat : a.position;
+        const bPos = typeof b.position === 'object' ? b.position.seat : b.position;
+        return aPos - bPos;
+      });
 
     if (activePlayers.length === 2) {
       // Heads up: other player is big blind
-      const buttonIndex = activePlayers.findIndex(p => p.position === buttonPosition);
+      const buttonIndex = activePlayers.findIndex(p => (typeof p.position === 'object' ? p.position.seat : p.position) === buttonPosition);
       const bbIndex = (buttonIndex + 1) % activePlayers.length;
-      return activePlayers[bbIndex].position;
+      const bbPlayer = activePlayers[bbIndex];
+      return typeof bbPlayer.position === 'object' ? bbPlayer.position.seat : bbPlayer.position;
     }
 
     // Find second active player after button
-    const buttonIndex = activePlayers.findIndex(p => p.position === buttonPosition);
+    const buttonIndex = activePlayers.findIndex(p => (typeof p.position === 'object' ? p.position.seat : p.position) === buttonPosition);
     const bbIndex = (buttonIndex + 2) % activePlayers.length;
-    return activePlayers[bbIndex].position;
+    const bbPlayer = activePlayers[bbIndex];
+    return typeof bbPlayer.position === 'object' ? bbPlayer.position.seat : bbPlayer.position;
   }
 
   private getActionOrder(afterPosition: number, activePlayers: any[]): number[] {
-    const sorted = [...activePlayers].sort((a, b) => a.position - b.position);
-    const startIndex = sorted.findIndex(p => p.position === afterPosition);
+    const sorted = [...activePlayers].sort((a, b) => {
+      const aPos = typeof a.position === 'object' ? a.position.seat : a.position;
+      const bPos = typeof b.position === 'object' ? b.position.seat : b.position;
+      return aPos - bPos;
+    });
+    const startIndex = sorted.findIndex(p => (typeof p.position === 'object' ? p.position.seat : p.position) === afterPosition);
     
     const order: number[] = [];
     for (let i = 1; i <= sorted.length; i++) {
       const index = (startIndex + i) % sorted.length;
-      order.push(sorted[index].position);
+      const player = sorted[index];
+      order.push(typeof player.position === 'object' ? player.position.seat : player.position);
     }
     
     return order;

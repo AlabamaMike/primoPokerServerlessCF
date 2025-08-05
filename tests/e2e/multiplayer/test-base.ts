@@ -220,6 +220,8 @@ export async function playHand(
     
     if (!validation.valid) {
       logger.error(`Game validation failed: ${validation.errors.join(', ')}`);
+      // Debug output
+      logger.log(`Debug: buttonPosition=${latestState.buttonPosition}, players=${JSON.stringify(latestState.players?.map((p: any) => ({ id: p.id.substring(0, 8), position: p.position, status: p.status })))}`);
     }
     
     // Handle betting for current phase
@@ -276,7 +278,8 @@ async function handleBettingRound(
   let actionCount = 0;
   
   // Continue until betting is complete
-  while (actionCount < maxActions) {
+  const maxActionsPerRound = 10; // Limit actions per betting round
+  while (actionCount < Math.min(maxActions, maxActionsPerRound)) {
     // Find player to act
     const actingPlayerId = gameState.currentPlayer || gameState.activePlayerId;
     if (!actingPlayerId) {
@@ -294,15 +297,21 @@ async function handleBettingRound(
     let action = 'check';
     
     if (toCall > 0) {
-      // Facing a bet - call or fold
-      action = Math.random() > 0.3 ? 'call' : 'fold';
+      // Facing a bet - mostly fold to end hands quickly
+      action = Math.random() > 0.8 ? 'call' : 'fold';
     } else {
-      // No bet to call - check or bet
-      action = Math.random() > 0.7 ? 'bet' : 'check';
+      // No bet to call - mostly check
+      action = Math.random() > 0.9 ? 'bet' : 'check';
     }
     
-    logger.recordAction(actingPlayer.id, action);
-    await wsHelper.sendAction(actingPlayer.id, action);
+    try {
+      logger.recordAction(actingPlayer.id, action);
+      await wsHelper.sendAction(actingPlayer.id, action);
+    } catch (error) {
+      logger.error(`Failed to send action for ${actingPlayer.username}: ${error}`);
+      // Skip to next player
+      break;
+    }
     
     // Wait for state update
     await new Promise(resolve => setTimeout(resolve, 1000));

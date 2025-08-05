@@ -1,0 +1,39 @@
+=================================
+Primo Poker Desktop Installer
+Version: 0.1.0
+Platform: Windows x64
+=================================
+
+Installation Steps:
+1. Welcome Screen
+   - Shows Primo Poker logo
+   - Version 0.1.0
+
+2. License Agreement (EULA)
+   - User must accept to continue
+
+3. Installation Directory
+   - Default: C:\Program Files\Primo Poker
+   - User can change location
+
+4. Start Menu Options
+   - Create start menu shortcut
+   - Create desktop shortcut
+
+5. Installation Progress
+   - Copying files...
+   - Creating shortcuts...
+   - Registering uninstaller...
+
+6. Completion
+   - Launch Primo Poker checkbox
+   - Finish button
+
+Installed Files:
+- Primo Poker.exe (main executable)
+- app.asar (application resources)
+- WebView2Loader.dll (web renderer)
+- resources/ (assets)
+- uninstall.exe
+
+Total Size: ~85 MB

@@ -18,7 +18,26 @@
       },
       "window": {
         "all": true
+      },
+      "http": {
+        "all": true,
+        "request": true,
+        "scope": ["https://primo-poker-updates.s3.amazonaws.com/*"]
+      },
+      "notification": {
+        "all": true
+      },
+      "dialog": {
+        "all": true
       }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://primo-poker-updates.s3.amazonaws.com/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": ""
     },
     "bundle": {
       "active": true,
@@ -30,7 +49,48 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": "",
+        "wix": {
+          "language": "en-US",
+          "template": null,
+          "fragmentPaths": [],
+          "componentGroupRefs": [],
+          "componentRefs": [],
+          "dialogImagePath": null,
+          "bannerPath": null,
+          "license": null
+        },
+        "nsis": {
+          "license": null,
+          "headerImage": null,
+          "sidebarImage": null,
+          "installerIcon": null,
+          "installMode": "currentUser",
+          "languages": ["English"]
+        }
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "10.13",
+        "license": null,
+        "entitlements": null,
+        "exceptionDomain": null,
+        "signingIdentity": null,
+        "providerShortName": null,
+        "notarize": false
+      },
+      "linux": {
+        "deb": {
+          "depends": []
+        },
+        "appimage": {
+          "bundleMediaFramework": true
+        }
+      }
     },
     "security": {
       "csp": null

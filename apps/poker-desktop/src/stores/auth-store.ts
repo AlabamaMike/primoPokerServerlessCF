@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
+import { testSafeInvoke } from '../utils/test-utils';
 
 interface User {
   id: string;
@@ -36,7 +37,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     
     try {
-      const response = await invoke<{
+      const response = await testSafeInvoke<{
         user: User;
         tokens: {
           accessToken: string;
@@ -66,7 +67,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     
     try {
-      await invoke('logout');
+      await testSafeInvoke('logout');
       set({
         user: null,
         isAuthenticated: false,
@@ -89,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     
     try {
-      const token = await invoke<AuthToken | null>('get_auth_token');
+      const token = await testSafeInvoke<AuthToken | null>('get_auth_token');
       
       if (token) {
         // TODO: Fetch user details with token

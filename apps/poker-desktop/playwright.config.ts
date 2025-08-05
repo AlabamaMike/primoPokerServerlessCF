@@ -34,5 +34,8 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      VITE_TEST_MODE: 'true'
+    }
   },
 });

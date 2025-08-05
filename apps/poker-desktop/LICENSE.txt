@@ -1,0 +1,52 @@
+PRIMO POKER END USER LICENSE AGREEMENT
+
+Last updated: January 2025
+
+IMPORTANT - READ CAREFULLY: This End User License Agreement ("EULA") is a legal agreement between you (either an individual or a single entity) and Primo Poker ("Company") for the Primo Poker software product, which includes computer software and may include associated media, printed materials, and "online" or electronic documentation ("Software").
+
+BY INSTALLING, COPYING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THE TERMS OF THIS EULA. IF YOU DO NOT AGREE TO THE TERMS OF THIS EULA, DO NOT INSTALL OR USE THE SOFTWARE.
+
+1. GRANT OF LICENSE
+The Software is licensed, not sold. This EULA grants you the following rights:
+- Installation and Use: You may install and use one copy of the Software on a single computer.
+- Backup Copy: You may make one backup copy of the Software for archival purposes.
+
+2. RESTRICTIONS
+You may not:
+- Reverse engineer, decompile, or disassemble the Software
+- Rent, lease, or lend the Software
+- Use the Software for any illegal purpose
+- Modify or create derivative works based on the Software
+
+3. ONLINE GAMING TERMS
+- You must be of legal age in your jurisdiction to play real money poker
+- You are responsible for complying with all local laws regarding online gaming
+- The Company is not responsible for any losses incurred while playing
+- Fair play is required; cheating, collusion, or use of prohibited software will result in immediate account termination
+
+4. PRIVACY AND DATA COLLECTION
+- The Software may collect gameplay statistics and crash reports
+- Personal information is handled according to our Privacy Policy
+- Account information is securely stored and encrypted
+
+5. UPDATES AND MAINTENANCE
+- The Software may automatically download and install updates
+- Updates are provided to improve security and functionality
+- You may disable automatic updates in the settings
+
+6. TERMINATION
+This EULA will terminate immediately if you fail to comply with its terms and conditions. Upon termination, you must destroy all copies of the Software.
+
+7. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NONINFRINGEMENT.
+
+8. LIMITATION OF LIABILITY
+IN NO EVENT SHALL THE COMPANY BE LIABLE FOR ANY SPECIAL, INCIDENTAL, INDIRECT, OR CONSEQUENTIAL DAMAGES WHATSOEVER ARISING OUT OF THE USE OF OR INABILITY TO USE THE SOFTWARE.
+
+9. GOVERNING LAW
+This EULA shall be governed by the laws of the jurisdiction in which the Company is established, without regard to its conflict of law provisions.
+
+10. ENTIRE AGREEMENT
+This EULA constitutes the entire agreement between you and the Company relating to the Software and supersedes all prior or contemporaneous understandings.
+
+By installing the Software, you acknowledge that you have read this EULA, understand it, and agree to be bound by its terms.

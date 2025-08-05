@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "notes": "New Features:\n- Improved lobby performance\n- Fixed connection issues\n- Added new table themes",
+  "pub_date": "2025-08-05T04:11:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "mock-signature-windows",
+      "url": "https://primo-poker-updates.s3.amazonaws.com/primo-poker_0.2.0_x64-setup.nsis.zip"
+    },
+    "darwin-x86_64": {
+      "signature": "mock-signature-mac-intel",
+      "url": "https://primo-poker-updates.s3.amazonaws.com/primo-poker_0.2.0_x64.app.tar.gz"
+    },
+    "darwin-aarch64": {
+      "signature": "mock-signature-mac-arm",
+      "url": "https://primo-poker-updates.s3.amazonaws.com/primo-poker_0.2.0_aarch64.app.tar.gz"
+    },
+    "linux-x86_64": {
+      "signature": "mock-signature-linux",
+      "url": "https://primo-poker-updates.s3.amazonaws.com/primo-poker_0.2.0_amd64.AppImage.tar.gz"
+    }
+  }
+}

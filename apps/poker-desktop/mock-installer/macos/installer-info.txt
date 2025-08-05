@@ -1,0 +1,30 @@
+=================================
+Primo Poker Desktop Installer
+Version: 0.1.0
+Platform: macOS Universal
+=================================
+
+DMG Contents:
+- Primo Poker.app
+- Applications shortcut
+- README.txt
+
+Installation:
+1. Mount DMG
+2. Drag Primo Poker to Applications
+3. Eject DMG
+4. Launch from Applications
+
+App Bundle Structure:
+Primo Poker.app/
+├── Contents/
+│   ├── Info.plist
+│   ├── MacOS/
+│   │   └── primo-poker (executable)
+│   ├── Resources/
+│   │   ├── icon.icns
+│   │   └── assets/
+│   └── Frameworks/
+│       └── WebKit.framework/
+
+Total Size: ~95 MB

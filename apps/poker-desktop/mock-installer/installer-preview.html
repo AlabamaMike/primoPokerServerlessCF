@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Primo Poker Installer Preview</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0F172A;
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .installer-window {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #1E293B;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .header {
+            background: linear-gradient(135deg, #6B46C1 0%, #F59E0B 100%);
+            padding: 30px;
+            text-align: center;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: #0F172A;
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .step {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #0F172A;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .button {
+            background: linear-gradient(135deg, #6B46C1 0%, #F59E0B 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .progress {
+            background: #334155;
+            height: 8px;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #6B46C1 0%, #F59E0B 100%);
+            height: 100%;
+            width: 65%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="installer-window">
+        <div class="header">
+            <div class="logo">P</div>
+            <h1>Primo Poker Desktop</h1>
+            <p>Version 0.1.0 Installer</p>
+        </div>
+        
+        <div class="content">
+            <div class="step">
+                <h3>Step 1: Welcome</h3>
+                <p>Welcome to the Primo Poker Desktop installer. This wizard will guide you through the installation process.</p>
+            </div>
+            
+            <div class="step">
+                <h3>Step 2: License Agreement</h3>
+                <p>Please read and accept the End User License Agreement to continue.</p>
+                <textarea readonly style="width: 100%; height: 100px; background: #1E293B; border: 1px solid #334155; color: #94A3B8; padding: 10px;">
+PRIMO POKER END USER LICENSE AGREEMENT
+
+By installing this software, you agree to the terms...
+                </textarea>
+            </div>
+            
+            <div class="step">
+                <h3>Step 3: Installation Progress</h3>
+                <p>Installing Primo Poker Desktop...</p>
+                <div class="progress">
+                    <div class="progress-bar"></div>
+                </div>
+                <p style="color: #94A3B8; font-size: 14px;">Copying files... 65%</p>
+            </div>
+            
+            <div style="text-align: right; margin-top: 30px;">
+                <button class="button" style="background: #475569;">Back</button>
+                <button class="button">Next</button>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 40px; text-align: center; color: #64748B;">
+        <p>This is a preview of how the installer would look</p>
+        <p>Actual installer will be native to each platform</p>
+    </div>
+</body>
+</html>

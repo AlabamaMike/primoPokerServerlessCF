@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
+import { testSafeInvoke } from "./utils/test-utils";
 import ConnectionStatus from "./components/ConnectionStatus";
 import LoginForm from "./components/LoginForm";
 import Lobby from "./components/Lobby";
+import LobbyV2 from "./components/LobbyV2";
+import GamePage from "./components/GamePage";
+import GameTableDemo from "./components/GameTableDemo";
+import LobbyMockup from "./components/LobbyV2/LobbyMockup";
+import PrimoLobbyMockup from "./components/LobbyV2/PrimoLobbyMockup";
+import UpdateManager from "./components/UpdateManager";
 import { useAuthStore } from "./stores/auth-store";
 import "./App.css";
 
@@ -13,12 +20,15 @@ interface BackendStatus {
 }
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || "https://primo-poker-server.alabamamike.workers.dev";
+const IS_TEST_MODE = import.meta.env.VITE_TEST_MODE === 'true';
 
 function App() {
   const [connectionStatus, setConnectionStatus] = useState<BackendStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [showLobby, setShowLobby] = useState(false);
-  const [_currentTableId, setCurrentTableId] = useState<string | null>(null);
+  const [showDemo, setShowDemo] = useState(false);
+  const [showLobbyMockup, setShowLobbyMockup] = useState(false);
+  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
   const { user, isAuthenticated, checkAuth } = useAuthStore();
 
   useEffect(() => {
@@ -33,7 +43,19 @@ function App() {
 
   async function checkConnection() {
     try {
-      const status = await invoke<BackendStatus>("check_backend_connection", {
+      // In test mode, simulate a successful connection
+      if (IS_TEST_MODE) {
+        console.log('[Test Mode] Simulating successful connection');
+        setConnectionStatus({
+          connected: true,
+          backend_url: BACKEND_URL,
+          latency_ms: 100
+        });
+        setLoading(false);
+        return;
+      }
+
+      const status = await testSafeInvoke<BackendStatus>("check_backend_connection", {
         apiUrl: BACKEND_URL
       });
       setConnectionStatus(status);
@@ -68,32 +90,51 @@ function App() {
                 // Navigate to lobby after login
               }}
             />
-          ) : showLobby ? (
-            <div className="authenticated-content" data-testid="authenticated-content">
-              <div className="mb-4 flex justify-between items-center">
+          ) : showLobbyMockup ? (
+            <div className="fixed inset-0 z-50">
+              <button
+                onClick={() => setShowLobbyMockup(false)}
+                className="absolute top-4 right-4 z-10 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
+              >
+                Close Mockup
+              </button>
+              <PrimoLobbyMockup />
+            </div>
+          ) : showDemo ? (
+            <div>
+              <div className="mb-4">
                 <button
-                  onClick={() => setShowLobby(false)}
+                  onClick={() => setShowDemo(false)}
                   className="text-gray-400 hover:text-white transition-colors"
                 >
-                  ← Back
-                </button>
-                <button 
-                  onClick={() => useAuthStore.getState().logout()}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
-                  data-testid="logout-button"
-                >
-                  Logout
+                  ← Back to Main Menu
                 </button>
               </div>
-              
-              <Lobby 
+              <GameTableDemo />
+            </div>
+          ) : currentTableId ? (
+            <GamePage 
+              tableId={currentTableId}
+              onLeaveTable={() => {
+                setCurrentTableId(null);
+                setShowLobby(true);
+              }}
+            />
+          ) : showLobby ? (
+            <div className="fixed inset-0 z-40">
+              <LobbyV2 
                 apiUrl={BACKEND_URL} 
                 onJoinTable={(tableId) => {
                   setCurrentTableId(tableId);
-                  // TODO: Navigate to game view
-                  console.log('Joining table:', tableId);
+                  setShowLobby(false);
                 }}
               />
+              <button
+                onClick={() => setShowLobby(false)}
+                className="absolute top-4 right-20 z-50 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                Exit Lobby
+              </button>
             </div>
           ) : (
             <div className="authenticated-content" data-testid="authenticated-content">
@@ -112,6 +153,31 @@ function App() {
                     Play Now
                   </button>
                   <button 
+                    onClick={() => setShowLobbyMockup(true)}
+                    className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-semibold transition-colors"
+                  >
+                    New Lobby Design
+                  </button>
+                  <button 
+                    onClick={() => setShowDemo(true)}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold transition-colors"
+                    data-testid="demo-button"
+                  >
+                    Table Demo
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const oldLobby = window.confirm('View old lobby design?');
+                      if (oldLobby) {
+                        // Temporarily use old lobby
+                        window.alert('Old lobby temporarily disabled. New design is now default.');
+                      }
+                    }}
+                    className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
+                  >
+                    Old Lobby
+                  </button>
+                  <button 
                     onClick={() => useAuthStore.getState().logout()}
                     className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
                     data-testid="logout-button"
@@ -124,6 +190,9 @@ function App() {
           )}
         </div>
       )}
+      
+      {/* Update Manager - Always rendered to check for updates */}
+      <UpdateManager />
     </div>
   );
 }

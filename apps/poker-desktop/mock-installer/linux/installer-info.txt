@@ -1,0 +1,28 @@
+=================================
+Primo Poker Desktop Installer
+Version: 0.1.0
+Platform: Linux x64
+=================================
+
+Available Formats:
+
+1. AppImage (Recommended)
+   - primo-poker_0.1.0_amd64.AppImage
+   - No installation required
+   - chmod +x and run
+   - Size: ~90 MB
+
+2. Debian Package
+   - primo-poker_0.1.0_amd64.deb
+   - Install: sudo dpkg -i primo-poker_0.1.0_amd64.deb
+   - Creates menu entry
+   - Size: ~85 MB
+
+Desktop Entry:
+[Desktop Entry]
+Name=Primo Poker
+Comment=Desktop poker client
+Exec=/usr/bin/primo-poker
+Icon=primo-poker
+Type=Application
+Categories=Games;

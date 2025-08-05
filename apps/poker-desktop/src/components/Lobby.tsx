@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { testSafeInvoke } from '../utils/test-utils';
 import { useAuthStore } from '../stores/auth-store';
 
 interface Table {
@@ -49,7 +50,7 @@ export default function Lobby({ apiUrl, onJoinTable }: LobbyProps) {
 
   async function fetchTables() {
     try {
-      const result = await invoke<Table[]>('get_tables', { apiUrl });
+      const result = await testSafeInvoke<Table[]>('get_tables', { apiUrl });
       setTables(result);
       setError(null);
     } catch (err) {
@@ -87,7 +88,7 @@ export default function Lobby({ apiUrl, onJoinTable }: LobbyProps) {
         isPrivate: false,
       };
 
-      const newTable = await invoke<Table>('create_table', { apiUrl, config });
+      const newTable = await testSafeInvoke<Table>('create_table', { apiUrl, config });
       
       // Refresh tables list
       await fetchTables();
@@ -122,7 +123,7 @@ export default function Lobby({ apiUrl, onJoinTable }: LobbyProps) {
       if (!table) return;
 
       const buyIn = (table.blinds.big || table.config?.bigBlind || 50) * 100;
-      await invoke('join_table', { apiUrl, tableId, buyIn });
+      await testSafeInvoke('join_table', { apiUrl, tableId, buyIn });
       
       if (onJoinTable) {
         onJoinTable(tableId);

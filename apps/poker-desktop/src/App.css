@@ -12,3 +12,27 @@
   padding: 1rem;
   margin: 1rem 0;
 }
+
+.login-form {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.authenticated-content {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

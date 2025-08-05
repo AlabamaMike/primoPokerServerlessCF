@@ -80,11 +80,13 @@
     "windows": [
       {
         "title": "Primo Poker",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 1024,
-        "minHeight": 600,
-        "center": true
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "minWidth": 1200,
+        "minHeight": 800
       }
     ]
   }

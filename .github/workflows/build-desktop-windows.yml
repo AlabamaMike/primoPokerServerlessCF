@@ -65,17 +65,6 @@ jobs:
         run: npm test
         continue-on-error: true # Don't fail build if tests fail for now
 
-      - name: Create Windows Icon
-        shell: pwsh
-        run: |
-          # Create a minimal valid ICO file
-          cd src-tauri/icons
-          
-          # For now, just copy the PNG as ICO - Tauri may handle conversion
-          Copy-Item "32x32.png" -Destination "icon.ico"
-          
-          Write-Host "Created placeholder icon.ico file"
-
       - name: Build Tauri app
         run: npm run tauri build
 

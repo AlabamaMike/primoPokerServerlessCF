@@ -69,7 +69,7 @@ jobs:
         shell: pwsh
         run: |
           # Create a minimal valid ICO file
-          cd apps/poker-desktop/src-tauri/icons
+          cd src-tauri/icons
           
           # For now, just copy the PNG as ICO - Tauri may handle conversion
           Copy-Item "32x32.png" -Destination "icon.ico"

@@ -3,8 +3,9 @@ import { invoke } from '@tauri-apps/api/tauri';
 
 interface User {
   id: string;
+  username: string;
   email: string;
-  name: string;
+  name?: string;
 }
 
 interface AuthToken {
@@ -37,8 +38,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await invoke<{
         user: User;
-        access_token: string;
-        refresh_token: string;
+        tokens: {
+          accessToken: string;
+          refreshToken: string;
+        };
+        message: string;
       }>('login', { apiUrl, email, password });
       
       set({

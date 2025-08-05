@@ -23,22 +23,31 @@ struct AuthToken {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct LoginRequest {
-    email: String,
+    username: String,
     password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct LoginResponse {
     user: User,
+    tokens: TokenResponse,
+    message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TokenResponse {
+    #[serde(rename = "accessToken")]
     access_token: String,
+    #[serde(rename = "refreshToken")]
     refresh_token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct User {
     id: String,
+    username: String,
     email: String,
-    name: String,
+    name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -141,7 +150,7 @@ async fn login(api_url: String, email: String, password: String) -> Result<Login
     let client = reqwest::Client::new();
     let response = client
         .post(&format!("{}/api/auth/login", api_url))
-        .json(&LoginRequest { email: email.clone(), password })
+        .json(&LoginRequest { username: email.clone(), password })
         .send()
         .await
         .map_err(|e| format!("Network error: {}", e))?;
@@ -152,14 +161,19 @@ async fn login(api_url: String, email: String, password: String) -> Result<Login
         
         // Store tokens securely
         let auth_token = AuthToken {
-            access_token: login_response.access_token.clone(),
-            refresh_token: login_response.refresh_token.clone(),
+            access_token: login_response.tokens.access_token.clone(),
+            refresh_token: login_response.tokens.refresh_token.clone(),
             expires_at: Utc::now() + Duration::hours(24), // Assuming 24h expiry
         };
         
         store_auth_token_secure(auth_token)?;
         
-        Ok(login_response)
+        // Convert to expected format for frontend
+        Ok(LoginResponse {
+            user: login_response.user,
+            tokens: login_response.tokens,
+            message: login_response.message,
+        })
     } else {
         let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         Err(format!("Login failed: {}", error_text))

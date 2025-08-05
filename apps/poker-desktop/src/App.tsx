@@ -18,7 +18,7 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState<BackendStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [showLobby, setShowLobby] = useState(false);
-  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
+  const [_currentTableId, setCurrentTableId] = useState<string | null>(null);
   const { user, isAuthenticated, checkAuth } = useAuthStore();
 
   useEffect(() => {

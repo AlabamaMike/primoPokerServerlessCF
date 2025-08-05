@@ -27,9 +27,9 @@ export default defineConfig({
     },
   ],
 
-  // Run the Tauri app before tests
+  // Run the Vite dev server for testing
   webServer: {
-    command: 'npm run build && cd src-tauri && cargo build --release',
+    command: 'npm run dev:vite',
     port: 1420,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',

@@ -14,7 +14,9 @@ import {
   PlayerStatus,
   Card,
   Suit,
-  Rank
+  Rank,
+  WebSocketMessage,
+  createWebSocketMessage
 } from '@primo-poker/shared'
 import { PokerGame, BettingEngine, DeckManager } from '@primo-poker/core'
 
@@ -64,12 +66,7 @@ export interface GameTableState {
   buttonPosition: number  // Track button position for proper rotation
 }
 
-export interface WebSocketMessage {
-  type: string
-  payload?: any
-  error?: string | undefined
-  timestamp: number
-}
+// Using WebSocketMessage from shared types
 
 export class GameTableDurableObject {
   private state: GameTableState
@@ -1800,12 +1797,11 @@ export class GameTableDurableObject {
    * Build a standardized WebSocket message
    */
   private buildMessage(type: string, payload?: any, error?: string): WebSocketMessage {
-    return {
-      type,
-      payload,
-      error,
-      timestamp: Date.now()
+    if (error) {
+      // For error messages, include error in payload
+      return createWebSocketMessage(type, { ...payload, error });
     }
+    return createWebSocketMessage(type, payload);
   }
 
   /**

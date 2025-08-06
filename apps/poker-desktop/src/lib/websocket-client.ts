@@ -1,8 +1,13 @@
 // WebSocket message types based on backend implementation
 export interface WebSocketMessage {
-  type: string;
-  payload: any;
-  timestamp: string;
+  id?: string;           // Unique message ID (optional for backward compatibility)
+  version?: number;      // Protocol version (optional, defaults to 1)
+  type: string;          // Message type
+  payload: any;          // Message data (standardized field name)
+  timestamp: number;     // Unix timestamp in milliseconds
+  sequenceId?: number;   // For message ordering (optional)
+  requiresAck?: boolean; // Whether acknowledgment is required
+  correlationId?: string; // For request/response pairing (optional)
 }
 
 export interface PlayerActionMessage extends WebSocketMessage {

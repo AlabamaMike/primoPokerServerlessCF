@@ -437,7 +437,12 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 export interface WebSocketMessage {
   type: string;
   payload: unknown;
-  timestamp: string;
+  timestamp: number;
+  id?: string;
+  version?: number;
+  sequenceId?: number;
+  requiresAck?: boolean;
+  correlationId?: string;
 }
 
 export interface GameUpdateMessage extends WebSocketMessage {
@@ -528,7 +533,6 @@ export interface PlayerWallet {
   lastUpdated: Date;
 }
 
-
 export interface SeatSelection {
   seatNumber: number;
   isOccupied: boolean;
@@ -543,4 +547,24 @@ export interface TableSeats {
   maxSeats: number;
   seats: SeatSelection[];
   availableSeats: number[];
+}
+
+// WebSocket message helper function
+export function createWebSocketMessage<T>(
+  type: string,
+  payload: T,
+  options?: {
+    id?: string;
+    version?: number;
+    sequenceId?: number;
+    requiresAck?: boolean;
+    correlationId?: string;
+  }
+): WebSocketMessage {
+  return {
+    type,
+    payload,
+    timestamp: Date.now(),
+    ...options,
+  };
 }

@@ -5,18 +5,14 @@
  * for live multiplayer poker experience.
  */
 
-import { GamePhase, PlayerStatus, GameState } from '@primo-poker/shared'
+import { GamePhase, PlayerStatus, GameState, WebSocketMessage, createWebSocketMessage } from '@primo-poker/shared'
 
 // Enhanced message types for real-time gameplay
-export interface GameMessage {
+export interface GameMessage extends WebSocketMessage {
   type: 'action' | 'state_update' | 'player_update' | 'chat' | 'animation' | 'system' | 'ping' | 'pong'
   tableId: string
-  timestamp: number
-  data: any
   priority: 'high' | 'medium' | 'low'
-  sequenceId: number
   playerId?: string
-  requiresAck?: boolean
 }
 
 export interface GameClient {
@@ -299,14 +295,12 @@ export class WebSocketManager {
 
     switch (message.type) {
       case 'ping':
-        this.sendToClient(client, { 
-          type: 'system', 
+        this.sendToClient(client, {
+          ...createWebSocketMessage('system', { type: 'pong', timestamp: Date.now() }),
           tableId: client.tableId,
-          timestamp: Date.now(),
           sequenceId: this.getNextSequenceId(),
-          priority: 'high',
-          data: { type: 'pong', timestamp: Date.now() }
-        })
+          priority: 'high'
+        } as GameMessage)
         break
 
       case 'ack':
@@ -359,7 +353,7 @@ export class WebSocketManager {
     if (!tableHistory) return
 
     const missedMessages = tableHistory.filter(msg => 
-      msg.sequenceId > lastStateVersion && 
+      msg.sequenceId !== undefined && msg.sequenceId > lastStateVersion && 
       msg.type !== 'ping' && 
       msg.type !== 'pong'
     )
@@ -442,13 +436,11 @@ export class WebSocketManager {
         // Send ping if needed
         if (now - client.lastPing > this.heartbeatInterval) {
           this.sendToClient(client, {
-            type: 'system',
+            ...createWebSocketMessage('system', { type: 'ping', timestamp: now }),
             tableId: client.tableId,
-            timestamp: now,
             sequenceId: this.getNextSequenceId(),
-            priority: 'high',
-            data: { type: 'ping', timestamp: now }
-          }).catch(error => {
+            priority: 'high'
+          } as GameMessage).catch(error => {
             console.error(`Failed to send ping to ${playerId}:`, error)
           })
           

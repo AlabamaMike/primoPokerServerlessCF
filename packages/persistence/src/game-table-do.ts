@@ -16,7 +16,8 @@ import {
   Suit,
   Rank,
   WebSocketMessage,
-  createWebSocketMessage
+  createWebSocketMessage,
+  GameRuleError
 } from '@primo-poker/shared'
 import { PokerGame, BettingEngine, DeckManager } from '@primo-poker/core'
 
@@ -1429,14 +1430,42 @@ export class GameTableDurableObject {
     
     // Determine dealer position
     let dealerIndex: number
-    if (this.state.buttonPosition === -1) {
-      // First game - randomly assign button
-      dealerIndex = Math.floor(Math.random() * playerArray.length)
-      this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
-    } else {
-      // Find next active player clockwise from current button
-      dealerIndex = this.findNextDealerIndex(playerArray)
-      this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+    try {
+      if (this.state.buttonPosition === -1) {
+        // First game - randomly assign button among active players
+        const activePlayers = playerArray
+          .map((p, i) => ({ player: p, index: i }))
+          .filter(({ player }) => {
+            const connection = this.state.connections.get(player.id)
+            return player.status === PlayerStatus.ACTIVE && connection && connection.isConnected
+          })
+        
+        if (activePlayers.length < 2) {
+          console.log('Not enough active players to start game')
+          return
+        }
+        
+        const randomActiveIndex = Math.floor(Math.random() * activePlayers.length)
+        dealerIndex = activePlayers[randomActiveIndex]!.index
+        this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+      } else {
+        // Find next active player clockwise from current button
+        dealerIndex = this.findNextDealerIndex(playerArray)
+        this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+      }
+    } catch (error) {
+      if (error instanceof GameRuleError && error.code === 'INSUFFICIENT_PLAYERS') {
+        console.log('Not enough active players to continue game:', error.message)
+        // Reset game state
+        this.state.game = null
+        this.state.gameState = null
+        await this.broadcastMessage(this.buildMessage('game_ended', {
+          reason: 'insufficient_players',
+          message: 'Not enough active players to continue the game'
+        }))
+        return
+      }
+      throw error // Re-throw other errors
     }
     
     const dealer = playerArray[dealerIndex]!
@@ -1858,29 +1887,45 @@ export class GameTableDurableObject {
    * Find next dealer index by rotating button clockwise
    */
   private findNextDealerIndex(sortedPlayers: GameTablePlayer[]): number {
-    if (sortedPlayers.length === 0) return 0
+    // Filter for active, connected players only
+    const activePlayers = sortedPlayers
+      .map((p, i) => ({ player: p, index: i }))
+      .filter(({ player }) => {
+        // Check if player is active
+        if (player.status !== PlayerStatus.ACTIVE) return false
+        
+        // Check if player has an active connection
+        const connection = this.state.connections.get(player.id)
+        return connection && connection.isConnected
+      })
     
-    // Find current button holder
-    const currentButtonIndex = sortedPlayers.findIndex(
-      p => p.position?.seat === this.state.buttonPosition
+    // Need at least 2 active players for a game
+    if (activePlayers.length < 2) {
+      throw new GameRuleError(
+        'INSUFFICIENT_PLAYERS',
+        'Not enough active players to continue the game'
+      )
+    }
+    
+    // Find current button holder among active players
+    const currentButtonPlayer = activePlayers.find(
+      ({ player }) => player.position?.seat === this.state.buttonPosition
     )
     
-    // If button position not found, start at 0
-    if (currentButtonIndex === -1) {
-      return 0
+    if (!currentButtonPlayer) {
+      // Button position is invalid or on disconnected player
+      // Assign to first active player
+      return activePlayers[0]!.index
     }
     
-    // Move to next player clockwise
-    let nextIndex = (currentButtonIndex + 1) % sortedPlayers.length
-    let attempts = 0
+    // Find index of current button holder in active players array
+    const currentIndex = activePlayers.indexOf(currentButtonPlayer)
     
-    // Skip inactive players
-    while (sortedPlayers[nextIndex]?.status !== 'active' && attempts < sortedPlayers.length) {
-      nextIndex = (nextIndex + 1) % sortedPlayers.length
-      attempts++
-    }
+    // Move to next active player clockwise
+    const nextActiveIndex = (currentIndex + 1) % activePlayers.length
     
-    return nextIndex
+    // Return the original index in sortedPlayers array
+    return activePlayers[nextActiveIndex]!.index
   }
 
   /**

@@ -325,17 +325,22 @@ describe('PII Filter Edge Cases', () => {
       };
       obj.self = obj; // Create circular reference
 
-      // Current implementation doesn't handle circular references
-      // This would cause infinite recursion
-      expect(() => filter.filter(obj)).toThrow(RangeError);
+      const result = filter.filter(obj) as any;
+      
+      expect(result.email).toBe('[EMAIL_REDACTED]');
+      expect(result.data).toBe('some data');
+      expect(result.self).toBe('[CIRCULAR_REFERENCE]');
     });
 
     it('should handle arrays with circular references', () => {
       const arr: any[] = ['test@example.com', 'data'];
       arr.push(arr); // Create circular reference
 
-      // Current implementation doesn't handle circular references
-      expect(() => filter.filter(arr)).toThrow(RangeError);
+      const result = filter.filter(arr) as any[];
+      
+      expect(result[0]).toBe('[EMAIL_REDACTED]');
+      expect(result[1]).toBe('data');
+      expect(result[2]).toBe('[CIRCULAR_REFERENCE]');
     });
 
     it('should handle complex circular structures', () => {
@@ -344,8 +349,13 @@ describe('PII Filter Edge Cases', () => {
       obj1.friend = obj2;
       obj2.friend = obj1; // Create circular reference
 
-      // Current implementation doesn't handle circular references
-      expect(() => filter.filter(obj1)).toThrow(RangeError);
+      const result = filter.filter(obj1) as any;
+      
+      expect(result.id).toBe(1);
+      expect(result.email).toBe('[EMAIL_REDACTED]');
+      expect(result.friend.id).toBe(2);
+      expect(result.friend.password).toBe('[REDACTED]');
+      expect(result.friend.friend).toBe('[CIRCULAR_REFERENCE]');
     });
   });
 

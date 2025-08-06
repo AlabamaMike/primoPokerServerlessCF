@@ -19,23 +19,40 @@ export class DefaultPIIFilter implements PIIFilter {
     jwt: 'Bearer [TOKEN_REDACTED]',
   };
 
-  filter(data: any): any {
+  filter(data: any, visitedObjects?: WeakSet<object>): any {
+    // Initialize visited objects set on first call
+    if (!visitedObjects) {
+      visitedObjects = new WeakSet<object>();
+    }
+
     if (typeof data === 'string') {
       return this.filterString(data);
     }
     
     if (Array.isArray(data)) {
-      return data.map(item => this.filter(item));
+      // Check for circular reference
+      if (visitedObjects.has(data)) {
+        return '[CIRCULAR_REFERENCE]';
+      }
+      visitedObjects.add(data);
+      
+      return data.map(item => this.filter(item, visitedObjects));
     }
     
     if (data && typeof data === 'object') {
+      // Check for circular reference
+      if (visitedObjects.has(data)) {
+        return '[CIRCULAR_REFERENCE]';
+      }
+      visitedObjects.add(data);
+      
       const filtered: any = {};
       for (const [key, value] of Object.entries(data)) {
         // Filter sensitive keys entirely
         if (this.isSensitiveKey(key)) {
           filtered[key] = '[REDACTED]';
         } else {
-          filtered[key] = this.filter(value);
+          filtered[key] = this.filter(value, visitedObjects);
         }
       }
       return filtered;

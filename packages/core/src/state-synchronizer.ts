@@ -1,6 +1,4 @@
-// Using any for GameState to avoid circular dependency issues
-// In production, this would import from '@primo-poker/shared'
-type GameState = any
+import type { GameState } from '@primo-poker/shared'
 import { 
   StateSnapshot, 
   StateDelta, 
@@ -16,33 +14,53 @@ import {
 
 export * from './state-snapshot'
 
+export interface StateSynchronizerOptions {
+  maxHistorySize?: number
+  maxDeltaHistorySize?: number
+  maxActionLogSize?: number
+  enableLogging?: boolean
+}
+
 export class StateSynchronizer {
   private versionCounter: number = 0
   private stateHistory: Map<number, StateSnapshot> = new Map()
   private deltaHistory: Map<string, StateDelta> = new Map()
   private actionLog: PlayerActionRecord[] = []
+  private readonly options: Required<StateSynchronizerOptions>
+  
+  constructor(options: StateSynchronizerOptions = {}) {
+    this.options = {
+      maxHistorySize: options.maxHistorySize ?? 50,
+      maxDeltaHistorySize: options.maxDeltaHistorySize ?? 100,
+      maxActionLogSize: options.maxActionLogSize ?? 200,
+      enableLogging: options.enableLogging ?? true
+    }
+  }
 
   async createSnapshot(
     gameState: GameState, 
     playerStates: Map<string, PlayerState>
   ): Promise<StateSnapshot> {
-    this.versionCounter++
+    // Atomic version increment
+    const version = this.incrementVersion()
     
-    // Deep copy player states to avoid reference issues
+    // Deep copy using structuredClone for proper deep cloning
+    const copiedGameState = this.deepClone(gameState)
     const copiedPlayerStates = new Map<string, PlayerState>()
     for (const [playerId, state] of playerStates) {
-      copiedPlayerStates.set(playerId, { ...state })
+      copiedPlayerStates.set(playerId, this.deepClone(state))
     }
     
     const snapshot: StateSnapshot = {
-      version: this.versionCounter,
-      hash: this.calculateHash(gameState, copiedPlayerStates),
-      gameState: { ...gameState },
+      version,
+      hash: await this.calculateHash(copiedGameState, copiedPlayerStates),
+      gameState: copiedGameState,
       playerStates: copiedPlayerStates,
       timestamp: Date.now()
     }
     
     this.stateHistory.set(snapshot.version, snapshot)
+    this.cleanupHistory()
     return snapshot
   }
 
@@ -102,6 +120,7 @@ export class StateSynchronizer {
     // Store delta for history
     const deltaKey = `${from.version}-${to.version}`
     this.deltaHistory.set(deltaKey, delta)
+    this.cleanupDeltaHistory()
     
     return delta
   }
@@ -111,13 +130,18 @@ export class StateSynchronizer {
       throw new Error(`Version mismatch: snapshot version ${snapshot.version} does not match delta fromVersion ${delta.fromVersion}`)
     }
     
-    // Create a deep copy of the snapshot
+    // Create a deep copy of the snapshot using structuredClone
     const newSnapshot: StateSnapshot = {
       version: delta.toVersion,
       hash: '',
-      gameState: { ...snapshot.gameState },
-      playerStates: new Map(snapshot.playerStates),
+      gameState: this.deepClone(snapshot.gameState),
+      playerStates: new Map(),
       timestamp: Date.now()
+    }
+    
+    // Deep copy player states
+    for (const [playerId, state] of snapshot.playerStates) {
+      newSnapshot.playerStates.set(playerId, this.deepClone(state))
     }
     
     // Apply each change
@@ -126,7 +150,7 @@ export class StateSynchronizer {
     }
     
     // Recalculate hash
-    newSnapshot.hash = this.calculateHash(newSnapshot.gameState, newSnapshot.playerStates)
+    newSnapshot.hash = await this.calculateHash(newSnapshot.gameState, newSnapshot.playerStates)
     
     return newSnapshot
   }
@@ -135,29 +159,38 @@ export class StateSynchronizer {
     try {
       // Basic structure validation
       if (!snapshot.version || !snapshot.hash || !snapshot.gameState || !snapshot.timestamp) {
+        this.log('State validation failed: missing required fields')
         return false
       }
       
       // Validate game state properties
       if (snapshot.gameState.pot < 0) {
+        this.log('State validation failed: negative pot value')
         return false
       }
       
       // Validate player states
       if (!(snapshot.playerStates instanceof Map)) {
+        this.log('State validation failed: playerStates is not a Map')
         return false
       }
       
       for (const [playerId, playerState] of snapshot.playerStates) {
         if (!playerState.id || playerState.chips < 0) {
+          this.log(`State validation failed: invalid player state for ${playerId}`)
           return false
         }
       }
       
       // Verify hash integrity
-      const calculatedHash = this.calculateHash(snapshot.gameState, snapshot.playerStates)
-      return calculatedHash === snapshot.hash
+      const calculatedHash = await this.calculateHash(snapshot.gameState, snapshot.playerStates)
+      const isValid = calculatedHash === snapshot.hash
+      if (!isValid) {
+        this.log('State validation failed: hash mismatch')
+      }
+      return isValid
     } catch (error) {
+      this.log(`State validation error: ${error instanceof Error ? error.message : 'Unknown error'}`)
       return false
     }
   }
@@ -282,6 +315,9 @@ export class StateSynchronizer {
         action => action.timestamp > clientSnapshot.timestamp
       )
       
+      // Add new action to log and cleanup
+      this.cleanupActionLog()
+      
       return {
         success: true,
         updates: delta,
@@ -375,19 +411,33 @@ export class StateSynchronizer {
   }
 
   // Private helper methods
-  private calculateHash(gameState: GameState, playerStates: Map<string, PlayerState>): string {
+  private async calculateHash(gameState: GameState, playerStates: Map<string, PlayerState>): Promise<string> {
     const stateString = JSON.stringify({
       gameState,
       playerStates: Array.from(playerStates.entries()).sort(([a], [b]) => a.localeCompare(b))
     })
-    // Simple hash function for now - in production, use crypto
-    let hash = 0
-    for (let i = 0; i < stateString.length; i++) {
-      const char = stateString.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash // Convert to 32bit integer
+    
+    // Use Web Crypto API for secure hashing
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const encoder = new TextEncoder()
+      const data = encoder.encode(stateString)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    } else {
+      // Fallback for environments without Web Crypto API
+      // This is still better than the previous simple hash
+      let hash = 0
+      let hash2 = 0
+      for (let i = 0; i < stateString.length; i++) {
+        const char = stateString.charCodeAt(i)
+        hash = ((hash << 5) - hash) + char
+        hash2 = ((hash2 << 3) - hash2) + char
+        hash = hash & hash
+        hash2 = hash2 & hash2
+      }
+      return Math.abs(hash).toString(16) + Math.abs(hash2).toString(16)
     }
-    return Math.abs(hash).toString(16)
   }
 
   private compareObjects(
@@ -396,16 +446,34 @@ export class StateSynchronizer {
     path: string, 
     changes: StateChange[]
   ): void {
+    // Short-circuit for identical references
+    if (oldObj === newObj) return
+    
+    // Check all keys in newObj
     for (const key in newObj) {
       const newPath = `${path}.${key}`
-      const oldValue = oldObj[key]
+      const oldValue = oldObj?.[key]
       const newValue = newObj[key]
       
       if (oldValue !== newValue) {
-        if (typeof newValue === 'object' && newValue !== null && !Array.isArray(newValue)) {
+        // For arrays, do a deep comparison to avoid false positives
+        if (Array.isArray(oldValue) && Array.isArray(newValue)) {
+          if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+            changes.push({ path: newPath, oldValue, newValue })
+          }
+        } else if (typeof newValue === 'object' && newValue !== null && !Array.isArray(newValue)) {
           this.compareObjects(oldValue || {}, newValue, newPath, changes)
         } else {
           changes.push({ path: newPath, oldValue, newValue })
+        }
+      }
+    }
+    
+    // Check for deleted keys
+    if (oldObj) {
+      for (const key in oldObj) {
+        if (!(key in newObj)) {
+          changes.push({ path: `${path}.${key}`, oldValue: oldObj[key], newValue: undefined })
         }
       }
     }
@@ -505,5 +573,57 @@ export class StateSynchronizer {
       size = (toVersion - fromVersion) * 100 // Rough estimate
     }
     return size
+  }
+  
+  // Helper method for atomic version increment
+  private incrementVersion(): number {
+    // In a real distributed system, this would use a more sophisticated
+    // approach like atomic counters or distributed consensus
+    return ++this.versionCounter
+  }
+  
+  // Deep clone helper using structuredClone with fallback
+  private deepClone<T>(obj: T): T {
+    if (typeof structuredClone !== 'undefined') {
+      return structuredClone(obj)
+    }
+    // Fallback for environments without structuredClone
+    return JSON.parse(JSON.stringify(obj))
+  }
+  
+  // Cleanup methods to prevent memory leaks
+  private cleanupHistory(): void {
+    if (this.stateHistory.size > this.options.maxHistorySize) {
+      const sortedVersions = Array.from(this.stateHistory.keys()).sort((a, b) => a - b)
+      const toDelete = sortedVersions.slice(0, sortedVersions.length - this.options.maxHistorySize)
+      for (const version of toDelete) {
+        this.stateHistory.delete(version)
+      }
+    }
+  }
+  
+  private cleanupDeltaHistory(): void {
+    if (this.deltaHistory.size > this.options.maxDeltaHistorySize) {
+      // Delete oldest deltas first
+      const entries = Array.from(this.deltaHistory.entries())
+      const toDelete = entries.slice(0, entries.length - this.options.maxDeltaHistorySize)
+      for (const [key] of toDelete) {
+        this.deltaHistory.delete(key)
+      }
+    }
+  }
+  
+  private cleanupActionLog(): void {
+    if (this.actionLog.length > this.options.maxActionLogSize) {
+      // Keep only the most recent actions
+      this.actionLog = this.actionLog.slice(-this.options.maxActionLogSize)
+    }
+  }
+  
+  // Logging helper
+  private log(message: string): void {
+    if (this.options.enableLogging) {
+      console.log(`[StateSynchronizer] ${message}`)
+    }
   }
 }

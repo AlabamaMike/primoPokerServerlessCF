@@ -39,6 +39,7 @@ export type { ISecurePokerGame, AuditEntry } from './secure-poker-game';
 // State synchronization
 export { StateSynchronizer } from './state-synchronizer';
 export type {
+  StateSynchronizerOptions,
   StateSnapshot,
   StateDelta,
   StateChange,

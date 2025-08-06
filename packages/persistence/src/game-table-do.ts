@@ -130,7 +130,12 @@ export class GameTableDurableObject {
     // Initialize game engines
     this.bettingEngine = new BettingEngine()
     this.deckManager = new DeckManager()
-    this.stateSynchronizer = new StateSynchronizer()
+    this.stateSynchronizer = new StateSynchronizer({
+      maxHistorySize: 50,
+      maxDeltaHistorySize: 100,
+      maxActionLogSize: 200,
+      enableLogging: true
+    })
 
     // Load saved state on first request
     this.initialized = false

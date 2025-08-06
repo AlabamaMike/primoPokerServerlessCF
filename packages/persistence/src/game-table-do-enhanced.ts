@@ -131,7 +131,7 @@ export class EnhancedGameTableDurableObject {
     this.stateSynchronizer = new StateSynchronizer({
       maxHistorySize: 100,
       snapshotInterval: 50,
-      conflictResolution: 'last-write-wins' as ConflictResolutionStrategy,
+      conflictResolution: ConflictResolutionStrategy.TIMESTAMP_FIRST,
     })
 
     // Set up auto-save

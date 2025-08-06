@@ -35,3 +35,19 @@ export type {
 } from './secure-deck-manager';
 export { SecurePokerGame } from './secure-poker-game';
 export type { ISecurePokerGame, AuditEntry } from './secure-poker-game';
+
+// State synchronization
+export { StateSynchronizer } from './state-synchronizer';
+export type {
+  StateSynchronizerOptions,
+  StateSnapshot,
+  StateDelta,
+  StateChange,
+  SyncResult,
+  StateRecovery,
+  PlayerActionRecord,
+  StateConflict,
+  ConflictResolutionStrategy,
+  StateSyncOptions,
+  PlayerState
+} from './state-synchronizer';

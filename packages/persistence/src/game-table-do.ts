@@ -19,7 +19,14 @@ import {
   createWebSocketMessage,
   GameRuleError
 } from '@primo-poker/shared'
-import { PokerGame, BettingEngine, DeckManager } from '@primo-poker/core'
+import { 
+  PokerGame, 
+  BettingEngine, 
+  DeckManager, 
+  StateSynchronizer,
+  StateSnapshot,
+  ConflictResolutionStrategy 
+} from '@primo-poker/core'
 
 export interface PlayerConnection {
   websocket: WebSocket
@@ -79,6 +86,8 @@ export class GameTableDurableObject {
   private durableObjectState: DurableObjectState
   private env: any
   private initialized: boolean = false
+  private stateSynchronizer: StateSynchronizer
+  private currentStateVersion: number = 0
 
   // Constants
   private static readonly MIN_PLAYERS_FOR_GAME = 2
@@ -121,6 +130,12 @@ export class GameTableDurableObject {
     // Initialize game engines
     this.bettingEngine = new BettingEngine()
     this.deckManager = new DeckManager()
+    this.stateSynchronizer = new StateSynchronizer({
+      maxHistorySize: 50,
+      maxDeltaHistorySize: 100,
+      maxActionLogSize: 200,
+      enableLogging: true
+    })
 
     // Load saved state on first request
     this.initialized = false
@@ -658,6 +673,10 @@ export class GameTableDurableObject {
           
         case 'request_state_sync':
           await this.handleStateSync(websocket, payload)
+          break
+          
+        case 'sync_state':
+          await this.handleStateSyncRequest(websocket, payload)
           break
           
         default:
@@ -1846,9 +1865,9 @@ export class GameTableDurableObject {
   private buildMessage(type: string, payload?: any, error?: string): WebSocketMessage {
     if (error) {
       // For error messages, include error in payload
-      return createWebSocketMessage(type, { ...payload, error });
+      return createWebSocketMessage(type, { ...payload, error, stateVersion: this.currentStateVersion });
     }
-    return createWebSocketMessage(type, payload);
+    return createWebSocketMessage(type, { ...payload, stateVersion: this.currentStateVersion });
   }
 
   /**
@@ -2075,5 +2094,57 @@ export class GameTableDurableObject {
     return Array.from(this.state.players.values()).map(player => 
       this.playerToDTO(player, player.id === currentPlayerId)
     )
+  }
+
+  /**
+   * Create a state snapshot for synchronization
+   */
+  private async createStateSnapshot(): Promise<StateSnapshot> {
+    // Convert players map to player states map
+    const playerStates = new Map()
+    for (const [playerId, player] of this.state.players) {
+      playerStates.set(playerId, {
+        id: player.id,
+        username: player.username,
+        chips: player.chips,
+        currentBet: player.currentBet,
+        hasActed: player.hasActed,
+        isFolded: player.isFolded,
+        isAllIn: player.status === PlayerStatus.ALL_IN,
+        position: player.position
+      })
+    }
+    
+    const snapshot = await this.stateSynchronizer.createSnapshot(
+      this.state.gameState || {} as any,
+      playerStates
+    )
+    
+    this.currentStateVersion = snapshot.version
+    return snapshot
+  }
+
+  /**
+   * Handle state sync request from client
+   */
+  private async handleStateSyncRequest(websocket: WebSocket, payload: any): Promise<void> {
+    const { playerId, clientVersion } = payload
+    
+    try {
+      const currentSnapshot = await this.createStateSnapshot()
+      const syncResult = await this.stateSynchronizer.syncState(
+        clientVersion || 0,
+        currentSnapshot,
+        { maxDeltaSize: 5000 }
+      )
+      
+      this.sendMessage(websocket, this.buildMessage('state_sync_response', {
+        syncResult,
+        currentVersion: currentSnapshot.version
+      }))
+    } catch (error) {
+      console.error('State sync error:', error)
+      this.sendError(websocket, 'Failed to sync state')
+    }
   }
 }

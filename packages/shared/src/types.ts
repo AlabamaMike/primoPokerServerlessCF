@@ -443,6 +443,7 @@ export interface WebSocketMessage {
   sequenceId?: number;
   requiresAck?: boolean;
   correlationId?: string;
+  stateVersion?: number;
 }
 
 export interface GameUpdateMessage extends WebSocketMessage {

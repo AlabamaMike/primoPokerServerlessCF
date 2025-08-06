@@ -9,12 +9,12 @@ export class Logger {
     error: 3,
   };
 
-  private readonly config: Required<LoggerConfig>;
+  protected readonly config: Required<LoggerConfig>;
   private readonly piiFilter: DefaultPIIFilter;
   private buffer: LogEntry[] = [];
   private flushingBuffer: LogEntry[] = [];
   private isFlushInProgress = false;
-  private aggregator?: LogAggregator;
+  protected aggregator?: LogAggregator;
 
   constructor(config: LoggerConfig) {
     this.config = {
@@ -94,7 +94,7 @@ export class Logger {
     }
   }
 
-  private log(level: LogLevel, message: string, context?: LogContext, error?: any): void {
+  protected log(level: LogLevel, message: string, context?: LogContext, error?: any): void {
     // Check log level
     if (Logger.LOG_LEVELS[level] < Logger.LOG_LEVELS[this.config.minLevel]) {
       return;
@@ -201,14 +201,14 @@ class ContextualLogger extends Logger {
   private readonly baseContext: LogContext;
 
   constructor(parentLogger: Logger, baseContext: LogContext) {
-    // We need to pass the config, but we'll override all methods
-    super((parentLogger as any).config);
+    // Pass the parent's config to maintain logger behavior
+    super(parentLogger.config);
     this.parentLogger = parentLogger;
     this.baseContext = baseContext;
     
     // Share the same aggregator reference
-    if ((parentLogger as any).aggregator) {
-      this.setAggregator((parentLogger as any).aggregator);
+    if (parentLogger.aggregator) {
+      this.setAggregator(parentLogger.aggregator);
     }
   }
 
@@ -240,6 +240,6 @@ class ContextualLogger extends Logger {
 
   private contextualLog(level: LogLevel, message: string, additionalContext?: LogContext): void {
     const mergedContext = { ...this.baseContext, ...additionalContext };
-    (this.parentLogger as any).log(level, message, mergedContext);
+    this.parentLogger.log(level, message, mergedContext);
   }
 }

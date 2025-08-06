@@ -6,6 +6,44 @@ interface BenchmarkResult {
   ops: number;
   duration: number;
   memoryUsed?: number;
+  percentiles?: {
+    p50: number;
+    p95: number;
+    p99: number;
+  };
+  memoryProfile?: {
+    heapBefore: number;
+    heapAfter: number;
+    heapGrowth: number;
+    external: number;
+    rss: number;
+  };
+}
+
+// Calculate percentiles from array of values
+function calculatePercentiles(values: number[]): { p50: number; p95: number; p99: number } {
+  const sorted = [...values].sort((a, b) => a - b);
+  const p50Index = Math.floor(sorted.length * 0.5);
+  const p95Index = Math.floor(sorted.length * 0.95);
+  const p99Index = Math.floor(sorted.length * 0.99);
+  return {
+    p50: sorted[p50Index] || 0,
+    p95: sorted[p95Index] || 0,
+    p99: sorted[p99Index] || 0
+  };
+}
+
+// Get memory usage
+function getMemoryUsage(): { heap: number; external: number; rss: number } {
+  if (typeof process !== 'undefined' && process.memoryUsage) {
+    const usage = process.memoryUsage();
+    return {
+      heap: usage.heapUsed,
+      external: usage.external,
+      rss: usage.rss
+    };
+  }
+  return { heap: 0, external: 0, rss: 0 };
 }
 
 class MockAggregator implements LogAggregator {
@@ -132,7 +170,9 @@ export class LoggerBenchmark {
     const start1 = performance.now();
     
     for (let i = 0; i < iterations; i++) {
-      const data = testData[i % testData.length];
+      const dataIndex = i % testData.length;
+      const data = testData[dataIndex];
+      if (!data) continue;
       const opStart = performance.now();
       loggerWithPII.info(data.message, data.context);
       latenciesWithPII.push(performance.now() - opStart);
@@ -152,7 +192,9 @@ export class LoggerBenchmark {
     const start2 = performance.now();
     
     for (let i = 0; i < iterations; i++) {
-      const data = testData[i % testData.length];
+      const dataIndex = i % testData.length;
+      const data = testData[dataIndex];
+      if (!data) continue;
       const opStart = performance.now();
       loggerWithoutPII.info(data.message, data.context);
       latenciesWithoutPII.push(performance.now() - opStart);

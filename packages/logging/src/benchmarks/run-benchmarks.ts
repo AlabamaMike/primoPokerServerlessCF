@@ -1,6 +1,7 @@
 import { LoggerBenchmark } from './logger-benchmark';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 interface BenchmarkReport {
   timestamp: string;
@@ -9,6 +10,7 @@ interface BenchmarkReport {
     platform: string;
     arch: string;
     cpus: number;
+    isCI: boolean;
   };
   results: any[];
   baselines?: Record<string, number>;
@@ -17,7 +19,7 @@ interface BenchmarkReport {
 async function runBenchmarks() {
   console.log('🚀 Starting Logger Performance Benchmarks\n');
   console.log(`Environment: Node ${process.version} on ${process.platform} ${process.arch}`);
-  console.log(`CPUs: ${require('os').cpus().length} cores\n`);
+  console.log(`CPUs: ${os.cpus().length} cores\n`);
   
   const benchmark = new LoggerBenchmark();
   const results = await benchmark.runAll();

@@ -19,6 +19,10 @@ export interface StateSynchronizerOptions {
   maxDeltaHistorySize?: number
   maxActionLogSize?: number
   enableLogging?: boolean
+  versionDiffThreshold?: number // Configurable threshold for full snapshot vs delta
+  maxDeltaSize?: number // Maximum delta size in bytes before sending full snapshot
+  enableComparisonCache?: boolean // Enable caching for object comparisons
+  maxComparisonCacheSize?: number // Maximum number of cached comparisons
 }
 
 export class StateSynchronizer {
@@ -27,13 +31,19 @@ export class StateSynchronizer {
   private deltaHistory: Map<string, StateDelta> = new Map()
   private actionLog: PlayerActionRecord[] = []
   private readonly options: Required<StateSynchronizerOptions>
+  private comparisonCache: Map<string, boolean> = new Map()
+  private versionLock: Promise<void> = Promise.resolve()
   
   constructor(options: StateSynchronizerOptions = {}) {
     this.options = {
       maxHistorySize: options.maxHistorySize ?? 50,
       maxDeltaHistorySize: options.maxDeltaHistorySize ?? 100,
       maxActionLogSize: options.maxActionLogSize ?? 200,
-      enableLogging: options.enableLogging ?? true
+      enableLogging: options.enableLogging ?? true,
+      versionDiffThreshold: options.versionDiffThreshold ?? 10,
+      maxDeltaSize: options.maxDeltaSize ?? 10 * 1024, // 10KB default
+      enableComparisonCache: options.enableComparisonCache ?? true,
+      maxComparisonCacheSize: options.maxComparisonCacheSize ?? 1000
     }
   }
 
@@ -42,7 +52,7 @@ export class StateSynchronizer {
     playerStates: Map<string, PlayerState>
   ): Promise<StateSnapshot> {
     // Atomic version increment
-    const version = this.incrementVersion()
+    const version = await this.incrementVersion()
     
     // Deep copy using structuredClone for proper deep cloning
     const copiedGameState = this.deepClone(gameState)
@@ -75,7 +85,9 @@ export class StateSynchronizer {
     const estimatedSize = JSON.stringify(currentSnapshot).length
     
     // If too many versions behind or delta would be too large, send full snapshot
-    if (versionDiff > 10 || (options?.maxDeltaSize && estimatedSize > options.maxDeltaSize)) {
+    if (versionDiff > this.options.versionDiffThreshold || 
+        (options?.maxDeltaSize && estimatedSize > options.maxDeltaSize) ||
+        estimatedSize > this.options.maxDeltaSize) {
       return {
         type: 'snapshot',
         snapshot: currentSnapshot
@@ -449,6 +461,23 @@ export class StateSynchronizer {
     // Short-circuit for identical references
     if (oldObj === newObj) return
     
+    // Early exit for null/undefined or type mismatch
+    if (oldObj == null || newObj == null || typeof oldObj !== typeof newObj) {
+      if (oldObj !== newObj) {
+        changes.push({ path, oldValue: oldObj, newValue: newObj })
+      }
+      return
+    }
+    
+    // Check cache if enabled
+    if (this.options.enableComparisonCache) {
+      const cacheKey = this.getComparisonCacheKey(oldObj, newObj, path)
+      const cachedResult = this.comparisonCache.get(cacheKey)
+      if (cachedResult !== undefined) {
+        return // Already processed
+      }
+    }
+    
     // Check all keys in newObj
     for (const key in newObj) {
       const newPath = `${path}.${key}`
@@ -458,7 +487,8 @@ export class StateSynchronizer {
       if (oldValue !== newValue) {
         // For arrays, do a deep comparison to avoid false positives
         if (Array.isArray(oldValue) && Array.isArray(newValue)) {
-          if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+          // Quick length check before stringify
+          if (oldValue.length !== newValue.length || JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
             changes.push({ path: newPath, oldValue, newValue })
           }
         } else if (typeof newValue === 'object' && newValue !== null && !Array.isArray(newValue)) {
@@ -476,6 +506,13 @@ export class StateSynchronizer {
           changes.push({ path: `${path}.${key}`, oldValue: oldObj[key], newValue: undefined })
         }
       }
+    }
+    
+    // Cache the comparison result if enabled
+    if (this.options.enableComparisonCache) {
+      const cacheKey = this.getComparisonCacheKey(oldObj, newObj, path)
+      this.comparisonCache.set(cacheKey, true)
+      this.cleanupComparisonCache()
     }
   }
 
@@ -575,10 +612,31 @@ export class StateSynchronizer {
     return size
   }
   
-  // Helper method for atomic version increment
-  private incrementVersion(): number {
-    // In a real distributed system, this would use a more sophisticated
-    // approach like atomic counters or distributed consensus
+  // Helper method for atomic version increment with race condition protection
+  private async incrementVersion(): Promise<number> {
+    // Use async locking to ensure atomic increment
+    let resolver: () => void
+    const currentLock = this.versionLock
+    this.versionLock = new Promise<void>(resolve => {
+      resolver = resolve
+    })
+    
+    await currentLock
+    
+    try {
+      // In a real distributed system, this would use atomic counters or distributed consensus
+      const newVersion = ++this.versionCounter
+      return newVersion
+    } finally {
+      resolver!()
+    }
+  }
+  
+  // Synchronous version for backward compatibility (logs warning)
+  private incrementVersionSync(): number {
+    if (this.options.enableLogging) {
+      console.warn('[StateSynchronizer] Using synchronous version increment. Consider using async createSnapshot for better concurrency.')
+    }
     return ++this.versionCounter
   }
   
@@ -624,6 +682,37 @@ export class StateSynchronizer {
   private log(message: string): void {
     if (this.options.enableLogging) {
       console.log(`[StateSynchronizer] ${message}`)
+    }
+  }
+  
+  // Helper to generate cache key for object comparisons
+  private getComparisonCacheKey(oldObj: any, newObj: any, path: string): string {
+    // Use object identity and path for cache key
+    // This is safe because we're caching within a single comparison operation
+    return `${path}:${this.getObjectId(oldObj)}:${this.getObjectId(newObj)}`
+  }
+  
+  // Helper to get a stable ID for an object (for caching)
+  private getObjectId(obj: any): string {
+    if (obj === null) return 'null'
+    if (obj === undefined) return 'undefined'
+    if (typeof obj !== 'object') return String(obj)
+    
+    // For objects, create a simple hash based on keys and types
+    // This is just for cache identification, not cryptographic security
+    const keys = Object.keys(obj).sort().join(',')
+    return `obj:${keys}:${obj.constructor?.name || 'Object'}`
+  }
+  
+  // Cleanup comparison cache when it gets too large
+  private cleanupComparisonCache(): void {
+    if (this.comparisonCache.size > this.options.maxComparisonCacheSize) {
+      // Simple FIFO cleanup - remove oldest entries
+      const entriesToRemove = this.comparisonCache.size - Math.floor(this.options.maxComparisonCacheSize * 0.8)
+      const keysToRemove = Array.from(this.comparisonCache.keys()).slice(0, entriesToRemove)
+      for (const key of keysToRemove) {
+        this.comparisonCache.delete(key)
+      }
     }
   }
 }

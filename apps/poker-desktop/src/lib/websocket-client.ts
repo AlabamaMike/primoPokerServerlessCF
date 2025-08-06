@@ -82,8 +82,12 @@ export interface WebSocketClientOptions {
   onError?: (error: Error) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  onReconnectAttempt?: (attempt: number) => void;
   reconnectAttempts?: number;
   reconnectDelay?: number;
+  maxReconnectDelay?: number;
+  reconnectBackoffMultiplier?: number;
+  enableExponentialBackoff?: boolean;
 }
 
 export class WebSocketClient {
@@ -94,17 +98,62 @@ export class WebSocketClient {
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private isConnecting = false;
   private isDestroyed = false;
+  private isOnline = true;
+  private onlineListener: (() => void) | null = null;
+  private offlineListener: (() => void) | null = null;
+  private onReconnectAttempt?: (attempt: number) => void;
 
   constructor(options: WebSocketClientOptions) {
     this.options = {
       reconnectAttempts: 5,
-      reconnectDelay: 3000,
+      reconnectDelay: 1000,
+      maxReconnectDelay: 30000,
+      reconnectBackoffMultiplier: 1.5,
+      enableExponentialBackoff: true,
       ...options
     };
+    
+    this.onReconnectAttempt = options.onReconnectAttempt;
+    this.setupNetworkListeners();
+  }
+  
+  private setupNetworkListeners(): void {
+    if (typeof window !== 'undefined') {
+      this.onlineListener = () => {
+        console.log('Network online detected');
+        this.isOnline = true;
+        if (!this.isConnected && !this.isConnecting && !this.isDestroyed) {
+          this.reconnectCount = 0;
+          this.connect();
+        }
+      };
+      
+      this.offlineListener = () => {
+        console.log('Network offline detected');
+        this.isOnline = false;
+        if (this.reconnectTimeout) {
+          clearTimeout(this.reconnectTimeout);
+          this.reconnectTimeout = null;
+        }
+      };
+      
+      window.addEventListener('online', this.onlineListener);
+      window.addEventListener('offline', this.offlineListener);
+      
+      // navigator.onLine is not always reliable but provides a basic check
+      // In a production app, consider implementing a more robust connectivity check
+      this.isOnline = navigator.onLine;
+    }
   }
 
   async connect(): Promise<void> {
     if (this.isConnecting || this.isDestroyed) return;
+    
+    if (!this.isOnline) {
+      console.log('Cannot connect: Network is offline');
+      this.options.onError?.(new Error('Network is offline'));
+      return;
+    }
     
     this.isConnecting = true;
     
@@ -191,11 +240,28 @@ export class WebSocketClient {
   private scheduleReconnect(): void {
     if (this.isDestroyed) return;
     
+    if (!this.isOnline) {
+      console.log('Skipping reconnect: Network is offline');
+      return;
+    }
+    
     if (this.reconnectCount < (this.options.reconnectAttempts || 5)) {
       this.reconnectCount++;
-      const delay = this.options.reconnectDelay || 3000;
       
-      console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectCount})`);
+      let delay = this.options.reconnectDelay || 1000;
+      
+      if (this.options.enableExponentialBackoff) {
+        const multiplier = this.options.reconnectBackoffMultiplier || 1.5;
+        delay = Math.min(
+          delay * Math.pow(multiplier, this.reconnectCount - 1),
+          this.options.maxReconnectDelay || 30000
+        );
+      }
+      
+      console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectCount}/${this.options.reconnectAttempts})`);
+      
+      // Notify about reconnection attempt
+      this.onReconnectAttempt?.(this.reconnectCount);
       
       this.reconnectTimeout = setTimeout(() => {
         this.connect();
@@ -287,6 +353,18 @@ export class WebSocketClient {
       this.ws.close(1000, 'Client disconnecting');
       this.ws = null;
     }
+    
+    // Clean up network listeners
+    if (typeof window !== 'undefined') {
+      if (this.onlineListener) {
+        window.removeEventListener('online', this.onlineListener);
+        this.onlineListener = null;
+      }
+      if (this.offlineListener) {
+        window.removeEventListener('offline', this.offlineListener);
+        this.offlineListener = null;
+      }
+    }
   }
 
   get isConnected(): boolean {
@@ -303,5 +381,9 @@ export class WebSocketClient {
       case WebSocket.CLOSED: return 'disconnected';
       default: return 'unknown';
     }
+  }
+  
+  get reconnectAttempts(): number {
+    return this.reconnectCount;
   }
 }

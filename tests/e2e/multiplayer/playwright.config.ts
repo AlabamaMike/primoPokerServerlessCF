@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: '.',
   
   // Test timeout
-  timeout: 5 * 60 * 1000, // 5 minutes per test
+  timeout: 2 * 60 * 1000, // 2 minutes per test
   
   // Expect timeout
   expect: {
@@ -43,7 +43,7 @@ export default defineConfig({
   retries: 1,
 
   // Run tests in parallel
-  workers: 1, // Single worker for multiplayer coordination
+  workers: process.env.CI ? 2 : 1, // Allow 2 workers in CI, single worker locally
   
   // Global setup/teardown
   globalSetup: require.resolve('./global-setup.ts'),

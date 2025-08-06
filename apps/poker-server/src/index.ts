@@ -43,13 +43,13 @@ export default {
     const logLevel = env.ENVIRONMENT === 'production' ? LogLevel.INFO : LogLevel.DEBUG;
     logger.setLogLevel(logLevel);
     
-    // Configure error reporting
-    errorReporter.options = {
+    // Configure error reporting (getInstance will handle options properly)
+    errorReporter.getInstance({
       analyticsEndpoint: env.ANALYTICS,
       kvNamespace: env.SESSION_STORE, // Using SESSION_STORE for error storage
       environment: env.ENVIRONMENT,
       samplingRate: env.ENVIRONMENT === 'production' ? 0.1 : 1.0, // 10% sampling in production
-    };
+    });
     
     // Initialize services
     if (!apiRoutes) {
@@ -176,7 +176,7 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
   const token = url.searchParams.get('token');
   const tableId = url.searchParams.get('tableId');
 
-  console.log('[WS] Upgrade request received:', {
+  logger.info('[WS] Upgrade request received', {
     url: url.toString(),
     hasToken: !!token,
     tokenLength: token?.length,
@@ -187,18 +187,18 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
 
   // Validate required parameters
   if (!token) {
-    console.error('[WS] Missing token parameter');
+    logger.error('[WS] Missing token parameter');
     return new Response('Missing token parameter', { status: 400 });
   }
 
   if (!tableId) {
-    console.error('[WS] Missing tableId parameter');
+    logger.error('[WS] Missing tableId parameter');
     return new Response('Missing tableId parameter', { status: 400 });
   }
 
   // Validate tableId is not a special route
   if (tableId === 'lobby' || tableId === 'undefined' || tableId === 'null') {
-    console.error('[WS] Invalid tableId:', tableId);
+    logger.error('[WS] Invalid tableId', undefined, { tableId });
     return new Response(`Invalid tableId: ${tableId}. WebSocket connections are only supported for game tables.`, { status: 400 });
   }
 
@@ -206,7 +206,7 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
   let decodedPayload: any;
   
   try {
-    console.log('[WS] Validating token for table:', tableId);
+    logger.info('[WS] Validating token for table', { tableId });
     
     // Initialize authentication manager
     const authManager = new (await import('@primo-poker/security')).AuthenticationManager(env.JWT_SECRET);
@@ -215,18 +215,18 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     const verifyResult = await authManager.verifyAccessToken(token);
     
     if (!verifyResult.valid || !verifyResult.payload) {
-      console.error('[WS] Token verification failed:', verifyResult.error);
+      logger.error('[WS] Token verification failed', undefined, { error: verifyResult.error });
       return new Response(verifyResult.error || 'Invalid token', { status: 401 });
     }
     
     decodedPayload = verifyResult.payload;
-    console.log('[WS] Token verified for user:', decodedPayload.userId, 'username:', decodedPayload.username);
+    logger.info('[WS] Token verified for user', { userId: decodedPayload.userId, username: decodedPayload.username });
 
     // Get or create GameTable Durable Object
     const gameTableId = env.GAME_TABLES.idFromName(tableId);
     const gameTable = env.GAME_TABLES.get(gameTableId);
 
-    console.log('[WS] Forwarding to GameTable Durable Object:', gameTableId.toString());
+    logger.info('[WS] Forwarding to GameTable Durable Object', { gameTableId: gameTableId.toString() });
 
     // Forward WebSocket upgrade request to the GameTable Durable Object
     // We need to preserve the WebSocket upgrade headers and add authentication info
@@ -247,7 +247,7 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
       headers
     });
 
-    console.log('[WS] Forwarding request to Durable Object with headers:', {
+    logger.info('[WS] Forwarding request to Durable Object with headers', {
       playerId: decodedPayload.userId,
       username: decodedPayload.username,
       tableId
@@ -256,13 +256,13 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
     // Forward to Durable Object - it will handle the WebSocket upgrade
     const response = await gameTable.fetch(websocketRequest);
     
-    console.log('[WS] Durable Object response status:', response.status);
+    logger.info('[WS] Durable Object response status', { status: response.status });
     
     // Return the response from the Durable Object
     return response;
 
   } catch (error) {
-    console.error('[WS] WebSocket upgrade error:', error);
+    logger.error('[WS] WebSocket upgrade error', error as Error);
     return new Response('Authentication failed', { status: 401 });
   }
 }
@@ -287,22 +287,22 @@ async function processTournamentMessage(message: any, env: Env): Promise<void> {
 
 async function startTournament(tournamentId: string, env: Env): Promise<void> {
   // Implementation for starting tournament
-  console.log(`Starting tournament: ${tournamentId}`);
+  logger.info('Starting tournament', { tournamentId });
 }
 
 async function advanceBlinds(tournamentId: string, env: Env): Promise<void> {
   // Implementation for advancing blind levels
-  console.log(`Advancing blinds for tournament: ${tournamentId}`);
+  logger.info('Advancing blinds for tournament', { tournamentId });
 }
 
 async function eliminatePlayer(tournamentId: string, playerId: string, env: Env): Promise<void> {
   // Implementation for player elimination
-  console.log(`Eliminating player ${playerId} from tournament: ${tournamentId}`);
+  logger.info('Eliminating player from tournament', { playerId, tournamentId });
 }
 
 async function finishTournament(tournamentId: string, env: Env): Promise<void> {
   // Implementation for finishing tournament
-  console.log(`Finishing tournament: ${tournamentId}`);
+  logger.info('Finishing tournament', { tournamentId });
 }
 
 // Maintenance functions
@@ -337,7 +337,7 @@ async function cleanupOldHandHistory(env: Env): Promise<void> {
       }
     }
   } catch (error) {
-    console.error('Hand history cleanup error:', error);
+    logger.error('Hand history cleanup error', error as Error);
   }
 }
 
@@ -364,7 +364,7 @@ async function runDailyMaintenance(env: Env): Promise<void> {
       });
     }
   } catch (error) {
-    console.error('Daily maintenance error:', error);
+    logger.error('Daily maintenance error', error as Error);
   }
 }
 

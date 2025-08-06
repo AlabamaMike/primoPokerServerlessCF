@@ -131,6 +131,7 @@ export class Logger {
       try {
         handler(entry);
       } catch (handlerError) {
+        // Fallback to console.error for handler errors to avoid infinite recursion
         console.error('Log handler error:', handlerError);
       }
     });

@@ -1,19 +1,19 @@
 import { MetricsCollector } from '@primo-poker/persistence';
-import { RandomUtils } from '@primo-poker/shared';
+import { RandomUtils, WorkerEnvironment } from '@primo-poker/shared';
 
-export type Middleware = (request: Request, env: any, next: (request: Request, env: any) => Promise<Response>) => Promise<Response>;
+export type Middleware = (request: Request, env: WorkerEnvironment, next: (request: Request, env: WorkerEnvironment) => Promise<Response>) => Promise<Response>;
 
 export class PerformanceMonitor {
   private metricsCollector?: MetricsCollector;
 
-  middleware: Middleware = async (request: Request, env: any, next: (request: Request, env: any) => Promise<Response>): Promise<Response> => {
+  middleware: Middleware = async (request: Request, env: WorkerEnvironment, next: (request: Request, env: WorkerEnvironment) => Promise<Response>): Promise<Response> => {
     const startTime = Date.now();
     const url = new URL(request.url);
     const path = url.pathname;
     
     // Initialize metrics collector if available
     if (env.DB && env.METRICS_NAMESPACE && !this.metricsCollector) {
-      this.metricsCollector = new MetricsCollector(env.DB, env.METRICS_NAMESPACE);
+      this.metricsCollector = new MetricsCollector(env.DB, env.METRICS_NAMESPACE as KVNamespace);
     }
 
     // Add or preserve correlation ID
@@ -78,8 +78,24 @@ export class PerformanceMonitor {
         timestamp: Date.now(),
       });
 
-      // Re-throw the error
-      throw error;
+      // Return error response instead of re-throwing
+      const errorResponse = new Response(
+        JSON.stringify({
+          error: 'Internal Server Error',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          correlationId,
+        }),
+        {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Response-Time': `${responseTime}ms`,
+            'X-Correlation-ID': correlationId,
+          },
+        }
+      );
+
+      return errorResponse;
     }
   };
 

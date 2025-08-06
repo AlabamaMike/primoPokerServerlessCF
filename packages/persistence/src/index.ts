@@ -42,3 +42,11 @@ export type {
   DurableObjectHealthMetric, 
   MetricsSummary 
 } from './monitoring/metrics';
+export { 
+  METRICS_TTL, 
+  TIME_WINDOWS, 
+  PERFORMANCE_THRESHOLDS, 
+  SAMPLING_RATES,
+  FLUSH_INTERVALS,
+  PERCENTILES 
+} from './monitoring/constants';

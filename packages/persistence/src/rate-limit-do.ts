@@ -5,6 +5,9 @@
  * Uses sliding window algorithm for accurate rate limiting.
  */
 
+import { logger } from '@primo-poker/core';
+import { WorkerEnvironment } from '@primo-poker/shared';
+
 export interface RateLimitRequest {
   key: string;
   limit: number;
@@ -26,11 +29,11 @@ interface RateLimitRecord {
 
 export class RateLimitDurableObject {
   private state: DurableObjectState;
-  private env: any;
+  private env: WorkerEnvironment;
   private records: Map<string, RateLimitRecord> = new Map();
   private metrics: Map<string, { hits: number; blocked: number }> = new Map();
   
-  constructor(state: DurableObjectState, env: any) {
+  constructor(state: DurableObjectState, env: WorkerEnvironment) {
     this.state = state;
     this.env = env;
   }
@@ -92,7 +95,7 @@ export class RateLimitDurableObject {
             { expirationTtl: 3600 } // 1 hour
           );
         } catch (error) {
-          console.error('Failed to record rate limit metric:', error);
+          logger.error('Failed to record rate limit metric', error as Error);
         }
       }
 

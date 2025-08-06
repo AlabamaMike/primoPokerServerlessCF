@@ -1,5 +1,6 @@
-import { ApiResponse } from '@primo-poker/shared';
+import { ApiResponse, WorkerEnvironment } from '@primo-poker/shared';
 import { MetricsCollector } from '@primo-poker/persistence';
+import { logger } from '@primo-poker/core';
 
 export interface HealthCheckResult {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -49,9 +50,9 @@ export interface ServiceHealth {
 export class HealthChecker {
   private metricsCollector?: MetricsCollector;
 
-  constructor(private env: any) {
+  constructor(private env: WorkerEnvironment) {
     if (env.DB && env.METRICS_NAMESPACE) {
-      this.metricsCollector = new MetricsCollector(env.DB, env.METRICS_NAMESPACE);
+      this.metricsCollector = new MetricsCollector(env.DB, env.METRICS_NAMESPACE as KVNamespace);
     }
   }
 
@@ -76,9 +77,11 @@ export class HealthChecker {
       overallStatus = 'degraded';
     }
 
-    const websocketUrl = this.env.ENVIRONMENT === 'production' 
-      ? 'wss://primo-poker-server.alabamamike.workers.dev'
-      : 'ws://localhost:8787';
+    const websocketUrl = this.env.WEBSOCKET_URL || (
+      this.env.ENVIRONMENT === 'production' 
+        ? 'wss://primo-poker-server.alabamamike.workers.dev'
+        : 'ws://localhost:8787'
+    );
 
     const totalResponseTime = Date.now() - startTime;
 
@@ -273,7 +276,7 @@ export class HealthChecker {
         p99ResponseTime: summary.p99ResponseTime || 0,
       };
     } catch (error) {
-      console.error('Failed to get metrics:', error);
+      logger.error('Failed to get metrics', error as Error);
       return undefined;
     }
   }

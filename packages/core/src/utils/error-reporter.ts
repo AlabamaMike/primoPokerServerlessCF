@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import type { AnalyticsEngineDataset, KVNamespace } from '@cloudflare/workers-types';
 
 export interface ErrorReport {
   timestamp: string;
@@ -44,8 +45,8 @@ export class ErrorReporter {
     if (!ErrorReporter.instance) {
       ErrorReporter.instance = new ErrorReporter(options);
     } else if (options) {
-      // Update options if provided
-      ErrorReporter.instance.options = { ...ErrorReporter.instance.options, ...options };
+      // Create new instance with updated options instead of mutating
+      ErrorReporter.instance = new ErrorReporter({ ...ErrorReporter.instance.options, ...options });
     }
     return ErrorReporter.instance;
   }
@@ -81,13 +82,11 @@ export class ErrorReporter {
     const errorId = this.generateErrorId();
     const severity = this.determineSeverity(error);
 
-    return {
+    const report: ErrorReport = {
       timestamp: new Date().toISOString(),
       errorId,
       errorType: error?.name || 'UnknownError',
       message: error?.message || String(error),
-      stack: error?.stack,
-      context: this.sanitizeContext(context),
       severity,
       userImpact: this.determineUserImpact(error),
       metadata: {
@@ -95,6 +94,17 @@ export class ErrorReporter {
         ...this.extractMetadata(error),
       },
     };
+
+    if (error?.stack) {
+      report.stack = error.stack;
+    }
+
+    const sanitizedContext = this.sanitizeContext(context);
+    if (sanitizedContext) {
+      report.context = sanitizedContext;
+    }
+
+    return report;
   }
 
   private generateErrorId(): string {

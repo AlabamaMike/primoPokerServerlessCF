@@ -569,3 +569,6 @@ export function createWebSocketMessage<T>(
     ...options,
   };
 }
+
+// Re-export environment types
+export * from './types/environment';

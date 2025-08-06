@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { PerformanceMonitor } from '../middleware/performance-monitor';
-import { MetricsCollector } from '../../persistence/src/monitoring/metrics';
+import { MetricsCollector } from '@primo-poker/persistence';
 
 // Mock the MetricsCollector
-jest.mock('../../persistence/src/monitoring/metrics');
+jest.mock('@primo-poker/persistence', () => ({
+  ...jest.requireActual('@primo-poker/persistence'),
+  MetricsCollector: jest.fn()
+}));
 
 describe('Performance Monitor Middleware', () => {
   let performanceMonitor: PerformanceMonitor;

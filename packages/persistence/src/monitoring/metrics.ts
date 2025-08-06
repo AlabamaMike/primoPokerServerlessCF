@@ -1,4 +1,6 @@
 import { D1Database } from '@cloudflare/workers-types';
+import { METRICS_TTL, TIME_WINDOWS, PERFORMANCE_THRESHOLDS, PERCENTILES } from './constants';
+import { logger } from '@primo-poker/core';
 
 export interface RequestMetric {
   method: string;
@@ -61,7 +63,7 @@ export class MetricsCollector {
       // Store in KV for quick access (with TTL)
       const key = `request:${metric.path}:${metric.timestamp}`;
       await this.kv.put(key, JSON.stringify(metric), {
-        expirationTtl: 86400, // 24 hours
+        expirationTtl: METRICS_TTL.REQUEST,
       });
 
       // Also store aggregated counts
@@ -69,10 +71,10 @@ export class MetricsCollector {
       const currentCount = await this.kv.get(countKey);
       const newCount = (currentCount ? parseInt(currentCount) : 0) + 1;
       await this.kv.put(countKey, newCount.toString(), {
-        expirationTtl: 3600, // 1 hour
+        expirationTtl: METRICS_TTL.RESPONSE_TIME,
       });
     } catch (error) {
-      console.error('Failed to record request metric:', error);
+      logger.error('Failed to record request metric', error as Error);
     }
   }
 
@@ -81,18 +83,18 @@ export class MetricsCollector {
       const metric: ResponseTimeMetric = {
         responseTime,
         path,
-        slow: responseTime > 1000, // Mark as slow if > 1 second
+        slow: responseTime > PERFORMANCE_THRESHOLDS.SLOW_REQUEST_MS,
       };
 
       const key = `response_time:${path}:${Date.now()}`;
       await this.kv.put(key, JSON.stringify(metric), {
-        expirationTtl: 3600, // 1 hour
+        expirationTtl: METRICS_TTL.RESPONSE_TIME,
       });
 
       // Store for percentile calculation
       await this.updateResponseTimeStats(path, responseTime);
     } catch (error) {
-      console.error('Failed to record response time:', error);
+      logger.error('Failed to record response time', error as Error);
     }
   }
 
@@ -107,7 +109,7 @@ export class MetricsCollector {
 
       const key = `error:${metric.path}:${metric.timestamp}`;
       await this.kv.put(key, JSON.stringify(metric), {
-        expirationTtl: 86400, // 24 hours
+        expirationTtl: METRICS_TTL.REQUEST,
       });
 
       // Update error count
@@ -115,10 +117,10 @@ export class MetricsCollector {
       const currentCount = await this.kv.get(countKey);
       const newCount = (currentCount ? parseInt(currentCount) : 0) + 1;
       await this.kv.put(countKey, newCount.toString(), {
-        expirationTtl: 3600, // 1 hour
+        expirationTtl: METRICS_TTL.RESPONSE_TIME,
       });
     } catch (error) {
-      console.error('Failed to record error metric:', error);
+      logger.error('Failed to record error metric', error as Error);
     }
   }
 
@@ -126,10 +128,10 @@ export class MetricsCollector {
     try {
       const key = `rate_limit:${metric.clientId}:${metric.timestamp}`;
       await this.kv.put(key, JSON.stringify(metric), {
-        expirationTtl: 3600, // 1 hour
+        expirationTtl: METRICS_TTL.RATE_LIMIT,
       });
     } catch (error) {
-      console.error('Failed to record rate limit metric:', error);
+      logger.error('Failed to record rate limit metric', error as Error);
     }
   }
 
@@ -137,17 +139,17 @@ export class MetricsCollector {
     try {
       const key = `do_health:${metric.objectName}:${metric.instanceId}:${metric.timestamp}`;
       await this.kv.put(key, JSON.stringify(metric), {
-        expirationTtl: 300, // 5 minutes
+        expirationTtl: METRICS_TTL.HEALTH_CHECK,
       });
     } catch (error) {
-      console.error('Failed to record Durable Object health:', error);
+      logger.error('Failed to record Durable Object health', error as Error);
     }
   }
 
   async getAggregatedRequests(): Promise<Record<string, number>> {
     const aggregated: Record<string, number> = {};
     const now = Date.now();
-    const oneMinuteAgo = now - 60000;
+    const oneMinuteAgo = now - TIME_WINDOWS.ONE_MINUTE;
 
     try {
       // List all request count keys from the last minute
@@ -168,14 +170,14 @@ export class MetricsCollector {
         }
       }
     } catch (error) {
-      console.error('Failed to get aggregated requests:', error);
+      logger.error('Failed to get aggregated requests', error as Error);
     }
 
     return aggregated;
   }
 
   async getRequestRate(window: '1m' | '5m' | '15m'): Promise<number> {
-    const windowMs = window === '1m' ? 60000 : window === '5m' ? 300000 : 900000;
+    const windowMs = window === '1m' ? TIME_WINDOWS.ONE_MINUTE : window === '5m' ? TIME_WINDOWS.FIVE_MINUTES : TIME_WINDOWS.FIFTEEN_MINUTES;
     const now = Date.now();
     const startTime = now - windowMs;
     let totalRequests = 0;
@@ -195,7 +197,7 @@ export class MetricsCollector {
         }
       }
     } catch (error) {
-      console.error('Failed to get request rate:', error);
+      logger.error('Failed to get request rate', error as Error);
     }
 
     return totalRequests / (windowMs / 60000); // Convert to requests per minute
@@ -214,7 +216,7 @@ export class MetricsCollector {
         p99: stats.p99 || 0,
       };
     } catch (error) {
-      console.error('Failed to get response time percentiles:', error);
+      logger.error('Failed to get response time percentiles', error as Error);
       return { p50: 0, p95: 0, p99: 0 };
     }
   }
@@ -237,7 +239,7 @@ export class MetricsCollector {
         }
       }
     } catch (error) {
-      console.error('Failed to get slow requests:', error);
+      logger.error('Failed to get slow requests', error as Error);
     }
 
     return slowRequests;
@@ -246,7 +248,7 @@ export class MetricsCollector {
   async getErrorRate(path?: string): Promise<number> {
     try {
       const now = Date.now();
-      const oneMinuteAgo = now - 60000;
+      const oneMinuteAgo = now - TIME_WINDOWS.ONE_MINUTE;
       let totalRequests = 0;
       let totalErrors = 0;
 
@@ -256,7 +258,10 @@ export class MetricsCollector {
       // Get request counts
       const requestList = await this.kv.list({ prefix: requestPrefix });
       for (const key of requestList.keys) {
-        const timestamp = parseInt(key.name.split(':').pop()!) * 60000;
+        const parts = key.name.split(':');
+        const timestampStr = parts[parts.length - 1];
+        if (!timestampStr) continue;
+        const timestamp = parseInt(timestampStr) * 60000;
         if (timestamp >= oneMinuteAgo) {
           const count = await this.kv.get(key.name);
           if (count) totalRequests += parseInt(count);
@@ -266,7 +271,10 @@ export class MetricsCollector {
       // Get error counts
       const errorList = await this.kv.list({ prefix: errorPrefix });
       for (const key of errorList.keys) {
-        const timestamp = parseInt(key.name.split(':').pop()!) * 60000;
+        const parts = key.name.split(':');
+        const timestampStr = parts[parts.length - 1];
+        if (!timestampStr) continue;
+        const timestamp = parseInt(timestampStr) * 60000;
         if (timestamp >= oneMinuteAgo) {
           const count = await this.kv.get(key.name);
           if (count) totalErrors += parseInt(count);
@@ -275,7 +283,7 @@ export class MetricsCollector {
 
       return totalRequests > 0 ? totalErrors / totalRequests : 0;
     } catch (error) {
-      console.error('Failed to get error rate:', error);
+      logger.error('Failed to get error rate', error as Error);
       return 0;
     }
   }
@@ -295,7 +303,7 @@ export class MetricsCollector {
         }
       }
     } catch (error) {
-      console.error('Failed to get errors by type:', error);
+      logger.error('Failed to get errors by type', error as Error);
     }
 
     return errorsByType;
@@ -304,7 +312,7 @@ export class MetricsCollector {
   async getRateLimitStats(): Promise<{ limitRate: number; topLimitedClients: string[] }> {
     try {
       const now = Date.now();
-      const oneMinuteAgo = now - 60000;
+      const oneMinuteAgo = now - TIME_WINDOWS.ONE_MINUTE;
       let totalAttempts = 0;
       let limitedAttempts = 0;
       const clientCounts: Record<string, number> = {};
@@ -334,7 +342,7 @@ export class MetricsCollector {
         topLimitedClients,
       };
     } catch (error) {
-      console.error('Failed to get rate limit stats:', error);
+      logger.error('Failed to get rate limit stats', error as Error);
       return { limitRate: 0, topLimitedClients: [] };
     }
   }
@@ -380,7 +388,7 @@ export class MetricsCollector {
         summary[objectName].healthRate = total > 0 ? summary[objectName].healthyCount / total : 0;
       }
     } catch (error) {
-      console.error('Failed to get Durable Object health summary:', error);
+      logger.error('Failed to get Durable Object health summary', error as Error);
     }
 
     return summary;
@@ -414,7 +422,6 @@ export class MetricsCollector {
   async cleanupOldMetrics(): Promise<void> {
     // This would typically be implemented as a scheduled job
     // For now, metrics are auto-expired using KV TTL
-    console.log('Metrics cleanup relies on KV TTL for automatic expiration');
   }
 
   private async updateResponseTimeStats(path: string, responseTime: number): Promise<void> {
@@ -425,21 +432,21 @@ export class MetricsCollector {
         lastUpdated: 0,
       };
 
-      // Keep last 100 response times for percentile calculation
+      // Keep last N response times for percentile calculation
       stats.times.push(responseTime);
-      if (stats.times.length > 100) {
-        stats.times = stats.times.slice(-100);
+      if (stats.times.length > PERFORMANCE_THRESHOLDS.MAX_RESPONSE_TIMES) {
+        stats.times = stats.times.slice(-PERFORMANCE_THRESHOLDS.MAX_RESPONSE_TIMES);
       }
 
       // Calculate percentiles
       const sorted = [...stats.times].sort((a, b) => a - b);
-      stats.p50 = sorted[Math.floor(sorted.length * 0.5)];
-      stats.p95 = sorted[Math.floor(sorted.length * 0.95)];
-      stats.p99 = sorted[Math.floor(sorted.length * 0.99)];
+      stats.p50 = sorted[Math.floor(sorted.length * PERCENTILES.P50)];
+      stats.p95 = sorted[Math.floor(sorted.length * PERCENTILES.P95)];
+      stats.p99 = sorted[Math.floor(sorted.length * PERCENTILES.P99)];
       stats.lastUpdated = Date.now();
 
       await this.kv.put(statsKey, JSON.stringify(stats), {
-        expirationTtl: 3600, // 1 hour
+        expirationTtl: METRICS_TTL.RESPONSE_TIME,
       });
 
       // Also update the 'all' stats
@@ -447,7 +454,7 @@ export class MetricsCollector {
         await this.updateResponseTimeStats('all', responseTime);
       }
     } catch (error) {
-      console.error('Failed to update response time stats:', error);
+      logger.error('Failed to update response time stats', error as Error);
     }
   }
 
@@ -461,7 +468,7 @@ export class MetricsCollector {
       const sum = stats.times.reduce((acc: number, time: number) => acc + time, 0);
       return sum / stats.times.length;
     } catch (error) {
-      console.error('Failed to get average response time:', error);
+      logger.error('Failed to get average response time', error as Error);
       return 0;
     }
   }

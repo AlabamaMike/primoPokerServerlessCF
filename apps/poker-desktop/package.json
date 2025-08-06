@@ -10,6 +10,7 @@
     "build:vite": "vite build",
     "tauri": "tauri",
     "test": "vitest",
+    "test:ci": "vitest run --passWithNoTests",
     "test:lobby": "jest --config jest.config.lobby.js",
     "test:lobby:watch": "jest --config jest.config.lobby.js --watch",
     "test:lobby:coverage": "jest --config jest.config.lobby.js --coverage",

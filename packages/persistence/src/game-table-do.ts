@@ -65,6 +65,7 @@ export interface GameTableState {
   lastActivity: number
   handNumber: number
   buttonPosition: number  // Track button position for proper rotation
+  buttonPlayerId: string | null  // Track button by player ID for better rotation handling
 }
 
 // Using WebSocketMessage from shared types
@@ -113,7 +114,8 @@ export class GameTableDurableObject {
       createdAt: Date.now(),
       lastActivity: Date.now(),
       handNumber: 0,
-      buttonPosition: -1  // -1 means no button position set yet
+      buttonPosition: -1,  // -1 means no button position set yet
+      buttonPlayerId: null  // No button player assigned yet
     }
 
     // Initialize game engines
@@ -1401,9 +1403,19 @@ export class GameTableDurableObject {
    * Remove player from table
    */
   private async removePlayerFromTable(playerId: string): Promise<void> {
+    // Check if this player has the button
+    const hadButton = this.state.buttonPlayerId === playerId
+    
     this.state.players.delete(playerId)
     this.state.connections.delete(playerId)
     this.state.spectators.delete(playerId)
+    
+    // If removed player had the button, clear the button player ID
+    // The next hand will properly reassign it
+    if (hadButton) {
+      this.state.buttonPlayerId = null
+      console.log(`Removed player ${playerId} had the button, will reassign on next hand`)
+    }
     
     // If game in progress and player was active, handle fold
     if (this.state.game && this.state.game.phase !== GamePhase.FINISHED) {
@@ -1449,11 +1461,15 @@ export class GameTableDurableObject {
           return
         }
         dealerIndex = activePlayers[randomActiveIndex].index
-        this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+        const dealerPlayer = playerArray[dealerIndex]
+        this.state.buttonPosition = dealerPlayer?.position?.seat ?? 0
+        this.state.buttonPlayerId = dealerPlayer?.id ?? null
       } else {
         // Find next active player clockwise from current button
         dealerIndex = this.findNextDealerIndex(playerArray)
-        this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+        const dealerPlayer = playerArray[dealerIndex]
+        this.state.buttonPosition = dealerPlayer?.position?.seat ?? 0
+        this.state.buttonPlayerId = dealerPlayer?.id ?? null
       }
     } catch (error) {
       if (error instanceof GameRuleError && error.code === 'INSUFFICIENT_PLAYERS') {
@@ -1891,9 +1907,21 @@ export class GameTableDurableObject {
   private isPlayerActiveAndConnected(player: GameTablePlayer): boolean {
     if (player.status !== PlayerStatus.ACTIVE) return false
     
-    // Re-check connection state to avoid race conditions
-    const connection = this.state.connections.get(player.id)
-    return connection ? connection.isConnected : false
+    // For button rotation purposes, consider players with chips as potentially active
+    // even if temporarily disconnected (they might reconnect)
+    if (player.chips > 0) {
+      // Re-check connection state to avoid race conditions
+      const connection = this.state.connections.get(player.id)
+      // Allow recently disconnected players to keep their turn
+      if (connection && !connection.isConnected) {
+        const disconnectTime = Date.now() - connection.lastHeartbeat
+        // Give players 30 seconds to reconnect before skipping them
+        return disconnectTime < 30000
+      }
+      return connection ? connection.isConnected : false
+    }
+    
+    return false
   }
 
   /**
@@ -1927,14 +1955,43 @@ export class GameTableDurableObject {
       )
     }
     
-    // Find current button holder among active players
-    const currentButtonPlayer = activePlayers.find(
-      ({ player }) => player.position?.seat === this.state.buttonPosition
-    )
+    let currentButtonPlayerIndex = -1
     
-    if (!currentButtonPlayer) {
-      // Button position is invalid or on disconnected player
-      // Assign to first active player
+    // First try to find by player ID (more reliable)
+    if (this.state.buttonPlayerId) {
+      currentButtonPlayerIndex = activePlayers.findIndex(
+        ({ player }) => player.id === this.state.buttonPlayerId
+      )
+    }
+    
+    // If not found by ID, try by seat position (fallback)
+    if (currentButtonPlayerIndex === -1 && this.state.buttonPosition >= 0) {
+      currentButtonPlayerIndex = activePlayers.findIndex(
+        ({ player }) => player.position?.seat === this.state.buttonPosition
+      )
+    }
+    
+    // If still not found, button is on disconnected/eliminated player
+    if (currentButtonPlayerIndex === -1) {
+      // Find the next active player clockwise from the last known button position
+      if (this.state.buttonPosition >= 0) {
+        // Sort active players by seat position
+        const sortedActivePlayers = [...activePlayers].sort(
+          (a, b) => (a.player.position?.seat ?? 0) - (b.player.position?.seat ?? 0)
+        )
+        
+        // Find first active player with seat > buttonPosition
+        const nextPlayer = sortedActivePlayers.find(
+          ({ player }) => (player.position?.seat ?? 0) > this.state.buttonPosition
+        )
+        
+        if (nextPlayer) {
+          // Found a player with higher seat number
+          return nextPlayer.index
+        }
+      }
+      
+      // No valid next player found, assign to first active player
       if (!activePlayers[0]) {
         throw new GameRuleError(
           'NO_ACTIVE_PLAYER',
@@ -1944,11 +2001,8 @@ export class GameTableDurableObject {
       return activePlayers[0].index
     }
     
-    // Find index of current button holder in active players array
-    const currentIndex = activePlayers.indexOf(currentButtonPlayer)
-    
     // Move to next active player clockwise
-    const nextActiveIndex = (currentIndex + 1) % activePlayers.length
+    const nextActiveIndex = (currentButtonPlayerIndex + 1) % activePlayers.length
     
     // Return the original index in sortedPlayers array
     if (!activePlayers[nextActiveIndex]) {

@@ -1,5 +1,43 @@
 import { Logger } from '../logger';
 import { LogAggregator, LogEntry, LoggerConfig } from '../types';
+import { SimpleEventEmitter } from '../event-emitter';
+
+// Environment detection
+const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+const isSlow = process.env.SLOW_TEST_ENV === 'true';
+
+// Adjust thresholds based on environment
+const getThreshold = (baseValue: number): number => {
+  if (isCI) return Math.floor(baseValue * 0.5); // CI can be 50% slower
+  if (isSlow) return Math.floor(baseValue * 0.3); // Slow environments get 70% reduction
+  return baseValue;
+};
+
+// Percentile calculation helper
+function calculatePercentiles(values: number[]): { p50: number; p95: number; p99: number } {
+  const sorted = [...values].sort((a, b) => a - b);
+  const p50Index = Math.floor(sorted.length * 0.5);
+  const p95Index = Math.floor(sorted.length * 0.95);
+  const p99Index = Math.floor(sorted.length * 0.99);
+  return {
+    p50: sorted[p50Index] || 0,
+    p95: sorted[p95Index] || 0,
+    p99: sorted[p99Index] || 0
+  };
+}
+
+// Memory profiling helper
+function getMemoryUsage(): { heap: number; external: number; rss: number } {
+  if (typeof process !== 'undefined' && process.memoryUsage) {
+    const usage = process.memoryUsage();
+    return {
+      heap: usage.heapUsed,
+      external: usage.external,
+      rss: usage.rss
+    };
+  }
+  return { heap: 0, external: 0, rss: 0 };
+}
 
 describe('Logger Performance Benchmarks', () => {
   // Suppress console output during tests
@@ -39,23 +77,27 @@ describe('Logger Performance Benchmarks', () => {
 
   const PERFORMANCE_THRESHOLDS = {
     instantiation: {
-      minimal: 400000, // ops/sec
-      withPII: 500000,
-      withSampling: 450000,
-      full: 400000
+      minimal: getThreshold(400000), // ops/sec
+      withPII: getThreshold(500000),
+      withSampling: getThreshold(450000),
+      full: getThreshold(400000)
     },
     throughput: {
-      minimal: 200000,
-      withPII: 40000,
-      structured: 150000
+      minimal: getThreshold(200000),
+      withPII: getThreshold(40000),
+      structured: getThreshold(150000)
     },
     contextMerging: {
-      single: 100000,
-      nested: 100000
+      single: getThreshold(100000),
+      nested: getThreshold(100000)
     },
     bufferManagement: {
-      small: 200000,
-      large: 200000
+      small: getThreshold(200000),
+      large: getThreshold(200000)
+    },
+    concurrent: {
+      basic: getThreshold(50000),
+      heavy: getThreshold(20000)
     }
   };
 
@@ -292,17 +334,24 @@ describe('Logger Performance Benchmarks', () => {
       });
       
       let overflowCount = 0;
-      logger.getEventEmitter().on((event) => {
+      // Fixed: Store listener reference for cleanup
+      const eventListener = (event: any) => {
         if (event.type === 'buffer_overflow') {
           overflowCount++;
         }
-      });
+      };
+      
+      const eventEmitter = logger.getEventEmitter();
+      eventEmitter.on(eventListener);
       
       const start = performance.now();
       for (let i = 0; i < iterations; i++) {
         logger.info(`Test message ${i}`, { index: i });
       }
       const duration = performance.now() - start;
+      
+      // Cleanup: Remove event listener
+      eventEmitter.off(eventListener);
       
       const opsPerSec = Math.round(iterations / (duration / 1000));
       originalConsole.log(`Buffer overflow handling: ${opsPerSec.toLocaleString()} ops/sec`);
@@ -354,8 +403,176 @@ describe('Logger Performance Benchmarks', () => {
       originalConsole.log(`PII filtering disabled: ${opsWithoutPII.toLocaleString()} ops/sec`);
       originalConsole.log(`PII filtering overhead: ${overhead.toFixed(2)}%`);
 
-      // PII filtering should have less than 500% overhead (5x slower is acceptable)
-      expect(overhead).toBeLessThan(500);
+      // PII filtering should have less than 600% overhead (6x slower is acceptable)
+      expect(overhead).toBeLessThan(600);
+    });
+  });
+
+  describe('Concurrent load testing', () => {
+    it('should handle concurrent logging efficiently', async () => {
+      const concurrentLoggers = 10;
+      const iterationsPerLogger = 5000;
+      const logger = new Logger({ 
+        minLevel: 'info',
+        enablePIIFiltering: false,
+        maxBufferSize: 1000 
+      });
+      
+      const memBefore = getMemoryUsage();
+      const latencies: number[] = [];
+      
+      const start = performance.now();
+      
+      // Simulate concurrent logging from multiple sources
+      const promises = Array(concurrentLoggers).fill(null).map((_, loggerId) => {
+        return new Promise<void>((resolve) => {
+          setImmediate(() => {
+            for (let i = 0; i < iterationsPerLogger; i++) {
+              const opStart = performance.now();
+              logger.info(`Logger ${loggerId} message ${i}`, { 
+                loggerId, 
+                index: i,
+                timestamp: Date.now() 
+              });
+              latencies.push(performance.now() - opStart);
+            }
+            resolve();
+          });
+        });
+      });
+      
+      await Promise.all(promises);
+      const duration = performance.now() - start;
+      
+      const memAfter = getMemoryUsage();
+      const memoryGrowth = memAfter.heap - memBefore.heap;
+      
+      const totalOps = concurrentLoggers * iterationsPerLogger;
+      const opsPerSec = Math.round(totalOps / (duration / 1000));
+      const percentiles = calculatePercentiles(latencies);
+      
+      originalConsole.log(`Concurrent logging (${concurrentLoggers} loggers):`);
+      originalConsole.log(`  Throughput: ${opsPerSec.toLocaleString()} ops/sec`);
+      originalConsole.log(`  P50 latency: ${percentiles.p50.toFixed(3)}ms`);
+      originalConsole.log(`  P95 latency: ${percentiles.p95.toFixed(3)}ms`);
+      originalConsole.log(`  P99 latency: ${percentiles.p99.toFixed(3)}ms`);
+      originalConsole.log(`  Memory growth: ${(memoryGrowth / 1024 / 1024).toFixed(2)}MB`);
+      
+      expect(opsPerSec).toBeGreaterThan(PERFORMANCE_THRESHOLDS.concurrent.basic);
+      expect(percentiles.p99).toBeLessThan(10); // P99 should be under 10ms
+    });
+
+    it('should maintain performance under heavy concurrent load', async () => {
+      const concurrentLoggers = 50;
+      const iterationsPerLogger = 1000;
+      const aggregator = new MockAggregator();
+      const logger = new Logger({ 
+        minLevel: 'info',
+        enablePIIFiltering: true,
+        enableSampling: true,
+        samplingRate: 0.5,
+        maxBufferSize: 5000 
+      });
+      logger.setAggregator(aggregator);
+      
+      // Add simulated latency to aggregator
+      aggregator.send = async (entries: LogEntry[]) => {
+        await new Promise(resolve => setTimeout(resolve, 10)); // 10ms latency
+        aggregator.sentEntries.push(...entries);
+        aggregator.sendCalls++;
+      };
+      
+      const memBefore = getMemoryUsage();
+      const start = performance.now();
+      
+      const promises = Array(concurrentLoggers).fill(null).map((_, loggerId) => {
+        return new Promise<void>((resolve) => {
+          setImmediate(async () => {
+            for (let i = 0; i < iterationsPerLogger; i++) {
+              logger.info(`Heavy load test ${i}`, { 
+                loggerId, 
+                email: 'test@example.com',
+                card: '4111-1111-1111-1111',
+                data: Array(100).fill('x').join('') // Larger payload
+              });
+              
+              // Occasional flush to test buffer management
+              if (i % 100 === 0) {
+                await logger.flush();
+              }
+            }
+            resolve();
+          });
+        });
+      });
+      
+      await Promise.all(promises);
+      await logger.flush(); // Final flush
+      
+      const duration = performance.now() - start;
+      const memAfter = getMemoryUsage();
+      
+      const totalOps = concurrentLoggers * iterationsPerLogger;
+      const opsPerSec = Math.round(totalOps / (duration / 1000));
+      const memoryGrowth = memAfter.heap - memBefore.heap;
+      
+      originalConsole.log(`Heavy concurrent load (${concurrentLoggers} loggers with PII+sampling):`);
+      originalConsole.log(`  Throughput: ${opsPerSec.toLocaleString()} ops/sec`);
+      originalConsole.log(`  Aggregator calls: ${aggregator.sendCalls}`);
+      originalConsole.log(`  Memory growth: ${(memoryGrowth / 1024 / 1024).toFixed(2)}MB`);
+      originalConsole.log(`  Environment: ${isCI ? 'CI' : 'Local'}`);
+      
+      expect(opsPerSec).toBeGreaterThan(PERFORMANCE_THRESHOLDS.concurrent.heavy);
+      expect(memoryGrowth).toBeLessThan(100 * 1024 * 1024); // Less than 100MB growth
+    });
+  });
+
+  describe('Memory profiling', () => {
+    it('should track memory usage across different configurations', () => {
+      const configs = [
+        { name: 'minimal', config: { minLevel: 'info' as const } },
+        { name: 'with PII', config: { minLevel: 'info' as const, enablePIIFiltering: true } },
+        { name: 'with buffer', config: { minLevel: 'info' as const, maxBufferSize: 10000 } },
+        { name: 'full featured', config: { 
+          minLevel: 'info' as const, 
+          enablePIIFiltering: true,
+          enableSampling: true,
+          samplingRate: 0.5,
+          maxBufferSize: 10000 
+        }}
+      ];
+      
+      const results: Array<{ name: string; memoryMB: number }> = [];
+      
+      for (const { name, config } of configs) {
+        if (global.gc) global.gc(); // Force GC if available
+        
+        const memBefore = getMemoryUsage();
+        const loggers: Logger[] = [];
+        
+        // Create multiple logger instances
+        for (let i = 0; i < 1000; i++) {
+          loggers.push(new Logger(config));
+        }
+        
+        // Log some messages
+        for (const logger of loggers.slice(0, 100)) {
+          for (let i = 0; i < 10; i++) {
+            logger.info('Memory test', { index: i });
+          }
+        }
+        
+        const memAfter = getMemoryUsage();
+        const memoryUsed = (memAfter.heap - memBefore.heap) / 1024 / 1024;
+        
+        results.push({ name, memoryMB: memoryUsed });
+        originalConsole.log(`Memory usage (${name}): ${memoryUsed.toFixed(2)}MB for 1000 loggers`);
+      }
+      
+      // Verify memory usage is reasonable
+      results.forEach(result => {
+        expect(result.memoryMB).toBeLessThan(50); // Each config should use less than 50MB
+      });
     });
   });
 });

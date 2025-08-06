@@ -121,36 +121,49 @@ export class LoggerBenchmark {
       }
     ];
 
+    // Ensure testData is not empty
+    if (testData.length === 0) {
+      throw new Error("testData must not be empty");
+    }
+    
     // Benchmark with PII filtering enabled
     const loggerWithPII = new Logger({ minLevel: 'info', enablePIIFiltering: true });
+    const latenciesWithPII: number[] = [];
     const start1 = performance.now();
     
     for (let i = 0; i < iterations; i++) {
-      const data = testData[i % testData.length]!;
+      const data = testData[i % testData.length];
+      const opStart = performance.now();
       loggerWithPII.info(data.message, data.context);
+      latenciesWithPII.push(performance.now() - opStart);
     }
     
     const duration1 = performance.now() - start1;
     this.results.push({
       name: 'PII filtering (enabled)',
       ops: Math.round(iterations / (duration1 / 1000)),
-      duration: duration1
+      duration: duration1,
+      percentiles: calculatePercentiles(latenciesWithPII)
     });
 
     // Benchmark without PII filtering
     const loggerWithoutPII = new Logger({ minLevel: 'info', enablePIIFiltering: false });
+    const latenciesWithoutPII: number[] = [];
     const start2 = performance.now();
     
     for (let i = 0; i < iterations; i++) {
-      const data = testData[i % testData.length]!;
+      const data = testData[i % testData.length];
+      const opStart = performance.now();
       loggerWithoutPII.info(data.message, data.context);
+      latenciesWithoutPII.push(performance.now() - opStart);
     }
     
     const duration2 = performance.now() - start2;
     this.results.push({
       name: 'PII filtering (disabled)',
       ops: Math.round(iterations / (duration2 / 1000)),
-      duration: duration2
+      duration: duration2,
+      percentiles: calculatePercentiles(latenciesWithoutPII)
     });
 
     const overhead = ((duration1 - duration2) / duration2) * 100;

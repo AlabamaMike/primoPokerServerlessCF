@@ -31,7 +31,8 @@ async function runBenchmarks() {
       node: process.version,
       platform: process.platform,
       arch: process.arch,
-      cpus: require('os').cpus().length
+      cpus: os.cpus().length,
+      isCI: process.env.CI === 'true'
     },
     results: results
   };

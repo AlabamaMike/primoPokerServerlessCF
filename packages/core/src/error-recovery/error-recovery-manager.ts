@@ -22,6 +22,7 @@ export interface OperationContext {
   resourceId?: string;
   critical: boolean;
   useCircuitBreaker?: boolean;
+  timeout?: number;
 }
 
 export interface RecoveryStrategy {
@@ -125,6 +126,11 @@ export class ErrorRecoveryManager {
     try {
       let result: T;
       
+      // Create a wrapped operation with timeout if specified
+      const operationWithTimeout = context.timeout
+        ? () => this.withTimeout(operation(), context.timeout!)
+        : operation;
+      
       // Check if we should use circuit breaker
       if (context.useCircuitBreaker || this.shouldUseCircuitBreaker(context)) {
         const circuitBreaker = this.getOrCreateCircuitBreaker(context.resourceType);
@@ -133,7 +139,7 @@ export class ErrorRecoveryManager {
           resource: context.resourceType,
           resourceId: context.resourceId,
         });
-        result = await circuitBreaker.execute(operation);
+        result = await circuitBreaker.execute(operationWithTimeout);
         this.metrics.successfulOperations++;
         return result;
       }
@@ -144,7 +150,7 @@ export class ErrorRecoveryManager {
         const executor = new RetryPolicyExecutor(retryPolicy);
         
         try {
-          result = await executor.execute(operation);
+          result = await executor.execute(operationWithTimeout);
           this.metrics.successfulOperations++;
           return result;
         } catch (error) {
@@ -165,7 +171,7 @@ export class ErrorRecoveryManager {
       }
 
       // Direct execution for non-recoverable operations
-      result = await operation();
+      result = await operationWithTimeout();
       this.metrics.successfulOperations++;
       return result;
     } catch (error) {
@@ -508,6 +514,16 @@ export class ErrorRecoveryManager {
   private wasRecovered(error: any): boolean {
     // Simple heuristic - in reality would track retry attempts
     return false;
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeout: number): Promise<T> {
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Operation timed out after ${timeout}ms`));
+      }, timeout);
+    });
+
+    return Promise.race([promise, timeoutPromise]);
   }
 
   private isCriticalField(field: string): boolean {

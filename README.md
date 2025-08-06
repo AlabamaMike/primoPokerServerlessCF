@@ -1,132 +1,263 @@
-# 🃏 Primo Poker - Professional Serverless Poker Platform
+# 🃏 Primo Poker Server - Enterprise-Grade Serverless Poker Platform
 
-> **Current Status: Desktop Client Migration** 🖥️  
-> Moving from browser-based to standalone desktop application for enhanced security and performance
+<div align="center">
+  
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![WebSocket](https://img.shields.io/badge/WebSocket-Real--time-00A6ED?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
+[![Security](https://img.shields.io/badge/Security-JWT%20%2B%20Crypto-4CAF50?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/primo-poker/security)
 
-A comprehensive serverless poker platform built on Cloudflare Workers with a secure desktop client, real-time multiplayer capabilities, complete hand evaluation system, bankroll management, and modern technologies.
+**Production API**: [https://primo-poker-server.alabamamike.workers.dev](https://primo-poker-server.alabamamike.workers.dev)
 
-## 🚀 Production Backend
-**Backend API**: [https://primo-poker-server.alabamamike.workers.dev](https://primo-poker-server.alabamamike.workers.dev)
-**Desktop Client**: Tauri-based application in `apps/poker-desktop`
+</div>
 
-### Recent Achievements (Aug 5, 2025): Desktop Client Development 🖥️
-- **Tauri Integration**: Built secure desktop application with React + Rust
-- **OS Keyring Storage**: Secure token storage using system credentials
-- **Production Connectivity**: Full API compatibility with Cloudflare backend
-- **E2E Testing**: Comprehensive test suite passing against production
-- **Frontend Decommission**: Removed browser-based client for security
+## 🎯 Overview
 
-### Available Features
-- **Full Multiplayer Support**: Real-time gameplay with multiple players
-- **Spectator Mode**: Watch games in progress before joining
-- **Seat Selection**: Visual seat picking with availability indicators
-- **Bankroll Management**: Persistent wallet with transaction tracking
-- **Stand Up/Sit Down**: Dynamic table participation
-- **Interactive poker simulation** with AI players
-- **Real-time WebSocket lobby** and table joining  
-- **Complete showdown system** with winner reveals
-- **Hand History**: Browse detailed history of all played hands
-- **Production APIs**: Health checks, table listings, and authentication endpoints
+Primo Poker Server is a comprehensive, production-ready poker platform built entirely on Cloudflare's serverless infrastructure. It delivers real-time multiplayer Texas Hold'em poker with enterprise-grade security, scalability, and performance. The platform supports 6+ player games, tournaments, and features a complete poker engine with professional-grade hand evaluation, bankroll management, and cryptographically secure card shuffling.
 
-## 🏗️ Architecture Overview
+### 🏆 Key Achievements
 
-### Clean Architecture Layers
+- **Full Multiplayer Support**: Real-time gameplay for 2-9 players per table
+- **Production Deployment**: Live on Cloudflare Workers with global edge distribution
+- **Secure Desktop Client**: Tauri-based application with OS keyring integration
+- **Comprehensive Testing**: E2E test suite covering all game scenarios
+- **WebSocket Architecture**: Sub-50ms latency real-time communication
+- **Cryptographic Security**: Verifiable fair shuffling with audit trails
 
-1. **Domain Layer** (`packages/core`): Pure TypeScript poker game logic with no framework dependencies
-2. **Application Layer** (`packages/api`): Use cases for game operations and API handlers
-3. **Infrastructure Layer** (`packages/persistence`): Cloudflare-specific implementations (D1, R2, KV, Durable Objects)
-4. **Presentation Layer** (`packages/api`): WebSocket and REST API handlers
+## 🏗️ System Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Client Layer                            │
+├─────────────────────────────────────────────────────────────────┤
+│  Desktop Client (Tauri)  │  Web Browser  │  Mobile (Future)     │
+│  - React + TypeScript     │  - PWA Ready  │  - React Native     │
+│  - Rust Backend          │  - WebSocket  │  - Native Bridge    │
+│  - OS Keyring Storage    │  - REST API   │                     │
+└────────────┬────────────────────┬──────────────┬───────────────┘
+             │                    │              │
+             ▼                    ▼              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    API Gateway (Cloudflare)                     │
+├─────────────────────────────────────────────────────────────────┤
+│  REST API Routes          │  WebSocket Manager                  │
+│  - Authentication         │  - Real-time Updates               │
+│  - Table Management       │  - Player Actions                  │
+│  - Wallet Operations      │  - Chat Messages                   │
+│  - Tournament Control     │  - State Synchronization           │
+└────────────┬────────────────────┬──────────────────────────────┘
+             │                    │
+             ▼                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 Durable Objects (Stateful)                      │
+├─────────────────────────────────────────────────────────────────┤
+│  GameTableDurableObject   │  SecureRNGDurableObject            │
+│  - Game State Management  │  - Cryptographic Shuffling        │
+│  - Player Connections     │  - Entropy Pool Management        │
+│  - Action Validation      │  - Audit Trail Generation         │
+│  - Pot Calculations       │                                    │
+│                          │  RateLimitDurableObject            │
+│  TableDurableObject      │  - Request Throttling              │
+│  - Table Configuration   │  - DDoS Protection                 │
+│  - Player Seating        │  - Fair Usage Enforcement         │
+└────────────┬────────────────────┬──────────────────────────────┘
+             │                    │
+             ▼                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Data Persistence Layer                       │
+├─────────────────────────────────────────────────────────────────┤
+│  D1 Database              │  R2 Object Storage                 │
+│  - Player Accounts        │  - Hand History Archives          │
+│  - Game History           │  - Audit Logs                     │
+│  - Tournament Records     │  - Large Binary Data              │
+│  - Statistics             │                                    │
+│                          │  KV Storage                        │
+│  Workers Analytics       │  - Session Cache                   │
+│  - Performance Metrics   │  - Temporary Data                  │
+│  - Error Tracking        │  - Rate Limit Counters            │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Domain-Driven Design
 
-- **Aggregates**: Game, Player, Table, Tournament
-- **Value Objects**: Card, Hand, Chip, Bet, Position
-- **Domain Events**: GameStarted, BetPlaced, HandCompleted, TournamentFinished
-- **Repositories**: IGameRepository, IPlayerRepository, ITournamentRepository
+The codebase follows clean architecture principles with clear separation of concerns:
 
-## 🎮 Key Features Implemented
+#### **Domain Layer** (`packages/core`)
+- Pure business logic with zero infrastructure dependencies
+- Poker game rules, hand evaluation, and game state management
+- Domain events for all state changes (GameStarted, BetPlaced, HandCompleted)
+- Value objects for cards, chips, positions, and bets
 
-### **Interactive Poker Experience**
-- Professional oval poker table with 9-max seating
-- Animated card dealing (hole cards + community cards)
-- Real-time pot tracking and chip management
-- Complete betting actions (fold, call, bet, raise)
-- Game phase progression (pre-flop → flop → turn → river)
+#### **Application Layer** (`packages/api`)
+- Use cases and orchestration logic
+- REST and WebSocket handlers
+- Request/response transformation
+- Authentication and authorization
 
-### **Real-time Multiplayer**
-- WebSocket-powered live communication
-- Interactive table lobbies with player counts
-- Synchronized game state across all players
-- Auto-reconnection with heartbeat monitoring
-- Seamless single-player ↔ multiplayer switching
-- **Spectator mode** with real-time viewer count
-- **Dynamic seat selection** with reservation system
-- **Stand up/sit down** functionality
+#### **Infrastructure Layer** (`packages/persistence`)
+- Cloudflare-specific implementations
+- Durable Objects for stateful game management
+- D1 database repositories
+- R2 storage for hand history
+- KV namespace for caching
 
-### **Bankroll & Wallet System**
-- Persistent chip balance across sessions
-- Transaction history tracking
-- Buy-in and cash-out management
-- Visual wallet display in game header
-- Deposit interface (demo/play money)
-- Automatic balance updates
+#### **Shared Kernel** (`packages/shared`)
+- Common types and interfaces
+- Zod schemas for validation
+- Error classes and utilities
+- Domain-agnostic helpers
 
-### **Complete Hand Evaluation**
-- Full Texas Hold'em ranking system (10 hand types)
-- Cinematic showdown displays with winner celebrations
-- Comprehensive hand history with detailed breakdowns
-- Accurate pot distribution and tie-breaking logic
-- Professional casino-quality animations and presentations
+## 🎮 Core Features
 
-### **Professional UI/UX**
-- Casino-quality visual design with custom poker theme
-- Smooth animations and micro-interactions
-- Fully responsive (desktop, tablet, mobile)
-- Real-time connection status indicators
-- Professional poker card and chip graphics
-- Interactive seat selection with hover effects
-- Transaction history with visual indicators
+### Poker Game Engine
 
-## 📁 Project Structure
+- **Texas Hold'em**: Full implementation with all betting rounds
+- **Hand Evaluation**: Professional-grade 7-card evaluation system
+- **Game Phases**: WAITING → PRE_FLOP → FLOP → TURN → RIVER → SHOWDOWN
+- **Betting Actions**: Fold, Check, Call, Bet, Raise, All-in
+- **Side Pots**: Automatic calculation for all-in scenarios
+- **Showdown Logic**: Winner determination with tie-breaking
 
+### Real-time Multiplayer
+
+- **WebSocket Communication**: Bidirectional real-time updates
+- **Player Synchronization**: Consistent state across all clients
+- **Spectator Mode**: Watch games without participating
+- **Auto-reconnection**: Seamless recovery from disconnections
+- **Heartbeat Monitoring**: Connection health tracking
+- **Button Rotation**: Automatic dealer/blind position management
+
+### Security & Fair Play
+
+- **Cryptographic Shuffling**: Web Crypto API with SHA-256
+- **JWT Authentication**: Secure token-based auth
+- **Rate Limiting**: DDoS protection via Durable Objects
+- **Audit Trails**: Complete hand history with verification
+- **Mental Poker**: Commitment schemes for fairness
+- **Anti-fraud**: Pattern detection and timing analysis
+
+### Bankroll Management
+
+- **Player Wallets**: Persistent chip balance tracking
+- **Buy-in/Cash-out**: Controlled table entry/exit
+- **Transaction History**: Complete audit trail
+- **Multiple Tables**: Play at multiple tables simultaneously
+- **Automatic Settlement**: Instant pot distribution
+
+## 📡 API Endpoints
+
+### Authentication
+```http
+POST   /api/auth/register     # Create new account
+POST   /api/auth/login        # Authenticate user
+POST   /api/auth/refresh      # Refresh JWT token
+POST   /api/auth/logout       # Invalidate session
 ```
-primo-poker-serverless/
-├── packages/
-│   ├── shared/          # Common types and utilities
-│   ├── core/            # Domain models and business logic
-│   ├── security/        # Authentication, RNG, anti-fraud
-│   ├── persistence/     # Data access layer (D1, Durable Objects)
-│   └── api/             # REST/WebSocket API handlers
-├── apps/
-│   └── poker-server/    # Main Cloudflare Workers application
-├── tests/
-│   ├── unit/            # Unit tests
-│   └── integration/     # Integration tests
-└── docs/                # Documentation
+
+### Player Management
+```http
+GET    /api/players/me        # Get profile
+PUT    /api/players/me        # Update profile
+GET    /api/wallet            # Get wallet balance
+POST   /api/wallet/buyin      # Buy chips for table
+POST   /api/wallet/cashout    # Leave table with chips
+GET    /api/wallet/transactions # Transaction history
+```
+
+### Table Operations
+```http
+GET    /api/tables            # List active tables
+POST   /api/tables            # Create new table
+GET    /api/tables/:id        # Get table state
+GET    /api/tables/:id/seats  # Get seating info
+POST   /api/tables/:id/join   # Join table
+POST   /api/tables/:id/leave  # Leave table
+POST   /api/tables/:id/action # Player action (bet/fold/etc)
+```
+
+### Game & History
+```http
+GET    /api/games/:id         # Get game details
+GET    /api/games/:id/history # Get hand history
+```
+
+### Tournaments
+```http
+GET    /api/tournaments       # List tournaments
+POST   /api/tournaments       # Create tournament
+POST   /api/tournaments/:id/register # Register for tournament
+```
+
+## 🔌 WebSocket Protocol
+
+### Connection
+```javascript
+ws://api.example.com/ws?token=JWT_TOKEN&tableId=TABLE_ID
+```
+
+### Message Format
+```typescript
+interface WebSocketMessage {
+  type: 'game_update' | 'player_action' | 'chat' | 'error';
+  payload: any;
+  timestamp: number;
+}
+```
+
+### Client → Server Events
+```typescript
+// Player action
+{ type: 'player_action', payload: { action: 'fold' | 'call' | 'raise', amount?: number } }
+
+// Chat message
+{ type: 'chat', payload: { message: string } }
+
+// Heartbeat
+{ type: 'ping' }
+```
+
+### Server → Client Events
+```typescript
+// Game state update
+{ type: 'game_update', payload: GameState }
+
+// Player joined/left
+{ type: 'player_joined', payload: Player }
+{ type: 'player_left', payload: { playerId: string } }
+
+// Chat broadcast
+{ type: 'chat', payload: { playerId: string, username: string, message: string } }
+
+// Error notification
+{ type: 'error', payload: { code: string, message: string } }
 ```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+
-- npm 9+
-- Cloudflare account with Workers, D1, R2, and KV access
+
+- Node.js 18+ and npm 9+
+- Cloudflare account with Workers access
+- Wrangler CLI (`npm install -g wrangler`)
 
 ### Installation
 
-1. **Clone and install dependencies:**
 ```bash
-git clone <repository-url>
-cd primo-poker-serverless
-npm install
-```
+# Clone repository
+git clone https://github.com/primo-poker/serverless-cf.git
+cd primo-poker-serverless-cf
 
-2. **Build all packages:**
-```bash
+# Install dependencies
+npm install
+
+# Build all packages
 npm run build
 ```
 
-3. **Set up Cloudflare services:**
+### Cloudflare Setup
+
 ```bash
 # Create D1 database
 wrangler d1 create primo-poker-db
@@ -135,227 +266,171 @@ wrangler d1 create primo-poker-db
 wrangler kv:namespace create "SESSION_STORE"
 
 # Create R2 bucket
-wrangler r2 bucket create primo-poker-hand-history
+wrangler r2 bucket create primo-poker-storage
 
-# Run database migrations
-wrangler d1 migrations apply primo-poker-db
-```
-
-4. **Configure secrets:**
-```bash
+# Configure secrets
 wrangler secret put JWT_SECRET
 wrangler secret put DATABASE_ENCRYPTION_KEY
+
+# Run database migrations
+wrangler d1 migrations apply primo-poker-db --local
 ```
 
-5. **Start development server:**
+### Development
+
 ```bash
+# Start local development server
 npm run dev
+
+# Run tests
+npm run test
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+```
+
+### Deployment
+
+```bash
+# Deploy to Cloudflare Workers
+npm run deploy
+
+# Deploy with custom environment
+wrangler deploy --env production
 ```
 
 ## 🧪 Testing
 
-Run the comprehensive test suite:
+### Test Suites
 
 ```bash
 # All tests
 npm test
 
-# Unit tests only
+# Unit tests
 npm run test:unit
 
-# Integration tests only
+# Integration tests  
 npm run test:integration
 
-# Watch mode
-npm run test:watch
+# E2E tests (requires running server)
+npm run test:e2e
 
 # Coverage report
 npm run test:coverage
 ```
 
-## 📊 Key Components
+### Test Architecture
 
-### Hand Evaluator
-```typescript
-import { Hand } from '@primo-poker/core';
+- **Unit Tests**: Pure business logic validation
+- **Integration Tests**: API endpoint testing
+- **E2E Tests**: Full user journey validation
+- **Multiplayer Tests**: Complex game scenario testing
 
-const cards = [/* 5-7 cards */];
-const evaluation = Hand.evaluate(cards);
-console.log(evaluation.ranking, evaluation.description);
+## 📦 Package Structure
+
 ```
-
-### Poker Game Engine
-```typescript
-import { PokerGame } from '@primo-poker/core';
-
-const game = new PokerGame(tableConfig, players);
-await game.dealCards();
-const result = await game.processBet(playerId, amount);
-```
-
-### Shuffle Verification
-```typescript
-import { ShuffleVerifier } from '@primo-poker/security';
-
-const verifier = new ShuffleVerifier();
-const deck = verifier.generateDeck();
-const shuffled = verifier.shuffleDeck(deck, seed);
-const isValid = verifier.verifyFairness(shuffled);
-```
-
-### Real-time WebSocket
-```typescript
-import { WebSocketManager } from '@primo-poker/api';
-
-const wsManager = new WebSocketManager(jwtSecret);
-await wsManager.handleConnection(ws, request);
+primo-poker-serverless-cf/
+├── apps/
+│   ├── poker-server/        # Main Cloudflare Workers app
+│   │   ├── src/
+│   │   │   ├── index.ts    # Worker entry point
+│   │   │   └── bindings.d.ts
+│   │   ├── migrations/     # D1 database migrations
+│   │   └── wrangler.toml   # Cloudflare configuration
+│   │
+│   └── poker-desktop/       # Tauri desktop client
+│       ├── src/            # React frontend
+│       ├── src-tauri/      # Rust backend
+│       └── package.json
+│
+├── packages/
+│   ├── shared/             # Common types and utilities
+│   │   ├── types/         # TypeScript interfaces
+│   │   ├── schemas/       # Zod validation schemas
+│   │   ├── errors/        # Custom error classes
+│   │   └── utils/         # Helper functions
+│   │
+│   ├── core/              # Game engine and business logic
+│   │   ├── poker-game.ts  # Main game controller
+│   │   ├── hand-evaluator.ts # Hand ranking system
+│   │   ├── table-manager.ts  # Table operations
+│   │   └── tournament.ts     # Tournament logic
+│   │
+│   ├── security/          # Authentication and crypto
+│   │   ├── auth-manager.ts   # JWT handling
+│   │   ├── shuffle-verifier.ts # Fair shuffling
+│   │   ├── password-manager.ts # Bcrypt operations
+│   │   └── anti-fraud.ts     # Security measures
+│   │
+│   ├── persistence/       # Data layer implementations
+│   │   ├── durable-objects/  # Stateful game objects
+│   │   ├── repositories/     # D1 database access
+│   │   ├── storage/          # R2 and KV operations
+│   │   └── migrations/       # Database schemas
+│   │
+│   └── api/              # HTTP and WebSocket handlers
+│       ├── routes.ts      # REST API endpoints
+│       ├── websocket.ts   # Real-time communication
+│       ├── middleware/    # Auth, CORS, rate limiting
+│       └── validators/    # Request validation
+│
+├── tests/
+│   ├── unit/             # Business logic tests
+│   ├── integration/      # API tests
+│   └── e2e/             # End-to-end tests
+│       └── multiplayer/  # Complex game scenarios
+│
+└── scripts/             # Build and deployment scripts
 ```
 
 ## 🔒 Security Features
 
-### Cryptographic Shuffling
-- Verifiable deck generation with commitments
-- Fisher-Yates shuffle with cryptographic seeds
-- Mental poker protocols for multi-party verification
-
-### Authentication
+### Authentication & Authorization
 - JWT tokens with refresh mechanism
-- Rate limiting for login attempts
+- Secure password hashing with bcrypt
+- Role-based access control (RBAC)
 - Session management with automatic cleanup
 
-### Anti-fraud Measures
-- Hand history immutability
-- Action timing analysis
-- Pattern detection for collusion
+### Cryptographic Security
+- Web Crypto API for secure randomness
+- SHA-256 commitments for shuffle verification
+- Mental poker protocols for fairness
+- Complete audit trails in R2 storage
 
-## 🌐 API Endpoints
+### Anti-Fraud Measures
+- Timing analysis for bot detection
+- Pattern recognition for collusion
+- Rate limiting via Durable Objects
+- IP-based throttling and blocking
 
-### Authentication
-- `POST /api/auth/login` - Player login
-- `POST /api/auth/refresh` - Token refresh  
-- `POST /api/auth/logout` - Player logout
+## 📈 Performance & Scalability
 
-### Tables
-- `GET /api/tables` - List active tables
-- `POST /api/tables` - Create new table
-- `POST /api/tables/:id/join` - Join table
-- `POST /api/tables/:id/action` - Player action
+### Edge Computing Benefits
+- **Global Distribution**: 200+ Cloudflare locations
+- **Low Latency**: Sub-50ms response times
+- **Auto-scaling**: Handles millions of requests
+- **DDoS Protection**: Enterprise-grade security
 
-### Games
-- `GET /api/games/:id` - Get game state
-- `GET /api/games/:id/history` - Hand history
-
-### Tournaments
-- `GET /api/tournaments` - List tournaments
-- `POST /api/tournaments` - Create tournament
-- `POST /api/tournaments/:id/register` - Register for tournament
-
-## 🎯 WebSocket Events
-
-### Client → Server
-```typescript
-// Player action
-{
-  type: 'player_action',
-  payload: {
-    playerId: string,
-    action: 'fold' | 'call' | 'raise' | 'check',
-    amount?: number
-  }
-}
-
-// Chat message
-{
-  type: 'chat',
-  payload: {
-    playerId: string,
-    message: string
-  }
-}
-```
-
-### Server → Client
-```typescript
-// Game state update
-{
-  type: 'game_update',
-  payload: GameState
-}
-
-// Chat broadcast
-{
-  type: 'chat',
-  payload: {
-    playerId: string,
-    username: string,
-    message: string,
-    isSystem: boolean
-  }
-}
-```
-
-## 🗄️ Database Schema
-
-The D1 database includes tables for:
-- `players` - Player accounts and statistics
-- `games` - Game states and history
-- `tournaments` - Tournament information
-- `hand_actions` - Detailed action history
-- `sessions` - Authentication sessions
-
-See `apps/poker-server/migrations/0001_initial.sql` for the complete schema.
-
-## 📈 Performance & Scaling
-
-### Cloudflare Edge Benefits
-- Global distribution with <50ms latency
-- Automatic scaling based on demand
-- Built-in DDoS protection
-
-### Optimization Features
-- Durable Objects for stateful game management
+### Optimization Strategies
+- Durable Objects for stateful operations
 - KV caching for frequently accessed data
-- R2 for long-term storage with lifecycle policies
-
-## 🔧 Configuration
-
-### Environment Variables
-```toml
-# wrangler.toml
-[vars]
-ENVIRONMENT = "production"
-
-# Secrets (set via wrangler secret put)
-JWT_SECRET = "your-secret-key"
-DATABASE_ENCRYPTION_KEY = "your-encryption-key"
-```
-
-### Table Configuration
-```typescript
-const tableConfig: TableConfig = {
-  gameType: GameType.TEXAS_HOLDEM,
-  bettingStructure: BettingStructure.NO_LIMIT,
-  maxPlayers: 9,
-  minBuyIn: 100,
-  maxBuyIn: 10000,
-  smallBlind: 5,
-  bigBlind: 10
-};
-```
+- R2 storage for large binary data
+- Workers Analytics for monitoring
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Run `npm run lint` and `npm test`
-5. Submit a pull request
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-### Code Style
-- TypeScript with strict mode
-- ESLint + Prettier configuration
-- Conventional commits specification
+### Development Standards
+- TypeScript strict mode enabled
 - 100% type coverage required
+- ESLint + Prettier formatting
+- Conventional commits
+- Comprehensive test coverage
 
 ## 📜 License
 
@@ -363,19 +438,25 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-For questions and support:
-- Open an issue on GitHub
-- Check the documentation in `/docs`
-- Review the test files for usage examples
+- **Documentation**: [/docs](./docs)
+- **Issues**: [GitHub Issues](https://github.com/primo-poker/issues)
+- **Discord**: [Community Server](https://discord.gg/primo-poker)
 
 ## 🎉 Acknowledgments
 
-Built with:
-- [Cloudflare Workers](https://workers.cloudflare.com/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Jest](https://jestjs.io/)
-- [Zod](https://zod.dev/)
+Built with cutting-edge technologies:
+- [Cloudflare Workers](https://workers.cloudflare.com/) - Serverless compute
+- [TypeScript](https://www.typescriptlang.org/) - Type safety
+- [Tauri](https://tauri.app/) - Desktop applications
+- [Zod](https://zod.dev/) - Runtime validation
+- [Jest](https://jestjs.io/) - Testing framework
 
 ---
 
-**Primo Poker** - Professional-grade serverless poker platform for the modern web.
+<div align="center">
+  
+**Primo Poker Server** - Professional-grade poker platform for the modern web
+
+[API Documentation](./docs/api) | [Game Rules](./docs/rules) | [Deployment Guide](./docs/deployment)
+
+</div>

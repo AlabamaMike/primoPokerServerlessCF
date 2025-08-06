@@ -16,7 +16,8 @@ import {
   Suit,
   Rank,
   WebSocketMessage,
-  createWebSocketMessage
+  createWebSocketMessage,
+  GameRuleError
 } from '@primo-poker/shared'
 import { PokerGame, BettingEngine, DeckManager } from '@primo-poker/core'
 
@@ -77,6 +78,9 @@ export class GameTableDurableObject {
   private durableObjectState: DurableObjectState
   private env: any
   private initialized: boolean = false
+
+  // Constants
+  private static readonly MIN_PLAYERS_FOR_GAME = 2
 
   constructor(state: DurableObjectState, env: any) {
     this.durableObjectState = state
@@ -1429,14 +1433,41 @@ export class GameTableDurableObject {
     
     // Determine dealer position
     let dealerIndex: number
-    if (this.state.buttonPosition === -1) {
-      // First game - randomly assign button
-      dealerIndex = Math.floor(Math.random() * playerArray.length)
-      this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
-    } else {
-      // Find next active player clockwise from current button
-      dealerIndex = this.findNextDealerIndex(playerArray)
-      this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+    try {
+      if (this.state.buttonPosition === -1) {
+        // First game - randomly assign button among active players
+        const activePlayers = this.getActivePlayersWithIndices(playerArray)
+        
+        if (activePlayers.length < GameTableDurableObject.MIN_PLAYERS_FOR_GAME) {
+          console.log('Not enough active players to start game')
+          return
+        }
+        
+        const randomActiveIndex = Math.floor(Math.random() * activePlayers.length)
+        if (!activePlayers[randomActiveIndex]) {
+          console.error('Randomly selected active player does not exist. Aborting game start.')
+          return
+        }
+        dealerIndex = activePlayers[randomActiveIndex].index
+        this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+      } else {
+        // Find next active player clockwise from current button
+        dealerIndex = this.findNextDealerIndex(playerArray)
+        this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
+      }
+    } catch (error) {
+      if (error instanceof GameRuleError && error.code === 'INSUFFICIENT_PLAYERS') {
+        console.log('Not enough active players to continue game:', error.message)
+        // Reset game state
+        this.state.game = null
+        this.state.gameState = null
+        await this.broadcastMessage(this.buildMessage('game_ended', {
+          reason: 'insufficient_players',
+          message: 'Not enough active players to continue the game'
+        }))
+        return
+      }
+      throw error // Re-throw other errors
     }
     
     const dealer = playerArray[dealerIndex]!
@@ -1855,32 +1886,78 @@ export class GameTableDurableObject {
   }
 
   /**
+   * Check if player is active and connected
+   */
+  private isPlayerActiveAndConnected(player: GameTablePlayer): boolean {
+    if (player.status !== PlayerStatus.ACTIVE) return false
+    
+    // Re-check connection state to avoid race conditions
+    const connection = this.state.connections.get(player.id)
+    return connection ? connection.isConnected : false
+  }
+
+  /**
+   * Get active players with their indices - optimized version
+   */
+  private getActivePlayersWithIndices(sortedPlayers: GameTablePlayer[]): Array<{ player: GameTablePlayer, index: number }> {
+    const activePlayers: Array<{ player: GameTablePlayer, index: number }> = []
+    
+    for (let i = 0; i < sortedPlayers.length; i++) {
+      const player = sortedPlayers[i]
+      if (player && this.isPlayerActiveAndConnected(player)) {
+        activePlayers.push({ player, index: i })
+      }
+    }
+    
+    return activePlayers
+  }
+
+  /**
    * Find next dealer index by rotating button clockwise
    */
   private findNextDealerIndex(sortedPlayers: GameTablePlayer[]): number {
-    if (sortedPlayers.length === 0) return 0
+    // Get active players using optimized helper
+    const activePlayers = this.getActivePlayersWithIndices(sortedPlayers)
     
-    // Find current button holder
-    const currentButtonIndex = sortedPlayers.findIndex(
-      p => p.position?.seat === this.state.buttonPosition
+    // Need at least minimum active players for a game
+    if (activePlayers.length < GameTableDurableObject.MIN_PLAYERS_FOR_GAME) {
+      throw new GameRuleError(
+        'INSUFFICIENT_PLAYERS',
+        'Not enough active players to continue the game'
+      )
+    }
+    
+    // Find current button holder among active players
+    const currentButtonPlayer = activePlayers.find(
+      ({ player }) => player.position?.seat === this.state.buttonPosition
     )
     
-    // If button position not found, start at 0
-    if (currentButtonIndex === -1) {
-      return 0
+    if (!currentButtonPlayer) {
+      // Button position is invalid or on disconnected player
+      // Assign to first active player
+      if (!activePlayers[0]) {
+        throw new GameRuleError(
+          'NO_ACTIVE_PLAYER',
+          'No active player found to assign the dealer button'
+        )
+      }
+      return activePlayers[0].index
     }
     
-    // Move to next player clockwise
-    let nextIndex = (currentButtonIndex + 1) % sortedPlayers.length
-    let attempts = 0
+    // Find index of current button holder in active players array
+    const currentIndex = activePlayers.indexOf(currentButtonPlayer)
     
-    // Skip inactive players
-    while (sortedPlayers[nextIndex]?.status !== 'active' && attempts < sortedPlayers.length) {
-      nextIndex = (nextIndex + 1) % sortedPlayers.length
-      attempts++
+    // Move to next active player clockwise
+    const nextActiveIndex = (currentIndex + 1) % activePlayers.length
+    
+    // Return the original index in sortedPlayers array
+    if (!activePlayers[nextActiveIndex]) {
+      throw new GameRuleError(
+        'INVALID_DEALER_INDEX',
+        'Failed to find next dealer index: activePlayers array out of bounds'
+      )
     }
-    
-    return nextIndex
+    return activePlayers[nextActiveIndex].index
   }
 
   /**

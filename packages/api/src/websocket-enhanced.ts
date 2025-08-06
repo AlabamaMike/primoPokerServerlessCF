@@ -374,6 +374,9 @@ export class EnhancedWebSocketManager {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
+    // Clean up health monitoring intervals
+    this.cleanupHealthMonitoring(connectionId);
+
     // Remove from all maps
     this.connections.delete(connectionId);
     this.playerConnectionMap.delete(connection.playerId);
@@ -456,6 +459,8 @@ export class EnhancedWebSocketManager {
     await Promise.allSettled(promises);
   }
 
+  private connectionHealthIntervals = new Map<string, { ping: NodeJS.Timeout; stale: NodeJS.Timeout }>();
+
   private setupHealthMonitoring(connectionId: string): void {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
@@ -463,7 +468,7 @@ export class EnhancedWebSocketManager {
     // Ping interval with recovery
     const pingInterval = setInterval(async () => {
       if (!this.connections.has(connectionId)) {
-        clearInterval(pingInterval);
+        this.cleanupHealthMonitoring(connectionId);
         return;
       }
 
@@ -481,8 +486,7 @@ export class EnhancedWebSocketManager {
     const staleCheckInterval = setInterval(() => {
       const conn = this.connections.get(connectionId);
       if (!conn) {
-        clearInterval(staleCheckInterval);
-        clearInterval(pingInterval);
+        this.cleanupHealthMonitoring(connectionId);
         return;
       }
 
@@ -491,10 +495,24 @@ export class EnhancedWebSocketManager {
       
       if (timeSinceLastActivity > 5 * 60 * 1000) {
         this.handleDisconnectionWithRecovery(connectionId);
-        clearInterval(staleCheckInterval);
-        clearInterval(pingInterval);
+        this.cleanupHealthMonitoring(connectionId);
       }
     }, 60000);
+
+    // Store intervals for cleanup
+    this.connectionHealthIntervals.set(connectionId, {
+      ping: pingInterval,
+      stale: staleCheckInterval
+    });
+  }
+
+  private cleanupHealthMonitoring(connectionId: string): void {
+    const intervals = this.connectionHealthIntervals.get(connectionId);
+    if (intervals) {
+      clearInterval(intervals.ping);
+      clearInterval(intervals.stale);
+      this.connectionHealthIntervals.delete(connectionId);
+    }
   }
 
   // Public methods remain similar but with error recovery
@@ -529,6 +547,35 @@ export class EnhancedWebSocketManager {
       errorMetrics: this.errorRecovery.getMetrics(),
       circuitBreakerStatus: this.errorRecovery.getCircuitBreakerStatus(),
     };
+  }
+
+  /**
+   * Cleanup all connections and intervals
+   * Should be called when shutting down the WebSocket manager
+   */
+  public cleanup(): void {
+    // Clear all grace period timeouts
+    for (const timeout of this.gracePeriodConnections.values()) {
+      clearTimeout(timeout);
+    }
+    this.gracePeriodConnections.clear();
+
+    // Clear all health monitoring intervals
+    for (const connectionId of this.connectionHealthIntervals.keys()) {
+      this.cleanupHealthMonitoring(connectionId);
+    }
+
+    // Close all active connections
+    for (const [connectionId, connection] of this.connections.entries()) {
+      if (connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.close(1000, 'Server shutdown');
+      }
+    }
+
+    // Clear all maps
+    this.connections.clear();
+    this.tableConnections.clear();
+    this.playerConnectionMap.clear();
   }
 
   private sendError(connectionId: string, message: string): void {

@@ -74,7 +74,7 @@ export class RetryPolicyExecutor {
     // Apply jitter if enabled
     if (this.policy.jitter) {
       const jitterAmount = baseDelay * Math.random();
-      return Math.floor(jitterAmount);
+      return Math.floor(baseDelay + jitterAmount);
     }
 
     return baseDelay;

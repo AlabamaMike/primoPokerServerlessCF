@@ -1,5 +1,6 @@
 import { CircuitBreaker, CircuitBreakerConfig } from './circuit-breaker';
 import { RetryPolicy, RetryPolicyExecutor } from './retry-policy';
+import { ErrorSanitizer } from './error-sanitizer';
 
 export interface OperationContext {
   operationName: string;
@@ -332,8 +333,11 @@ export class ErrorRecoveryManager {
   }
 
   private handleCriticalError(error: Error, context: OperationContext): void {
-    // In a real implementation, this would send alerts, log to monitoring service, etc.
-    console.error(`Critical error in ${context.operationName}:`, error);
+    // Sanitize error before logging to prevent sensitive data exposure
+    const sanitizedError = ErrorSanitizer.sanitizeForLogging(error);
+    console.error(`Critical error in ${context.operationName}:`, sanitizedError);
+    
+    // In a real implementation, this would also send alerts to monitoring service
   }
 
   private wasRecovered(error: any): boolean {
@@ -354,8 +358,45 @@ export class ErrorRecoveryManager {
   }
 
   private mergeStates(local: any, remote: any): any {
-    // Simple merge - in reality would have conflict resolution logic
-    return { ...local, ...remote };
+    // Deep merge with conflict resolution for game states
+    if (!local || !remote || typeof local !== 'object' || typeof remote !== 'object') {
+      return remote; // Prefer remote state if not mergeable
+    }
+
+    const merged: any = { ...local };
+
+    for (const key in remote) {
+      if (!(key in merged)) {
+        // Add new fields from remote
+        merged[key] = remote[key];
+      } else if (this.isCriticalField(key)) {
+        // Critical fields always use remote (server) state
+        merged[key] = remote[key];
+      } else if (typeof remote[key] === 'object' && typeof merged[key] === 'object') {
+        // Recursively merge nested objects
+        if (Array.isArray(remote[key]) && Array.isArray(merged[key])) {
+          // For arrays, prefer remote state to avoid inconsistencies
+          merged[key] = remote[key];
+        } else if (remote[key] instanceof Date || merged[key] instanceof Date) {
+          // For dates, use the most recent
+          merged[key] = new Date(Math.max(
+            new Date(remote[key]).getTime(),
+            new Date(merged[key]).getTime()
+          ));
+        } else {
+          // Recursive merge for nested objects
+          merged[key] = this.mergeStates(merged[key], remote[key]);
+        }
+      } else if (key === 'version' || key === 'timestamp') {
+        // Version/timestamp fields use the higher value
+        merged[key] = Math.max(Number(merged[key]) || 0, Number(remote[key]) || 0);
+      } else {
+        // For primitive values, use remote state
+        merged[key] = remote[key];
+      }
+    }
+
+    return merged;
   }
 }
 

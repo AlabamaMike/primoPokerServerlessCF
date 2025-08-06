@@ -1,3 +1,5 @@
+import { ErrorSanitizer } from './error-sanitizer';
+
 export type CircuitBreakerState = 'closed' | 'open' | 'half-open';
 
 export interface CircuitBreakerConfig {
@@ -33,7 +35,8 @@ export class CircuitBreaker {
     this.resetMetricsIfNeeded();
 
     if (!this.allowRequest()) {
-      throw new Error('Circuit breaker is open');
+      // Use sanitized error to avoid exposing internal state
+      throw ErrorSanitizer.sanitizeError(new Error('Service temporarily unavailable'));
     }
 
     if (this.state === 'half-open') {

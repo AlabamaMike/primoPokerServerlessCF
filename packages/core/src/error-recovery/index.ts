@@ -19,6 +19,7 @@ export type {
   RecoveryContext,
   RecoveryStrategy as StrategyConfig
 } from './recovery-strategies';
+export { ErrorSanitizer } from './error-sanitizer';
 
 // Re-export the default instance for convenience
 import ErrorRecoveryManager from './error-recovery-manager';

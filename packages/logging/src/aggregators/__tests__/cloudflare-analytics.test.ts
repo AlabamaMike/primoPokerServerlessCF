@@ -34,9 +34,9 @@ describe('CloudflareAnalyticsAggregator', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (aggregator) {
-      aggregator.stop();
+      await aggregator.stop();
     }
   });
 
@@ -245,7 +245,7 @@ describe('CloudflareAnalyticsAggregator', () => {
       aggregator = new CloudflareAnalyticsAggregator(mockConfig);
       await aggregator.send([createLogEntry('test')]);
       
-      aggregator.stop();
+      await aggregator.stop();
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'CloudflareAnalyticsAggregator final metrics:',
@@ -255,11 +255,11 @@ describe('CloudflareAnalyticsAggregator', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should stop timers on shutdown', () => {
+    it('should stop timers on shutdown', async () => {
       const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
       
       aggregator = new CloudflareAnalyticsAggregator(mockConfig);
-      aggregator.stop();
+      await aggregator.stop();
 
       // Should clear both flush timer and retry timer
       expect(clearIntervalSpy).toHaveBeenCalledTimes(2);

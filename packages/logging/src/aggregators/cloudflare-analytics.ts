@@ -27,8 +27,13 @@ interface AggregatorMetrics {
   bufferSize: number;
 }
 
+// Type for processed configuration
+type ProcessedCloudflareAnalyticsConfig = Required<Omit<CloudflareAnalyticsConfig, 'onError'>> & {
+  onError?: CloudflareAnalyticsConfig['onError'];
+};
+
 export class CloudflareAnalyticsAggregator implements LogAggregator {
-  private readonly config: Required<Omit<CloudflareAnalyticsConfig, 'onError'>> & { onError?: CloudflareAnalyticsConfig['onError'] };
+  private readonly config: ProcessedCloudflareAnalyticsConfig;
   private buffer: LogEntry[] = [];
   private flushTimer?: ReturnType<typeof setInterval>;
   private retryTimer?: ReturnType<typeof setInterval>;
@@ -84,7 +89,9 @@ export class CloudflareAnalyticsAggregator implements LogAggregator {
       
       // Call error callback if configured
       if (this.config.onError) {
-        this.config.onError(error as Error, batch);
+        // Ensure error is an Error object
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        this.config.onError(errorObj, batch);
       }
       
       // Add to dead letter queue if space available
@@ -147,8 +154,10 @@ export class CloudflareAnalyticsAggregator implements LogAggregator {
       } catch (error) {
         // Failed retry
         if (entry.attempts < this.config.maxRetries) {
-          // Calculate exponential backoff
-          const backoffDelay = this.config.retryDelay * Math.pow(2, entry.attempts);
+          // Calculate exponential backoff with maximum limit
+          const MAX_BACKOFF_DELAY_MS = 300000; // 5 minutes
+          const calculatedDelay = this.config.retryDelay * Math.pow(2, entry.attempts);
+          const backoffDelay = Math.min(calculatedDelay, MAX_BACKOFF_DELAY_MS);
           entry.nextRetryTime = Date.now() + backoffDelay;
           
           // Put back in queue if space available
@@ -214,21 +223,23 @@ export class CloudflareAnalyticsAggregator implements LogAggregator {
     return { ...this.metrics };
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
-      delete this.flushTimer;
+      this.flushTimer = undefined;
     }
     
     if (this.retryTimer) {
       clearInterval(this.retryTimer);
-      delete this.retryTimer;
+      this.retryTimer = undefined;
     }
     
-    // Final flush
-    this.flush().catch(error => {
+    // Final flush - await to ensure completion
+    try {
+      await this.flush();
+    } catch (error) {
       console.error('Final flush failed:', error);
-    });
+    }
     
     // Log final metrics
     console.log('CloudflareAnalyticsAggregator final metrics:', this.metrics);

@@ -190,9 +190,15 @@ describe('Logger Error Handling', () => {
     });
 
     it('should track dropped logs due to buffer overflow', () => {
-      // Force buffer overflow by setting a small max buffer size
-      const maxBufferSize = (Logger as any).MAX_BUFFER_SIZE;
-      (Logger as any).MAX_BUFFER_SIZE = 2;
+      // Create logger with small buffer size
+      const config: LoggerConfig = {
+        minLevel: 'debug',
+        maxBufferSize: 2,
+        onBufferOverflow: (droppedCount, bufferSize) => {
+          errorCallbacks.bufferOverflows.push({ droppedCount, bufferSize });
+        },
+      };
+      logger = new Logger(config);
 
       const events: LoggingEvent[] = [];
       const eventEmitter = logger.getEventEmitter();
@@ -204,9 +210,6 @@ describe('Logger Error Handling', () => {
       logger.info('Message 3'); // This should be dropped
       logger.info('Message 4'); // This should be dropped
 
-      // Restore original buffer size
-      (Logger as any).MAX_BUFFER_SIZE = maxBufferSize;
-
       const metrics = logger.getMetrics();
       expect(metrics.totalLogsProcessed).toBe(2);
       expect(metrics.totalLogsDropped).toBe(2);
@@ -214,6 +217,7 @@ describe('Logger Error Handling', () => {
       const overflowEvents = events.filter(e => e.type === 'buffer_overflow') as any[];
       expect(overflowEvents).toHaveLength(2);
       expect(errorCallbacks.bufferOverflows).toHaveLength(2);
+      expect(errorCallbacks.bufferOverflows[0]?.bufferSize).toBe(2);
     });
 
     it('should return a copy of metrics to prevent external modification', () => {

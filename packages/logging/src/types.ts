@@ -37,7 +37,18 @@ export interface LoggerConfig {
   onAggregationError?: (error: Error, entries: LogEntry[]) => void;
   onBufferOverflow?: (droppedCount: number, bufferSize: number) => void;
   onFilterError?: (error: Error, entry: LogEntry, filterIndex: number) => void;
+  // Buffer management
+  maxBufferSize?: number;
 }
+
+/**
+ * Internal processed logger configuration with all optional fields resolved to defaults
+ */
+export type ProcessedLoggerConfig = Required<Omit<LoggerConfig, 'onAggregationError' | 'onBufferOverflow' | 'onFilterError'>> & {
+  onAggregationError?: (error: Error, entries: LogEntry[]) => void;
+  onBufferOverflow?: (droppedCount: number, bufferSize: number) => void;
+  onFilterError?: (error: Error, entry: LogEntry, filterIndex: number) => void;
+};
 
 export interface LogAggregator {
   send(entries: LogEntry[]): Promise<void>;
@@ -74,4 +85,47 @@ export interface LoggingEventEmitter {
   on(listener: LoggingEventListener): void;
   off(listener: LoggingEventListener): void;
   emit(event: LoggingEvent): void;
+}
+
+/**
+ * Error thrown when log aggregation fails
+ */
+export class LogAggregationError extends Error {
+  constructor(
+    message: string,
+    public readonly entries: LogEntry[],
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = 'LogAggregationError';
+  }
+}
+
+/**
+ * Error thrown when a log filter fails
+ */
+export class LogFilterError extends Error {
+  constructor(
+    message: string,
+    public readonly entry: LogEntry,
+    public readonly filterIndex: number,
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = 'LogFilterError';
+  }
+}
+
+/**
+ * Error thrown when the log buffer overflows
+ */
+export class LogBufferOverflowError extends Error {
+  constructor(
+    message: string,
+    public readonly droppedCount: number,
+    public readonly bufferSize: number
+  ) {
+    super(message);
+    this.name = 'LogBufferOverflowError';
+  }
 }

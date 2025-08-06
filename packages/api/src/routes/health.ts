@@ -88,7 +88,7 @@ export class HealthChecker {
     return {
       status: overallStatus,
       timestamp: new Date().toISOString(),
-      environment: this.env.ENVIRONMENT || 'development',
+      environment: (this.env.ENVIRONMENT || 'development') as string,
       version: this.env.VERSION || '1.0.0',
       services: {
         database: 'D1',
@@ -103,7 +103,13 @@ export class HealthChecker {
         sessionStore: sessionStoreHealth,
         overall: overallStatus,
       },
-      metrics,
+      metrics: metrics || {
+        requestsPerMinute: 0,
+        averageResponseTime: 0,
+        errorRate: 0,
+        p95ResponseTime: 0,
+        p99ResponseTime: 0,
+      },
       rateLimiting: {
         enabled: true,
         requestsPerWindow: 100,
@@ -176,11 +182,9 @@ export class HealthChecker {
       const testId = this.env.GAME_TABLES.idFromName('health-check-test');
       const testObject = this.env.GAME_TABLES.get(testId);
       
-      const healthResponse = await testObject.fetch(
-        new Request('https://internal/health', {
-          method: 'GET',
-        })
-      );
+      const healthResponse = await testObject.fetch('https://internal/health', {
+        method: 'GET',
+      });
 
       const responseTime = Date.now() - startTime;
 

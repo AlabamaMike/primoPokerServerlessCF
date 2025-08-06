@@ -7,7 +7,8 @@ import {
   PlayerStatus,
   BuyInRequest,
   BuyInResponse,
-  PlayerWallet
+  PlayerWallet,
+  WorkerEnvironment
 } from '@primo-poker/shared';
 import { TableManager, logger, LogLevel } from '@primo-poker/core';
 import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-poker/security';
@@ -20,14 +21,7 @@ interface AuthenticatedRequest extends IRequest {
   env?: WorkerEnv;
 }
 
-interface WorkerEnv {
-  DB: D1Database;
-  SESSION_STORE: KVNamespace;
-  TABLE_OBJECTS: DurableObjectNamespace;
-  GAME_TABLES: DurableObjectNamespace;
-  JWT_SECRET: string;
-  ENVIRONMENT?: string;
-}
+type WorkerEnv = WorkerEnvironment;
 
 export class PokerAPIRoutes {
   private router: any; // Using any to avoid itty-router type issues
@@ -377,11 +371,9 @@ export class PokerAPIRoutes {
           const durableObjectId = request.env.GAME_TABLES.idFromName(knownTableId as string);
           const gameTable = request.env.GAME_TABLES.get(durableObjectId);
           
-          const stateResponse = await gameTable.fetch(
-            new Request(`http://internal/state`, {
-              method: 'GET',
-            })
-          );
+          const stateResponse = await gameTable.fetch(`http://internal/state`, {
+            method: 'GET',
+          });
           
           if (stateResponse.ok) {
             const tableState = await stateResponse.json() as any;
@@ -430,13 +422,14 @@ export class PokerAPIRoutes {
       return this.errorResponse('Server configuration error', 500);
     }
 
+    let config: any;
     try {
       logger.debug('Parsing request body');
       const body = await request.json() as Record<string, any>;
       logger.debug('Body parsed successfully', { body });
       
       // Validate table configuration
-      const config = {
+      config = {
         ...body,
         id: RandomUtils.generateUUID(),
       };
@@ -463,17 +456,15 @@ export class PokerAPIRoutes {
       const requestPayload = { config: configResult.data };
       logger.debug('Sending create request to Durable Object', { tableId, payload: requestPayload });
       
-      const createResponse = await gameTable.fetch(
-        new Request(`http://internal/create`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Creator-ID': request.user.userId,
-            'X-Creator-Username': request.user.username,
-          },
-          body: JSON.stringify(requestPayload),
-        })
-      );
+      const createResponse = await gameTable.fetch(`http://internal/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Creator-ID': request.user.userId,
+          'X-Creator-Username': request.user.username,
+        },
+        body: JSON.stringify(requestPayload),
+      });
       
       logger.debug('Durable Object response received', { status: createResponse.status });
 
@@ -519,11 +510,9 @@ export class PokerAPIRoutes {
       const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
       const gameTable = request.env.GAME_TABLES.get(durableObjectId);
       
-      const stateResponse = await gameTable.fetch(
-        new Request(`http://internal/state`, {
-          method: 'GET',
-        })
-      );
+      const stateResponse = await gameTable.fetch(`http://internal/state`, {
+        method: 'GET',
+      });
       
       if (!stateResponse.ok) {
         return this.errorResponse('Table not found', 404);
@@ -544,9 +533,9 @@ export class PokerAPIRoutes {
     logger.setContext({ 
       correlationId, 
       operation: 'joinTable',
-      tableId,
-      userId: request.user?.userId,
-      username: request.user?.username 
+      tableId: tableId || '',
+      userId: request.user?.userId || '',
+      username: request.user?.username || ''
     });
 
     if (!tableId || !request.user) {
@@ -568,21 +557,19 @@ export class PokerAPIRoutes {
       const gameTable = request.env.GAME_TABLES.get(durableObjectId);
 
       // Send join request to Durable Object
-      const joinResponse = await gameTable.fetch(
-        new Request(`http://internal/join`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Player-ID': request.user.userId,
-            'X-Username': request.user.username,
-          },
-          body: JSON.stringify({
-            playerId: request.user.userId,
-            buyIn: body.buyIn || 100, // Default buy-in
-            password: body.password,
-          }),
-        })
-      );
+      const joinResponse = await gameTable.fetch(`http://internal/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Player-ID': request.user.userId,
+          'X-Username': request.user.username,
+        },
+        body: JSON.stringify({
+          playerId: request.user.userId,
+          buyIn: body.buyIn || 100, // Default buy-in
+          password: body.password,
+        }),
+      });
 
       if (!joinResponse.ok) {
         const error = await joinResponse.text();
@@ -617,15 +604,13 @@ export class PokerAPIRoutes {
       const gameTable = request.env.GAME_TABLES.get(durableObjectId);
       
       // Send leave request to Durable Object
-      const leaveResponse = await gameTable.fetch(
-        new Request(`http://internal/leave`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Player-ID': request.user.userId,
-          },
-        })
-      );
+      const leaveResponse = await gameTable.fetch(`http://internal/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Player-ID': request.user.userId,
+        },
+      });
       
       if (!leaveResponse.ok) {
         const error = await leaveResponse.json() as any;
@@ -657,7 +642,7 @@ export class PokerAPIRoutes {
       const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
       const gameTable = request.env.GAME_TABLES.get(durableObjectId);
       
-      const actionRequest = new Request(`https://table-object/action`, {
+      const response = await gameTable.fetch(`https://table-object/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -666,8 +651,6 @@ export class PokerAPIRoutes {
           amount: body.amount,
         }),
       });
-
-      const response = await gameTable.fetch(actionRequest);
       const result = await response.json();
 
       return new Response(JSON.stringify(result), {

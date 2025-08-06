@@ -21,11 +21,20 @@ export function initializeLogging(config: LoggingConfig): void {
       }
     : undefined;
 
-  LoggerFactory.initialize({
-    defaultLevel: config.defaultLogLevel || 'info',
-    enablePIIFiltering: true,
-    enableSampling: config.enableSampling ?? false,
-    samplingRate: config.samplingRate ?? 1,
-    analytics: analyticsConfig,
-  });
+  if (analyticsConfig) {
+    LoggerFactory.initialize({
+      defaultLevel: config.defaultLogLevel || 'info',
+      enablePIIFiltering: true,
+      enableSampling: config.enableSampling ?? false,
+      samplingRate: config.samplingRate ?? 1,
+      analytics: analyticsConfig,
+    });
+  } else {
+    LoggerFactory.initialize({
+      defaultLevel: config.defaultLogLevel || 'info',
+      enablePIIFiltering: true,
+      enableSampling: config.enableSampling ?? false,
+      samplingRate: config.samplingRate ?? 1,
+    });
+  }
 }

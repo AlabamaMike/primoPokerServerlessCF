@@ -31,12 +31,13 @@ export class PerformanceMonitor {
 
     // Record request metrics
     try {
+      const contentLength = request.headers.get('content-length');
       const requestMetric = {
         method: request.method,
         path,
         timestamp: Date.now(),
-        bodySize: request.headers.get('content-length') ? parseInt(request.headers.get('content-length')!) : undefined,
-        memoryUsage: (global as any).performance?.memory?.usedJSHeapSize,
+        bodySize: contentLength ? parseInt(contentLength) : 0,
+        memoryUsage: (globalThis as any).performance?.memory?.usedJSHeapSize,
       };
 
       await this.metricsCollector?.recordRequest(requestMetric);

@@ -1,3 +1,7 @@
+/**
+ * Jest configuration for comprehensive test suite
+ * Includes parallel execution optimization for faster CI/CD
+ */
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
@@ -31,5 +35,13 @@ module.exports = {
   },
   testTimeout: 30000,
   clearMocks: true,
-  verbose: true
+  verbose: true,
+  // Parallel execution configuration
+  maxWorkers: process.env.CI ? 2 : '50%', // 2 workers in CI, 50% of CPUs locally
+  maxConcurrency: 5, // Limit concurrent tests per worker
+  // Test isolation for reliable parallel execution
+  resetMocks: true,
+  restoreMocks: true,
+  // Fail fast in CI to save resources
+  bail: process.env.CI ? 1 : 0
 };

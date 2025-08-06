@@ -10,47 +10,10 @@ import {
   PlayerStatus
 } from '@primo-poker/shared';
 import { AuthenticationManager } from '@primo-poker/security';
+import { MockWebSocket, setupWebSocketMock } from '../test-utils/mock-websocket';
 
-// Mock WebSocket
-class MockWebSocket {
-  static OPEN = 1;
-  static CLOSED = 3;
-  
-  readyState = MockWebSocket.OPEN;
-  sentMessages: string[] = [];
-  eventHandlers = new Map<string, Function[]>();
-  
-  send(data: string) {
-    this.sentMessages.push(data);
-  }
-  
-  close(code?: number, reason?: string) {
-    this.readyState = MockWebSocket.CLOSED;
-    this.emit('close', { code, reason });
-  }
-  
-  addEventListener(event: string, handler: Function) {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, []);
-    }
-    this.eventHandlers.get(event)!.push(handler);
-  }
-  
-  removeEventListener(event: string, handler: Function) {
-    const handlers = this.eventHandlers.get(event);
-    if (handlers) {
-      const index = handlers.indexOf(handler);
-      if (index > -1) {
-        handlers.splice(index, 1);
-      }
-    }
-  }
-  
-  emit(event: string, data: any) {
-    const handlers = this.eventHandlers.get(event) || [];
-    handlers.forEach(handler => handler(data));
-  }
-}
+// Setup WebSocket mock globally
+setupWebSocketMock(global);
 
 describe('WebSocket Integration Tests', () => {
   let wsManager: WebSocketManager;

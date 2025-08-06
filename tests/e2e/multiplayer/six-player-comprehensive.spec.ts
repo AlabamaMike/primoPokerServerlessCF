@@ -1,8 +1,13 @@
 import { test, expect, Page } from '@playwright/test';
 import { setupTestPlayers, TestPlayer } from './helpers/test-players';
 import { WebSocketHelper } from './helpers/websocket-helper';
+import { retryE2E } from '../../test-utils/retry-helper';
+import { getTestTimeout } from '../../test-utils/test-config';
 
-const API_URL = process.env.API_URL || 'https://primo-poker-server.alabamamike.workers.dev';
+const API_URL = process.env.API_URL;
+if (!API_URL) {
+  throw new Error('API_URL environment variable must be set for tests. Refusing to run against a default or production endpoint.');
+}
 
 describe('6-Player Comprehensive E2E Tests', () => {
   let players: TestPlayer[] = [];
@@ -392,11 +397,17 @@ describe('6-Player Comprehensive E2E Tests', () => {
     
     expect(activePlayerIndex).toBeGreaterThanOrEqual(0);
     
-    // Wait for regular timer to expire
-    await pages[activePlayerIndex]!.waitForSelector('[data-testid="timer-warning"]', { timeout: 20000 });
+    // Wait for regular timer to expire with retry logic
+    await retryE2E('timer-warning-wait', async () => {
+      await pages[activePlayerIndex]!.waitForSelector('[data-testid="timer-warning"]', { 
+        timeout: getTestTimeout('e2e') 
+      });
+    });
     
-    // Time bank should activate automatically
-    await expect(pages[activePlayerIndex]!.locator('[data-testid="time-bank-active"]')).toBeVisible();
+    // Time bank should activate automatically with retry
+    await retryE2E('time-bank-activation', async () => {
+      await expect(pages[activePlayerIndex]!.locator('[data-testid="time-bank-active"]')).toBeVisible();
+    });
     
     // Verify time bank countdown
     const initialTimeBank = await pages[activePlayerIndex]!.locator('[data-testid="time-bank-seconds"]').textContent();

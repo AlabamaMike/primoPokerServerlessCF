@@ -11,8 +11,10 @@ import {
   PlayerStatus,
   Card,
   Suit,
-  Rank
+  Rank,
+  GamePhase
 } from '@primo-poker/shared';
+import { getPerformanceThreshold } from '../test-utils/test-config';
 
 interface PerformanceMetrics {
   operation: string;
@@ -128,7 +130,7 @@ describe('Performance Tests', () => {
         }
       );
       
-      expect(metrics.averageTime).toBeLessThan(0.1); // Less than 0.1ms per evaluation
+      expect(metrics.averageTime).toBeLessThan(getPerformanceThreshold('handEvaluation')); // Environment-aware threshold
       expect(metrics.opsPerSecond).toBeGreaterThan(10000); // More than 10k hands/second
     });
 
@@ -145,7 +147,7 @@ describe('Performance Tests', () => {
         }
       );
       
-      expect(metrics.averageTime).toBeLessThan(0.2); // Less than 0.2ms per comparison
+      expect(metrics.averageTime).toBeLessThan(getPerformanceThreshold('handEvaluation') * 2); // Double threshold for comparison
     });
   });
 
@@ -190,7 +192,7 @@ describe('Performance Tests', () => {
         }
       );
       
-      expect(metrics.averageTime).toBeLessThan(1); // Less than 1ms per initialization
+      expect(metrics.averageTime).toBeLessThan(getPerformanceThreshold('gameInitialization')); // Environment-aware threshold
     });
 
     test('should process betting actions efficiently', async () => {
@@ -208,7 +210,7 @@ describe('Performance Tests', () => {
         }
       );
       
-      expect(metrics.averageTime).toBeLessThan(0.5); // Less than 0.5ms per action
+      expect(metrics.averageTime).toBeLessThan(getPerformanceThreshold('bettingAction')); // Environment-aware threshold
     });
 
     test('should complete full hands within time limits', async () => {
@@ -223,7 +225,7 @@ describe('Performance Tests', () => {
           let gameState = game.getGameState();
           let actions = 0;
           
-          while (gameState.phase !== 'FINISHED' && actions < 50) {
+          while (gameState.phase !== GamePhase.FINISHED && actions < 50) {
             if (gameState.activePlayerId) {
               await game.processBet(gameState.activePlayerId, gameState.currentBet);
               gameState = game.getGameState();

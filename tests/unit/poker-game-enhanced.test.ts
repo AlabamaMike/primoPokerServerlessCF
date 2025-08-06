@@ -12,6 +12,7 @@ import {
   Suit,
   Rank
 } from '@primo-poker/shared';
+import { createTestPlayers, createTestTableConfig } from '../test-utils/test-data-factory';
 
 describe('PokerGame Enhanced Tests', () => {
   let tableConfig: TableConfig;
@@ -19,78 +20,29 @@ describe('PokerGame Enhanced Tests', () => {
   let game: PokerGame;
 
   beforeEach(() => {
-    tableConfig = {
-      id: 'test-table-1',
-      name: 'Test Table',
+    tableConfig = createTestTableConfig({
       gameType: GameType.TEXAS_HOLDEM,
       bettingStructure: BettingStructure.NO_LIMIT,
       gameFormat: GameFormat.CASH,
       maxPlayers: 9,
-      minBuyIn: 100,
-      maxBuyIn: 1000,
       smallBlind: 5,
       bigBlind: 10,
-      ante: 0,
-      timeBank: 30,
-      isPrivate: false,
-    };
+      timeBank: 30
+    });
 
-    players = [
-      {
-        id: 'player-1',
-        username: 'Alice',
-        email: 'alice@example.com',
-        chipCount: 500,
-        status: PlayerStatus.ACTIVE,
-        timeBank: 30,
-        isDealer: false,
-      },
-      {
-        id: 'player-2',
-        username: 'Bob',
-        email: 'bob@example.com',
-        chipCount: 500,
-        status: PlayerStatus.ACTIVE,
-        timeBank: 30,
-        isDealer: false,
-      },
-      {
-        id: 'player-3',
-        username: 'Charlie',
-        email: 'charlie@example.com',
-        chipCount: 500,
-        status: PlayerStatus.ACTIVE,
-        timeBank: 30,
-        isDealer: false,
-      },
-      {
-        id: 'player-4',
-        username: 'Dave',
-        email: 'dave@example.com',
-        chipCount: 500,
-        status: PlayerStatus.ACTIVE,
-        timeBank: 30,
-        isDealer: false,
-      },
-      {
-        id: 'player-5',
-        username: 'Eve',
-        email: 'eve@example.com',
-        chipCount: 500,
-        status: PlayerStatus.ACTIVE,
-        timeBank: 30,
-        isDealer: false,
-      },
-      {
-        id: 'player-6',
-        username: 'Frank',
-        email: 'frank@example.com',
-        chipCount: 500,
-        status: PlayerStatus.ACTIVE,
-        timeBank: 30,
-        isDealer: false,
-      },
-    ];
+    // Create 6 test players with 500 chips each
+    const baseTestPlayers = createTestPlayers(6, 500);
+    
+    // Convert to match expected Player interface with username/email
+    players = baseTestPlayers.map((p, index) => ({
+      id: p.id,
+      username: p.name,
+      email: `${p.name.toLowerCase()}@example.com`,
+      chipCount: p.chips,
+      status: PlayerStatus.ACTIVE,
+      timeBank: 30,
+      isDealer: false,
+    }));
 
     game = new PokerGame(tableConfig, players);
   });

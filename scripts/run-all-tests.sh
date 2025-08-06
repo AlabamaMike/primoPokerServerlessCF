@@ -194,6 +194,12 @@ echo -e "Unit Test Files: ${UNIT_TESTS}"
 echo -e "Integration Test Files: ${INTEGRATION_TESTS}"
 echo -e "E2E Test Files: ${E2E_TESTS}"
 echo -e "Performance Test Files: ${PERF_TESTS}"
+# Validate numeric values before arithmetic
+if ! [[ "$UNIT_TESTS" =~ ^[0-9]+$ ]]; then UNIT_TESTS=0; fi
+if ! [[ "$INTEGRATION_TESTS" =~ ^[0-9]+$ ]]; then INTEGRATION_TESTS=0; fi
+if ! [[ "$E2E_TESTS" =~ ^[0-9]+$ ]]; then E2E_TESTS=0; fi
+if ! [[ "$PERF_TESTS" =~ ^[0-9]+$ ]]; then PERF_TESTS=0; fi
+
 echo -e "Total Test Files: $((UNIT_TESTS + INTEGRATION_TESTS + E2E_TESTS + PERF_TESTS))"
 
 # Clean up temporary files

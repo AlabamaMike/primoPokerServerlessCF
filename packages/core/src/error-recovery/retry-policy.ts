@@ -1,3 +1,5 @@
+import { Logger, LoggerFactory } from '@primo-poker/logging';
+
 export interface RetryPolicy {
   maxAttempts: number;
   backoffStrategy: 'exponential' | 'linear' | 'fixed';
@@ -13,7 +15,11 @@ export interface RetryContext {
 }
 
 export class RetryPolicyExecutor {
-  constructor(private readonly policy: RetryPolicy) {}
+  private readonly logger: Logger;
+
+  constructor(private readonly policy: RetryPolicy) {
+    this.logger = LoggerFactory.getInstance().getLogger('retry-policy');
+  }
 
   async execute<T>(
     operation: (context?: RetryContext) => Promise<T> | T,
@@ -35,15 +41,31 @@ export class RetryPolicyExecutor {
 
       try {
         const result = await Promise.resolve(operation(retryContext));
+        if (attempt > 1) {
+          this.logger.info('Operation succeeded after retry', {
+            attempt,
+            totalAttempts: this.policy.maxAttempts,
+          });
+        }
         return result;
       } catch (error) {
         lastError = error as Error;
 
         if (attempt === this.policy.maxAttempts) {
+          this.logger.error('Retry policy exhausted', error as Error, {
+            attempts: this.policy.maxAttempts,
+            backoffStrategy: this.policy.backoffStrategy,
+          });
           throw error;
         }
 
         const delay = this.calculateDelay(attempt);
+        this.logger.debug('Retrying operation', {
+          attempt,
+          maxAttempts: this.policy.maxAttempts,
+          delay,
+          error: (error as Error).message,
+        });
         await this.delay(delay, signal);
       }
     }

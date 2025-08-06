@@ -21,7 +21,7 @@ export class CorrelationIdGenerator {
     const alphabetLength = this.ALPHABET.length;
     
     for (let i = 0; i < length; i++) {
-      result += this.ALPHABET[array[i] % alphabetLength];
+      result += this.ALPHABET[(array[i] ?? 0) % alphabetLength];
     }
     
     return result;

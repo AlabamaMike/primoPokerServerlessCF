@@ -58,21 +58,8 @@ export class Logger {
   }
 
   withContext(context: LogContext): Logger {
-    // Create a child logger with merged context
-    const childConfig = { ...this.config };
-    const childLogger = new Logger(childConfig);
-    if (this.aggregator) {
-      childLogger.setAggregator(this.aggregator);
-    }
-    
-    // Override log method to merge contexts
-    const originalLog = childLogger.log.bind(childLogger);
-    childLogger.log = (level: LogLevel, message: string, additionalContext?: LogContext, error?: any) => {
-      const mergedContext = { ...context, ...additionalContext };
-      originalLog(level, message, mergedContext, error);
-    };
-    
-    return childLogger;
+    // Create a lightweight context wrapper
+    return new ContextualLogger(this, context);
   }
 
   async flush(): Promise<void> {
@@ -92,7 +79,7 @@ export class Logger {
     if (this.config.enableSampling) {
       const array = new Uint8Array(1);
       crypto.getRandomValues(array);
-      const randomValue = array[0] / 256; // Convert to 0-1 range
+      const randomValue = (array[0] ?? 0) / 256; // Convert to 0-1 range
       if (randomValue > this.config.samplingRate) {
         return;
       }
@@ -180,5 +167,54 @@ export class Logger {
     }
 
     return parts.join(' ');
+  }
+}
+
+// Lightweight context wrapper for better performance
+class ContextualLogger extends Logger {
+  private readonly parentLogger: Logger;
+  private readonly baseContext: LogContext;
+
+  constructor(parentLogger: Logger, baseContext: LogContext) {
+    // We need to pass the config, but we'll override all methods
+    super((parentLogger as any).config);
+    this.parentLogger = parentLogger;
+    this.baseContext = baseContext;
+    
+    // Share the same aggregator reference
+    if ((parentLogger as any).aggregator) {
+      this.setAggregator((parentLogger as any).aggregator);
+    }
+  }
+
+  debug(message: string, context?: LogContext): void {
+    this.contextualLog('debug', message, context);
+  }
+
+  info(message: string, context?: LogContext): void {
+    this.contextualLog('info', message, context);
+  }
+
+  warn(message: string, context?: LogContext): void {
+    this.contextualLog('warn', message, context);
+  }
+
+  error(message: string, error?: Error | unknown, context?: LogContext): void {
+    const mergedContext = { ...this.baseContext, ...context };
+    this.parentLogger.error(message, error, mergedContext);
+  }
+
+  withContext(context: LogContext): Logger {
+    const mergedContext = { ...this.baseContext, ...context };
+    return new ContextualLogger(this.parentLogger, mergedContext);
+  }
+
+  async flush(): Promise<void> {
+    return this.parentLogger.flush();
+  }
+
+  private contextualLog(level: LogLevel, message: string, additionalContext?: LogContext): void {
+    const mergedContext = { ...this.baseContext, ...additionalContext };
+    (this.parentLogger as any).log(level, message, mergedContext);
   }
 }

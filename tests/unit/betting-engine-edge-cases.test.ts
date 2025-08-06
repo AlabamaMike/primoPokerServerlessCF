@@ -1,4 +1,4 @@
-import { BettingEngine, BettingResult, BettingError } from '@primo-poker/core';
+import { BettingEngine, BettingAction, ValidationResult } from '@primo-poker/core';
 import { GamePlayer, PlayerStatus, GamePhase } from '@primo-poker/shared';
 
 describe('BettingEngine Edge Cases and Comprehensive Tests', () => {

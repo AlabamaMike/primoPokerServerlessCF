@@ -51,3 +51,7 @@ export type {
   StateSyncOptions,
   PlayerState
 } from './state-synchronizer';
+
+// Error recovery framework
+export * from './error-recovery';
+export { ErrorRecoveryManager } from './error-recovery';

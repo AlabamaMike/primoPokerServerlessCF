@@ -22,6 +22,7 @@ module.exports = {
     'node_modules/(?!(@primo-poker)/)'
   ],
   extensionsToTreatAsEsm: ['.ts'],
+  setupFiles: ['<rootDir>/jest.setup.test.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

@@ -22,6 +22,12 @@ binding = "SESSION_STORE"
 id = "6ef4c203e65f429082df51bbec8bb19e"
 preview_id = "d7b0477a22d94639806c8533d46682a9"
 
+# KV Namespace for metrics
+[[kv_namespaces]]
+binding = "METRICS_NAMESPACE"
+id = "7ef4c203e65f429082df51bbec8bb19f"
+preview_id = "e7b0477a22d94639806c8533d46682a8"
+
 # R2 Bucket for hand history
 [[r2_buckets]]
 binding = "HAND_HISTORY_BUCKET"

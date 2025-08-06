@@ -7,7 +7,7 @@
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts"],
+  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "src/websocket-unified.ts"],
   "references": [
     { "path": "../shared" },
     { "path": "../core" },

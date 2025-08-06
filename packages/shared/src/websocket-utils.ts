@@ -27,7 +27,7 @@ export enum GameEventType {
   NEW_HAND_STARTING = 'NEW_HAND_STARTING',
 }
 
-export const WebSocketMessageSchema = z.object({
+export const WSMessageSchema = z.object({
   type: z.nativeEnum(WebSocketEventType),
   payload: z.any(),
   timestamp: z.number().optional(),
@@ -48,12 +48,12 @@ export const GameEventMessageSchema = z.object({
   correlationId: z.string().optional(),
 });
 
-export type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
+export type WSMessage = z.infer<typeof WSMessageSchema>;
 export type GameEventMessage = z.infer<typeof GameEventMessageSchema>;
 
 export class MessageFactory {
   private static generateMessageId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   static createMessage(
@@ -64,7 +64,7 @@ export class MessageFactory {
       correlationId?: string;
       timestamp?: number;
     }
-  ): WebSocketMessage {
+  ): WSMessage {
     return {
       type,
       payload,
@@ -110,7 +110,7 @@ export class MessageFactory {
       code?: string;
       details?: any;
     }
-  ): WebSocketMessage {
+  ): WSMessage {
     return {
       type: WebSocketEventType.ERROR,
       payload: {
@@ -124,46 +124,54 @@ export class MessageFactory {
     };
   }
 
-  static createPing(): WebSocketMessage {
+  static createPing(): WSMessage {
     return this.createMessage(WebSocketEventType.PING, null);
   }
 
-  static createPong(): WebSocketMessage {
+  static createPong(): WSMessage {
     return this.createMessage(WebSocketEventType.PONG, null);
   }
 
-  static createConnectionAck(connectionId: string): WebSocketMessage {
+  static createConnectionAck(connectionId: string): WSMessage {
     return this.createMessage(WebSocketEventType.CONNECTION_ACK, {
       connectionId,
       status: 'connected',
     });
   }
 
-  static parseMessage(data: string | ArrayBuffer): WebSocketMessage | null {
+  static parseMessage(data: string | ArrayBuffer): WSMessage | null {
     try {
-      const parsed = typeof data === 'string' ? JSON.parse(data) : JSON.parse(new TextDecoder().decode(data as ArrayBuffer));
-      return WebSocketMessageSchema.parse(parsed);
+      let jsonString: string;
+      if (typeof data === 'string') {
+        jsonString = data;
+      } else {
+        jsonString = new TextDecoder().decode(data as ArrayBuffer);
+      }
+      const parsed = JSON.parse(jsonString);
+      return WSMessageSchema.parse(parsed);
     } catch (error) {
       console.error('Failed to parse WebSocket message:', error);
       return null;
     }
   }
 
-  static stringify(message: WebSocketMessage): string {
+  static stringify(message: WSMessage): string {
     return JSON.stringify(message);
   }
 }
 
 export class MessageQueue {
-  private queue: WebSocketMessage[] = [];
+  private queue: WSMessage[] = [];
   private maxSize: number;
   private processedIds = new Set<string>();
+  private maxProcessedIds: number;
 
   constructor(maxSize = 1000) {
     this.maxSize = maxSize;
+    this.maxProcessedIds = maxSize * 2; // Keep track of more IDs to catch duplicates
   }
 
-  enqueue(message: WebSocketMessage): boolean {
+  enqueue(message: WSMessage): boolean {
     if (message.messageId && this.processedIds.has(message.messageId)) {
       return false;
     }
@@ -171,23 +179,32 @@ export class MessageQueue {
     this.queue.push(message);
     if (message.messageId) {
       this.processedIds.add(message.messageId);
+      
+      // Prevent unbounded growth of processedIds
+      if (this.processedIds.size > this.maxProcessedIds) {
+        const idsToRemove = this.processedIds.size - this.maxProcessedIds;
+        const iterator = this.processedIds.values();
+        for (let i = 0; i < idsToRemove; i++) {
+          const oldestId = iterator.next().value;
+          if (oldestId) {
+            this.processedIds.delete(oldestId);
+          }
+        }
+      }
     }
 
     if (this.queue.length > this.maxSize) {
-      const removed = this.queue.shift();
-      if (removed?.messageId) {
-        this.processedIds.delete(removed.messageId);
-      }
+      this.queue.shift();
     }
 
     return true;
   }
 
-  dequeue(): WebSocketMessage | undefined {
+  dequeue(): WSMessage | undefined {
     return this.queue.shift();
   }
 
-  peek(): WebSocketMessage | undefined {
+  peek(): WSMessage | undefined {
     return this.queue[0];
   }
 
@@ -298,7 +315,7 @@ export function createWebSocketBroadcaster(
   sendToConnection: (connectionId: string, message: string) => void
 ) {
   return {
-    broadcast(connections: string[], message: WebSocketMessage): void {
+    broadcast(connections: string[], message: WSMessage): void {
       const serialized = MessageFactory.stringify(message);
       connections.forEach(connectionId => {
         try {
@@ -311,7 +328,7 @@ export function createWebSocketBroadcaster(
 
     broadcastToAll(
       connectionManager: ConnectionStateManager,
-      message: WebSocketMessage,
+      message: WSMessage,
       excludeIds?: string[]
     ): void {
       const activeConnections = connectionManager.getActiveConnections()
@@ -326,7 +343,7 @@ export function createWebSocketBroadcaster(
     broadcastToPlayers(
       connectionManager: ConnectionStateManager,
       playerIds: string[],
-      message: WebSocketMessage
+      message: WSMessage
     ): void {
       const connections = connectionManager.getAllConnections()
         .filter(conn => conn.playerId && playerIds.includes(conn.playerId))

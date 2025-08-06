@@ -18,7 +18,7 @@ import {
   PlayerError,
   ErrorCode,
   createErrorHandler,
-} from '@primo-poker/shared/src/error-handling';
+} from '@primo-poker/shared';
 
 export interface GameTableServiceConfig {
   tableConfig: TableConfig;
@@ -43,6 +43,7 @@ export class GameTableService {
   private eventHistory: GameEvent[] = [];
   private stateChangeCallback?: (state: GameState, event: GameEventType) => void;
   private errorHandler: ReturnType<typeof createErrorHandler>;
+  private nextHandTimer?: NodeJS.Timeout;
 
   constructor(config: GameTableServiceConfig) {
     this.tableConfig = config.tableConfig;
@@ -455,10 +456,16 @@ export class GameTableService {
       return;
     }
 
-    setTimeout(() => {
+    // Clear any existing timer
+    if (this.nextHandTimer) {
+      clearTimeout(this.nextHandTimer);
+    }
+    
+    this.nextHandTimer = setTimeout(() => {
       this.game.startNewHand();
       this.notifyStateChange(GameEventType.NEW_HAND_STARTING);
       this.startGame();
+      this.nextHandTimer = undefined;
     }, 5000);
   }
 
@@ -580,6 +587,13 @@ export class GameTableService {
       const state = this.game.getGameState();
       const optimizedUpdate = this.syncOptimizer.optimizeGameState(state);
       this.stateChangeCallback(state, eventType);
+    }
+  }
+
+  cleanup(): void {
+    if (this.nextHandTimer) {
+      clearTimeout(this.nextHandTimer);
+      this.nextHandTimer = undefined;
     }
   }
 }

@@ -2,15 +2,15 @@ import {
   MessageFactory, 
   ConnectionStateManager, 
   createWebSocketBroadcaster,
-  WebSocketMessage,
+  WSMessage,
   MessageQueue
-} from '@primo-poker/shared/src/websocket-utils';
+} from '@primo-poker/shared';
 import {
   BaseError,
   createErrorHandler,
   ConnectionError,
   ErrorCode,
-} from '@primo-poker/shared/src/error-handling';
+} from '@primo-poker/shared';
 import { WebSocketEventType, GameEventType } from '@primo-poker/shared';
 import { validateJWT } from '@primo-poker/security';
 import { Env } from '../types';
@@ -25,6 +25,7 @@ export interface UnifiedWebSocketConfig {
 export class UnifiedWebSocketManager {
   private connectionManager: ConnectionStateManager;
   private messageQueues: Map<string, MessageQueue>;
+  private webSockets: Map<string, WebSocket>;
   private broadcaster: ReturnType<typeof createWebSocketBroadcaster>;
   private heartbeatIntervals: Map<string, NodeJS.Timeout>;
   private reconnectTimers: Map<string, NodeJS.Timeout>;
@@ -44,6 +45,7 @@ export class UnifiedWebSocketManager {
 
     this.connectionManager = new ConnectionStateManager();
     this.messageQueues = new Map();
+    this.webSockets = new Map();
     this.heartbeatIntervals = new Map();
     this.reconnectTimers = new Map();
     
@@ -74,7 +76,9 @@ export class UnifiedWebSocketManager {
       const token = authHeader?.replace('Bearer ', '');
       const payload = token ? await this.validateToken(token) : null;
 
-      const [client, server] = Object.values(new WebSocketPair());
+      const pair = new WebSocketPair();
+      const client = pair[0];
+      const server = pair[1];
 
       this.setupConnection(server, connectionId, payload?.userId);
 
@@ -98,6 +102,7 @@ export class UnifiedWebSocketManager {
   ): void {
     const messageQueue = new MessageQueue(this.config.maxMessageQueueSize);
     this.messageQueues.set(connectionId, messageQueue);
+    this.webSockets.set(connectionId, webSocket);
 
     this.connectionManager.addConnection(connectionId, {
       id: connectionId,
@@ -183,7 +188,7 @@ export class UnifiedWebSocketManager {
 
   private async handleGameEvent(
     connectionId: string,
-    message: WebSocketMessage
+    message: WSMessage
   ): Promise<void> {
     const connection = this.connectionManager.getConnection(connectionId);
     if (!connection?.playerId) {
@@ -223,7 +228,7 @@ export class UnifiedWebSocketManager {
 
   private async handleChatMessage(
     connectionId: string,
-    message: WebSocketMessage
+    message: WSMessage
   ): Promise<void> {
     const connection = this.connectionManager.getConnection(connectionId);
     if (!connection?.playerId) {
@@ -249,7 +254,7 @@ export class UnifiedWebSocketManager {
 
   private async handlePlayerAction(
     connectionId: string,
-    message: WebSocketMessage
+    message: WSMessage
   ): Promise<void> {
     const connection = this.connectionManager.getConnection(connectionId);
     if (!connection?.playerId) {
@@ -285,7 +290,7 @@ export class UnifiedWebSocketManager {
 
   async broadcastToTable(
     tableId: string,
-    message: WebSocketMessage,
+    message: WSMessage,
     excludeIds?: string[]
   ): Promise<void> {
     const gameTable = this.env.GAME_TABLE.get(
@@ -343,6 +348,7 @@ export class UnifiedWebSocketManager {
     const reconnectTimer = setTimeout(() => {
       this.connectionManager.removeConnection(connectionId);
       this.messageQueues.delete(connectionId);
+      this.webSockets.delete(connectionId);
       this.reconnectTimers.delete(connectionId);
     }, this.config.reconnectGracePeriod);
 
@@ -374,6 +380,7 @@ export class UnifiedWebSocketManager {
       const staleIds = this.connectionManager.cleanupStaleConnections(300000);
       staleIds.forEach(id => {
         this.messageQueues.delete(id);
+        this.webSockets.delete(id);
         const heartbeat = this.heartbeatIntervals.get(id);
         if (heartbeat) {
           clearInterval(heartbeat);
@@ -384,15 +391,23 @@ export class UnifiedWebSocketManager {
   }
 
   private async validateToken(token: string): Promise<any> {
-    return validateJWT(token, this.env.JWT_SECRET);
+    try {
+      return await validateJWT(token, this.env.JWT_SECRET);
+    } catch (error) {
+      throw new BaseError(
+        'Invalid authentication token',
+        ErrorCode.AUTHENTICATION_FAILED,
+        { error: error instanceof Error ? error.message : String(error) }
+      );
+    }
   }
 
   private generateConnectionId(): string {
-    return `ws-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `ws-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   private getWebSocket(connectionId: string): WebSocket | undefined {
-    return undefined;
+    return this.webSockets.get(connectionId);
   }
 
   async reconnectPlayer(

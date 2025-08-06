@@ -1,16 +1,14 @@
 import { 
-  Player, 
+  GamePlayer, 
   PlayerAction, 
-  PlayerActionType, 
-  GamePhase,
-  Pot
+  GamePhase
 } from '@primo-poker/shared';
 import { 
   ValidationError, 
   PlayerError, 
   GameError,
   ErrorCode 
-} from '@primo-poker/shared/src/error-handling';
+} from '@primo-poker/shared';
 
 export interface ValidationResult {
   valid: boolean;
@@ -20,8 +18,18 @@ export interface ValidationResult {
   callAmount?: number;
 }
 
+export interface Pot {
+  amount: number;
+  eligiblePlayerIds: string[];
+}
+
+export interface PlayerActionData {
+  type: PlayerAction;
+  amount?: number;
+}
+
 export interface BettingContext {
-  players: Player[];
+  players: GamePlayer[];
   currentBet: number;
   totalPot: number;
   phase: GamePhase;
@@ -32,18 +40,18 @@ export interface BettingContext {
 
 export interface ActionValidator {
   validate(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult;
 }
 
 export class FoldValidator implements ActionValidator {
-  validate(action: PlayerAction, player: Player): ValidationResult {
-    if (player.folded) {
+  validate(action: PlayerActionData, player: GamePlayer, context: BettingContext): ValidationResult {
+    if (player.isFolded) {
       return {
         valid: false,
-        error: new PlayerError('Player has already folded', ErrorCode.ACTION_NOT_ALLOWED),
+        error: new PlayerError('GamePlayer has already folded', ErrorCode.ACTION_NOT_ALLOWED),
       };
     }
     return { valid: true };
@@ -52,8 +60,8 @@ export class FoldValidator implements ActionValidator {
 
 export class CheckValidator implements ActionValidator {
   validate(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     const callAmount = Math.max(0, context.currentBet - player.currentBet);
@@ -75,8 +83,8 @@ export class CheckValidator implements ActionValidator {
 
 export class CallValidator implements ActionValidator {
   validate(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     const callAmount = Math.max(0, context.currentBet - player.currentBet);
@@ -108,8 +116,8 @@ export class CallValidator implements ActionValidator {
 
 export class BetValidator implements ActionValidator {
   validate(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     if (!action.amount || action.amount <= 0) {
@@ -176,8 +184,8 @@ export class RaiseValidator implements ActionValidator {
   }
 
   validate(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     const cacheKey = this.getCacheKey(
@@ -196,16 +204,20 @@ export class RaiseValidator implements ActionValidator {
     this.raiseCache.set(cacheKey, result);
 
     if (this.raiseCache.size > 1000) {
-      const firstKey = this.raiseCache.keys().next().value;
-      this.raiseCache.delete(firstKey);
+      // Remove 10% of the cache when it's full
+      const keysToRemove = Math.floor(this.raiseCache.size * 0.1);
+      const keys = Array.from(this.raiseCache.keys());
+      for (let i = 0; i < keysToRemove; i++) {
+        this.raiseCache.delete(keys[i]);
+      }
     }
 
     return result;
   }
 
   private performValidation(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     if (!action.amount || action.amount <= 0) {
@@ -269,8 +281,8 @@ export class RaiseValidator implements ActionValidator {
 
 export class AllInValidator implements ActionValidator {
   validate(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     if (player.chips <= 0) {
@@ -288,26 +300,26 @@ export class AllInValidator implements ActionValidator {
 }
 
 export class OptimizedBettingEngine {
-  private validators: Map<PlayerActionType, ActionValidator>;
+  private validators: Map<PlayerAction, ActionValidator>;
   private potCalculator: PotCalculator;
   private validationCache = new Map<string, ValidationResult>();
 
   constructor() {
     this.validators = new Map([
-      [PlayerActionType.FOLD, new FoldValidator()],
-      [PlayerActionType.CHECK, new CheckValidator()],
-      [PlayerActionType.CALL, new CallValidator()],
-      [PlayerActionType.BET, new BetValidator()],
-      [PlayerActionType.RAISE, new RaiseValidator()],
-      [PlayerActionType.ALL_IN, new AllInValidator()],
+      [PlayerAction.FOLD, new FoldValidator()],
+      [PlayerAction.CHECK, new CheckValidator()],
+      [PlayerAction.CALL, new CallValidator()],
+      [PlayerAction.BET, new BetValidator()],
+      [PlayerAction.RAISE, new RaiseValidator()],
+      [PlayerAction.ALL_IN, new AllInValidator()],
     ]);
     
     this.potCalculator = new PotCalculator();
   }
 
   validateAction(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): ValidationResult {
     const validator = this.validators.get(action.type);
@@ -322,11 +334,11 @@ export class OptimizedBettingEngine {
       };
     }
 
-    if (player.folded) {
+    if (player.isFolded) {
       return {
         valid: false,
         error: new PlayerError(
-          'Player has already folded',
+          'GamePlayer has already folded',
           ErrorCode.ACTION_NOT_ALLOWED
         ),
       };
@@ -342,15 +354,19 @@ export class OptimizedBettingEngine {
     this.validationCache.set(cacheKey, result);
 
     if (this.validationCache.size > 5000) {
-      const firstKey = this.validationCache.keys().next().value;
-      this.validationCache.delete(firstKey);
+      // Remove 10% of the cache when it's full
+      const keysToRemove = Math.floor(this.validationCache.size * 0.1);
+      const keys = Array.from(this.validationCache.keys());
+      for (let i = 0; i < keysToRemove; i++) {
+        this.validationCache.delete(keys[i]);
+      }
     }
 
     return result;
   }
 
   private getCacheKey(
-    action: PlayerAction,
+    action: PlayerActionData,
     playerId: string,
     context: BettingContext
   ): string {
@@ -358,11 +374,11 @@ export class OptimizedBettingEngine {
   }
 
   executeAction(
-    action: PlayerAction,
-    player: Player,
+    action: PlayerActionData,
+    player: GamePlayer,
     context: BettingContext
   ): {
-    updatedPlayer: Player;
+    updatedGamePlayer: GamePlayer;
     updatedCurrentBet: number;
     potContribution: number;
   } {
@@ -371,92 +387,92 @@ export class OptimizedBettingEngine {
       throw validation.error!;
     }
 
-    let updatedPlayer = { ...player };
+    const updatedGamePlayer = { ...player };
     let updatedCurrentBet = context.currentBet;
     let potContribution = 0;
 
     switch (action.type) {
-      case PlayerActionType.FOLD:
-        updatedPlayer.folded = true;
+      case PlayerAction.FOLD:
+        updatedGamePlayer.folded = true;
         break;
 
-      case PlayerActionType.CHECK:
+      case PlayerAction.CHECK:
         break;
 
-      case PlayerActionType.CALL:
+      case PlayerAction.CALL:
         const callAmount = validation.callAmount!;
-        updatedPlayer.chips -= callAmount;
-        updatedPlayer.currentBet += callAmount;
+        updatedGamePlayer.chips -= callAmount;
+        updatedGamePlayer.currentBet += callAmount;
         potContribution = callAmount;
         break;
 
-      case PlayerActionType.BET:
-        updatedPlayer.chips -= action.amount!;
-        updatedPlayer.currentBet = action.amount!;
+      case PlayerAction.BET:
+        updatedGamePlayer.chips -= action.amount!;
+        updatedGamePlayer.currentBet = action.amount!;
         updatedCurrentBet = action.amount!;
         potContribution = action.amount!;
         break;
 
-      case PlayerActionType.RAISE:
-        const raiseCallAmount = context.currentBet - updatedPlayer.currentBet;
-        const raiseTotalAmount = action.amount! - updatedPlayer.currentBet;
-        updatedPlayer.chips -= raiseTotalAmount;
-        updatedPlayer.currentBet = action.amount!;
+      case PlayerAction.RAISE:
+        const raiseCallAmount = context.currentBet - updatedGamePlayer.currentBet;
+        const raiseTotalAmount = action.amount! - updatedGamePlayer.currentBet;
+        updatedGamePlayer.chips -= raiseTotalAmount;
+        updatedGamePlayer.currentBet = action.amount!;
         updatedCurrentBet = action.amount!;
         potContribution = raiseTotalAmount;
         break;
 
-      case PlayerActionType.ALL_IN:
-        potContribution = updatedPlayer.chips;
-        updatedPlayer.currentBet += updatedPlayer.chips;
-        updatedPlayer.chips = 0;
-        updatedPlayer.isAllIn = true;
-        if (updatedPlayer.currentBet > updatedCurrentBet) {
-          updatedCurrentBet = updatedPlayer.currentBet;
+      case PlayerAction.ALL_IN:
+        potContribution = updatedGamePlayer.chips;
+        updatedGamePlayer.currentBet += updatedGamePlayer.chips;
+        updatedGamePlayer.chips = 0;
+        updatedGamePlayer.isAllIn = true;
+        if (updatedGamePlayer.currentBet > updatedCurrentBet) {
+          updatedCurrentBet = updatedGamePlayer.currentBet;
         }
         break;
     }
 
-    updatedPlayer.lastAction = action.type;
+    updatedGamePlayer.lastAction = action.type;
 
     return {
-      updatedPlayer,
+      updatedGamePlayer,
       updatedCurrentBet,
       potContribution,
     };
   }
 
-  calculatePots(players: Player[], mainPotAmount: number): Pot[] {
+  calculatePots(players: GamePlayer[], mainPotAmount: number): Pot[] {
     return this.potCalculator.calculatePots(players, mainPotAmount);
   }
 
   getAvailableActions(
-    player: Player,
+    player: GamePlayer,
     context: BettingContext
-  ): PlayerActionType[] {
-    if (player.folded) {
+  ): PlayerAction[] {
+    if (player.isFolded) {
       return [];
     }
 
-    const actions: PlayerActionType[] = [PlayerActionType.FOLD];
+    const actions: PlayerAction[] = [PlayerAction.FOLD];
     const callAmount = context.currentBet - player.currentBet;
 
     if (callAmount === 0) {
-      actions.push(PlayerActionType.CHECK);
+      actions.push(PlayerAction.CHECK);
       if (player.chips > 0) {
-        actions.push(PlayerActionType.BET);
+        actions.push(PlayerAction.BET);
       }
     } else {
       if (player.chips >= callAmount) {
-        actions.push(PlayerActionType.CALL);
+        actions.push(PlayerAction.CALL);
       }
       if (player.chips > callAmount) {
-        actions.push(PlayerActionType.RAISE);
+        actions.push(PlayerAction.RAISE);
       }
     }
 
     if (player.chips > 0) {
-      actions.push(PlayerActionType.ALL_IN);
+      actions.push(PlayerAction.ALL_IN);
     }
 
     return actions;
@@ -464,7 +480,7 @@ export class OptimizedBettingEngine {
 
   clearCache(): void {
     this.validationCache.clear();
-    const raiseValidator = this.validators.get(PlayerActionType.RAISE) as RaiseValidator;
+    const raiseValidator = this.validators.get(PlayerAction.RAISE) as RaiseValidator;
     if (raiseValidator) {
       raiseValidator.clearCache();
     }
@@ -474,14 +490,14 @@ export class OptimizedBettingEngine {
 export class PotCalculator {
   private potCache = new Map<string, Pot[]>();
 
-  private getCacheKey(players: Player[]): string {
+  private getCacheKey(players: GamePlayer[]): string {
     return players
-      .map(p => `${p.id}:${p.totalBet}:${p.folded}`)
+      .map(p => `${p.id}:${p.currentBet}:${p.folded}`)
       .sort()
       .join('|');
   }
 
-  calculatePots(players: Player[], mainPotAmount: number): Pot[] {
+  calculatePots(players: GamePlayer[], mainPotAmount: number): Pot[] {
     const cacheKey = this.getCacheKey(players);
     const cached = this.potCache.get(cacheKey);
     if (cached) {
@@ -499,32 +515,32 @@ export class PotCalculator {
     return pots;
   }
 
-  private performCalculation(players: Player[], mainPotAmount: number): Pot[] {
-    const activePlayers = players.filter(p => !p.folded || p.totalBet > 0);
+  private performCalculation(players: GamePlayer[], mainPotAmount: number): Pot[] {
+    const activeGamePlayers = players.filter(p => !p.isFolded || p.currentBet > 0);
     
-    if (activePlayers.length === 0) {
+    if (activeGamePlayers.length === 0) {
       return [{ amount: mainPotAmount, eligiblePlayerIds: [] }];
     }
 
-    const sortedPlayers = [...activePlayers].sort((a, b) => a.totalBet - b.totalBet);
+    const sortedGamePlayers = [...activeGamePlayers].sort((a, b) => a.currentBet - b.currentBet);
     const pots: Pot[] = [];
     let previousBet = 0;
 
-    for (let i = 0; i < sortedPlayers.length; i++) {
-      const currentPlayer = sortedPlayers[i];
-      const betLevel = currentPlayer.totalBet;
+    for (let i = 0; i < sortedGamePlayers.length; i++) {
+      const currentGamePlayer = sortedGamePlayers[i];
+      const betLevel = currentGamePlayer.totalBet;
       
       if (betLevel > previousBet) {
-        const eligiblePlayers = sortedPlayers
+        const eligibleGamePlayers = sortedGamePlayers
           .slice(i)
           .filter(p => !p.folded)
           .map(p => p.id);
         
-        if (eligiblePlayers.length > 0) {
-          const potAmount = (betLevel - previousBet) * (sortedPlayers.length - i);
+        if (eligibleGamePlayers.length > 0) {
+          const potAmount = (betLevel - previousBet) * (sortedGamePlayers.length - i);
           pots.push({
             amount: potAmount,
-            eligiblePlayerIds: eligiblePlayers,
+            eligibleGamePlayerIds: eligibleGamePlayers,
           });
         }
         
@@ -540,8 +556,8 @@ export class PotCalculator {
     
     for (const pot of pots) {
       const existing = consolidated.find(
-        p => JSON.stringify(p.eligiblePlayerIds.sort()) === 
-             JSON.stringify(pot.eligiblePlayerIds.sort())
+        p => JSON.stringify(p.eligibleGamePlayerIds.sort()) === 
+             JSON.stringify(pot.eligibleGamePlayerIds.sort())
       );
       
       if (existing) {
@@ -549,7 +565,7 @@ export class PotCalculator {
       } else {
         consolidated.push({
           amount: pot.amount,
-          eligiblePlayerIds: [...pot.eligiblePlayerIds],
+          eligibleGamePlayerIds: [...pot.eligibleGamePlayerIds],
         });
       }
     }

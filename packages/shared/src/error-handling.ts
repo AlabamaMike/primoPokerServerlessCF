@@ -84,8 +84,8 @@ export abstract class BaseError extends Error {
     this.code = context.code;
     this.details = context.details;
     this.timestamp = context.timestamp || Date.now();
-    this.correlationId = context.correlationId as string | undefined;
-    this.userMessage = (context.userMessage || this.getDefaultUserMessage()) as string;
+    this.correlationId = context.correlationId;
+    this.userMessage = context.userMessage || this.getDefaultUserMessage();
     this.retryable = context.retryable ?? false;
     this.httpStatus = context.httpStatus ?? 500;
 

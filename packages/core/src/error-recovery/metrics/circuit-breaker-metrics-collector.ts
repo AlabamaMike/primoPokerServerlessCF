@@ -21,7 +21,7 @@ export class CircuitBreakerMetricsCollector {
   private lastAggregationTime: Map<string, number> = new Map();
   private tripCount = 0;
   private recoveryCount = 0;
-  private resourceConfig?: ResourceSpecificConfig;
+  private resourceConfig?: ResourceSpecificConfig | undefined;
 
   constructor(
     private readonly circuitBreaker: CircuitBreaker,
@@ -29,7 +29,7 @@ export class CircuitBreakerMetricsCollector {
     private readonly resourceType: string = 'api'
   ) {
     this.lastState = circuitBreaker.getState();
-    this.resourceConfig = DEFAULT_RESOURCE_CONFIGS[resourceType];
+    this.resourceConfig = DEFAULT_RESOURCE_CONFIGS[resourceType] || DEFAULT_RESOURCE_CONFIGS.api;
     
     // Initialize time series maps
     this.timeSeries.set('successRate', []);
@@ -76,7 +76,7 @@ export class CircuitBreakerMetricsCollector {
         self.recordSuccessfulOperation(responseTime);
         self.checkStateTransition(previousState);
         
-        return result;
+        return result as T;
       } catch (error) {
         const endTime = Date.now();
         const responseTime = endTime - startTime;
@@ -93,7 +93,7 @@ export class CircuitBreakerMetricsCollector {
       originalTrip();
       this.tripCount++;
       this.recordStateTransition(previousState, 'open', 'failure_threshold_exceeded');
-      this.generateAlert('trip', 'high', `Circuit breaker ${this.circuitBreaker['name']} tripped`);
+      this.generateAlert('trip', 'high', `Circuit breaker ${this.circuitBreaker.getName()} tripped`);
       this.checkTripRateThreshold();
     };
     
@@ -102,7 +102,7 @@ export class CircuitBreakerMetricsCollector {
       originalReset();
       this.recoveryCount++;
       this.recordStateTransition(previousState, 'closed', 'manual_reset');
-      this.generateAlert('recovery', 'low', `Circuit breaker ${this.circuitBreaker['name']} recovered`);
+      this.generateAlert('recovery', 'low', `Circuit breaker ${this.circuitBreaker.getName()} recovered`);
     };
     
     // Override getState to detect automatic transitions
@@ -115,7 +115,7 @@ export class CircuitBreakerMetricsCollector {
         } else if (this.lastState === 'half-open' && currentState === 'closed') {
           this.recordStateTransition('half-open', 'closed', 'successful_request');
           this.recoveryCount++;
-          this.generateAlert('recovery', 'low', `Circuit breaker ${this.circuitBreaker['name']} recovered`);
+          this.generateAlert('recovery', 'low', `Circuit breaker ${this.circuitBreaker.getName()} recovered`);
         }
         this.lastState = currentState;
       }
@@ -256,7 +256,7 @@ export class CircuitBreakerMetricsCollector {
   private getPercentile(sortedArray: number[], percentile: number): number {
     if (sortedArray.length === 0) return 0;
     const index = Math.ceil((percentile / 100) * sortedArray.length) - 1;
-    return sortedArray[index];
+    return sortedArray[index] ?? 0;
   }
 
   private getOperationsInTimeRange(startTime: number, endTime: number): Array<{ success: boolean; responseTime: number }> {
@@ -268,8 +268,13 @@ export class CircuitBreakerMetricsCollector {
     const responseTimes: number[] = [];
     
     for (const [key, times] of this.operationMetrics.entries()) {
-      const [timestamp, status] = key.split('_');
+      const parts = key.split('_');
+      if (parts.length < 2) continue;
+      const timestamp = parts[0];
+      const status = parts[1];
+      if (!timestamp || !status) continue;
       const ts = parseInt(timestamp, 10);
+      if (isNaN(ts)) continue;
       
       if (ts >= startTime && ts <= endTime) {
         for (const responseTime of times) {
@@ -331,7 +336,7 @@ export class CircuitBreakerMetricsCollector {
       from,
       to,
       timestamp: Date.now(),
-      reason,
+      reason: reason || undefined,
     });
   }
 
@@ -342,13 +347,13 @@ export class CircuitBreakerMetricsCollector {
     metadata?: Record<string, any>
   ): void {
     this.alerts.push({
-      id: `${Date.now()}_${Math.random()}`,
-      circuitBreakerName: this.circuitBreaker['name'],
+      id: crypto.randomUUID(),
+      circuitBreakerName: this.circuitBreaker.getName(),
       alertType,
       severity,
       timestamp: Date.now(),
       message,
-      metadata,
+      metadata: metadata || undefined,
     });
   }
 
@@ -405,8 +410,8 @@ export class CircuitBreakerMetricsCollector {
       successRate: totalRequests > 0 ? (metrics.successCount / totalRequests) * 100 : 0,
       failureRate: totalRequests > 0 ? (metrics.failureCount / totalRequests) * 100 : 0,
       totalRequests,
-      lastFailureTime: metrics.lastFailureTime || undefined,
-      averageResponseTime,
+      lastFailureTime: metrics.lastFailureTime > 0 ? metrics.lastFailureTime : undefined,
+      averageResponseTime: averageResponseTime || undefined,
     };
   }
 
@@ -446,7 +451,10 @@ export class CircuitBreakerMetricsCollector {
     // Clean up operation metrics
     const keysToDelete: string[] = [];
     for (const key of this.operationMetrics.keys()) {
-      const timestamp = parseInt(key.split('_')[0], 10);
+      const parts = key.split('_');
+      if (parts.length === 0 || !parts[0]) continue;
+      const timestamp = parseInt(parts[0], 10);
+      if (isNaN(timestamp)) continue;
       if (timestamp < cutoffTime) {
         keysToDelete.push(key);
       }
@@ -468,9 +476,9 @@ export class CircuitBreakerMetricsCollector {
       // Create a default aggregation
       this.aggregate(period);
       const updated = this.aggregations.get(period) || [];
-      return updated[updated.length - 1];
+      return updated[updated.length - 1] || this.createDefaultAggregation(period);
     }
-    return aggregations[aggregations.length - 1];
+    return aggregations[aggregations.length - 1] || this.createDefaultAggregation(period);
   }
 
   export(): MetricsExportFormat {
@@ -478,9 +486,9 @@ export class CircuitBreakerMetricsCollector {
       version: '1.0.0',
       exportedAt: Date.now(),
       circuitBreaker: {
-        name: this.circuitBreaker['name'],
+        name: this.circuitBreaker.getName(),
         resourceType: this.resourceType,
-        config: this.circuitBreaker['config'],
+        config: this.circuitBreaker.getConfig(),
       },
       metrics: {
         current: this.getCurrentMetrics(),
@@ -502,7 +510,7 @@ export class CircuitBreakerMetricsCollector {
 
   exportPrometheus(): string {
     const metrics = this.getCurrentMetrics();
-    const name = this.circuitBreaker['name'];
+    const name = this.circuitBreaker.getName();
     
     const lines: string[] = [];
     
@@ -538,7 +546,7 @@ export class CircuitBreakerMetricsCollector {
   }
 
   getConfiguration(): any {
-    return this.circuitBreaker['config'];
+    return this.circuitBreaker.getConfig();
   }
 
   static validateConfiguration(config: any): void {
@@ -554,5 +562,25 @@ export class CircuitBreakerMetricsCollector {
     if (config.monitoringPeriod <= 0) {
       throw new Error('Invalid configuration: monitoringPeriod must be positive');
     }
+  }
+  
+  private createDefaultAggregation(period: 'minute' | 'hour' | 'day'): MetricsAggregation {
+    const now = Date.now();
+    const intervalMs = this.getIntervalMs(period);
+    return {
+      period,
+      startTime: now - intervalMs,
+      endTime: now,
+      totalRequests: 0,
+      successCount: 0,
+      failureCount: 0,
+      averageSuccessRate: 0,
+      averageFailureRate: 0,
+      tripCount: 0,
+      recoveryCount: 0,
+      averageResponseTime: 0,
+      p95ResponseTime: 0,
+      p99ResponseTime: 0,
+    };
   }
 }

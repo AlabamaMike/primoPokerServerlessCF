@@ -2,7 +2,7 @@ export interface CircuitBreakerStateTransition {
   from: string;
   to: string;
   timestamp: number;
-  reason?: string;
+  reason?: string | undefined;
 }
 
 export interface CircuitBreakerMetricsSnapshot {
@@ -13,16 +13,16 @@ export interface CircuitBreakerMetricsSnapshot {
   successRate: number;
   failureRate: number;
   totalRequests: number;
-  halfOpenRequests?: number;
-  lastFailureTime?: number;
-  lastSuccessTime?: number;
-  averageResponseTime?: number;
+  halfOpenRequests?: number | undefined;
+  lastFailureTime?: number | undefined;
+  lastSuccessTime?: number | undefined;
+  averageResponseTime?: number | undefined;
 }
 
 export interface TimeSeriesDataPoint {
   timestamp: number;
   value: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> | undefined;
 }
 
 export interface CircuitBreakerAlert {
@@ -32,7 +32,7 @@ export interface CircuitBreakerAlert {
   severity: 'low' | 'medium' | 'high' | 'critical';
   timestamp: number;
   message: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> | undefined;
 }
 
 export interface MetricsAggregation {

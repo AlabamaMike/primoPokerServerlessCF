@@ -302,6 +302,9 @@ export class GameTableDurableObject {
       case '/action':
         console.log('GameTableDO - Matched /action case')
         return this.handlePlayerActionREST(request)
+      case '/health':
+        console.log('GameTableDO - Matched /health case')
+        return this.handleHealthCheck(request)
       default:
         console.log('GameTableDO - No match, returning 404. Path was:', JSON.stringify(path))
         return new Response('Not found', { status: 404 })
@@ -2146,5 +2149,122 @@ export class GameTableDurableObject {
       console.error('State sync error:', error)
       this.sendError(websocket, 'Failed to sync state')
     }
+  }
+
+  /**
+   * Handle health check requests
+   */
+  private async handleHealthCheck(request: Request): Promise<Response> {
+    const startTime = Date.now();
+    let healthy = true;
+    let error: string | undefined;
+    const warnings: string[] = [];
+
+    // Basic health information
+    const healthInfo: any = {
+      healthy: true,
+      instanceId: this.durableObjectState.id.toString(),
+      uptime: Date.now() - this.state.createdAt,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Memory usage information
+    if ((global as any).performance?.memory) {
+      const memory = (global as any).performance.memory;
+      healthInfo.memoryUsage = {
+        used: memory.usedJSHeapSize,
+        total: memory.totalJSHeapSize,
+        limit: memory.jsHeapSizeLimit,
+        usagePercent: (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100,
+      };
+
+      // Warn if memory usage is high
+      if (healthInfo.memoryUsage.usagePercent > 90) {
+        warnings.push('High memory usage detected');
+      }
+    }
+
+    // Table state information
+    if (this.state) {
+      healthInfo.tableInfo = {
+        tableId: this.state.tableId,
+        playerCount: this.state.players.size,
+        connectionCount: this.state.connections.size,
+        spectatorCount: this.state.spectators.size,
+        isActive: this.state.gameState !== null,
+        handNumber: this.state.handNumber,
+        lastActivity: this.state.lastActivity,
+        timeSinceLastActivity: Date.now() - this.state.lastActivity,
+      };
+
+      // Check for inactive table
+      if (healthInfo.tableInfo.timeSinceLastActivity > 300000) { // 5 minutes
+        warnings.push('Table has been inactive for over 5 minutes');
+      }
+    }
+
+    // WebSocket connection health
+    healthInfo.websocketConnections = this.state.connections.size;
+    let activeConnections = 0;
+    for (const [playerId, connection] of this.state.connections) {
+      if (connection.isConnected) {
+        activeConnections++;
+      }
+    }
+    healthInfo.activeWebSocketConnections = activeConnections;
+
+    // Check storage health
+    try {
+      await this.durableObjectState.storage.get('health_check_test');
+      healthInfo.storageHealthy = true;
+    } catch (storageError) {
+      healthy = false;
+      error = 'Storage access failed';
+      healthInfo.storageHealthy = false;
+    }
+
+    // Performance metrics (if tracking is implemented)
+    healthInfo.metrics = {
+      totalRequests: 0, // Would be tracked in production
+      averageResponseTime: 0, // Would be calculated in production
+      errorCount: 0, // Would be tracked in production
+      errorRate: 0, // Would be calculated in production
+    };
+
+    // Calculate response time for this health check
+    const responseTime = Date.now() - startTime;
+    healthInfo.healthCheckResponseTime = responseTime;
+
+    // Aggregate health status
+    healthInfo.healthy = healthy;
+    if (error) {
+      healthInfo.error = error;
+    }
+    if (warnings.length > 0) {
+      healthInfo.warnings = warnings;
+    }
+
+    // Add detailed checks if requested
+    if (request.headers.get('X-Include-Detailed') === 'true') {
+      healthInfo.checks = {
+        storage: { status: healthInfo.storageHealthy ? 'healthy' : 'unhealthy' },
+        websocket: { status: activeConnections > 0 ? 'healthy' : 'degraded' },
+        gameState: { status: this.state.gameState ? 'active' : 'idle' },
+        memory: { status: healthInfo.memoryUsage?.usagePercent > 90 ? 'degraded' : 'healthy' },
+      };
+
+      // Calculate overall health score (0-100)
+      let healthScore = 100;
+      if (!healthInfo.storageHealthy) healthScore -= 50;
+      if (activeConnections === 0 && this.state.players.size > 0) healthScore -= 20;
+      if (healthInfo.memoryUsage?.usagePercent > 90) healthScore -= 10;
+      if (warnings.length > 0) healthScore -= warnings.length * 5;
+      healthInfo.healthScore = Math.max(0, healthScore);
+    }
+
+    return new Response(JSON.stringify(healthInfo), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

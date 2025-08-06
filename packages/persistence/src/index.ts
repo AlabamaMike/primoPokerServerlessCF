@@ -33,3 +33,12 @@ export { WalletManager } from './wallet-manager';
 export { SecureRNGDurableObject } from './secure-rng-do';
 export type { RNGRequest, RNGResponse, RNGStatus, AuditLog, StoredState } from './secure-rng-do';
 export { RateLimitDurableObject } from './rate-limit-do';
+export { MetricsCollector } from './monitoring/metrics';
+export type { 
+  RequestMetric, 
+  ErrorMetric, 
+  ResponseTimeMetric, 
+  RateLimitMetric, 
+  DurableObjectHealthMetric, 
+  MetricsSummary 
+} from './monitoring/metrics';

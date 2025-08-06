@@ -9,6 +9,7 @@ export interface RateLimitRequest {
   key: string;
   limit: number;
   window: number; // milliseconds
+  path?: string; // For metrics tracking
 }
 
 export interface RateLimitResponse {
@@ -25,13 +26,24 @@ interface RateLimitRecord {
 
 export class RateLimitDurableObject {
   private state: DurableObjectState;
+  private env: any;
   private records: Map<string, RateLimitRecord> = new Map();
+  private metrics: Map<string, { hits: number; blocked: number }> = new Map();
   
-  constructor(state: DurableObjectState) {
+  constructor(state: DurableObjectState, env: any) {
     this.state = state;
+    this.env = env;
   }
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    
+    // Handle metrics endpoint
+    if (url.pathname === '/metrics') {
+      return this.getMetrics();
+    }
+    
+    // Handle rate limit check
     try {
       const body: RateLimitRequest = await request.json();
       
@@ -55,6 +67,33 @@ export class RateLimitDurableObject {
       const allowed = record.timestamps.length < record.limit;
       if (allowed) {
         record.timestamps.push(now);
+      }
+
+      // Update metrics
+      const metricsKey = body.path || 'unknown';
+      const metric = this.metrics.get(metricsKey) || { hits: 0, blocked: 0 };
+      metric.hits++;
+      if (!allowed) {
+        metric.blocked++;
+      }
+      this.metrics.set(metricsKey, metric);
+
+      // Send metrics to KV if available
+      if (this.env?.METRICS_NAMESPACE && body.path) {
+        try {
+          await this.env.METRICS_NAMESPACE.put(
+            `rate_limit:${body.key}:${now}`,
+            JSON.stringify({
+              clientId: body.key,
+              path: body.path,
+              limited: !allowed,
+              timestamp: now,
+            }),
+            { expirationTtl: 3600 } // 1 hour
+          );
+        } catch (error) {
+          console.error('Failed to record rate limit metric:', error);
+        }
       }
 
       // Calculate reset time
@@ -128,5 +167,29 @@ export class RateLimitDurableObject {
     if (!currentAlarm) {
       await this.state.storage.setAlarm(new Date(Date.now() + 3600000));
     }
+  }
+
+  private async getMetrics(): Promise<Response> {
+    const metricsData = {
+      timestamp: new Date().toISOString(),
+      totalKeys: this.records.size,
+      pathMetrics: Array.from(this.metrics.entries()).map(([path, data]) => ({
+        path,
+        totalHits: data.hits,
+        blockedRequests: data.blocked,
+        blockRate: data.hits > 0 ? data.blocked / data.hits : 0,
+      })),
+      activeClients: Array.from(this.records.entries()).map(([key, record]) => ({
+        key,
+        currentRequests: record.timestamps.length,
+        limit: record.limit,
+        window: record.window,
+        utilizationRate: record.limit > 0 ? record.timestamps.length / record.limit : 0,
+      })).filter(client => client.currentRequests > 0),
+    };
+
+    return new Response(JSON.stringify(metricsData), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

@@ -9,9 +9,10 @@ import {
   BuyInResponse,
   PlayerWallet
 } from '@primo-poker/shared';
-import { TableManager } from '@primo-poker/core';
+import { TableManager, logger, LogLevel } from '@primo-poker/core';
 import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-poker/security';
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
+import { HealthChecker } from './routes/health';
 
 // Extended request interface with authentication
 interface AuthenticatedRequest extends IRequest {
@@ -118,10 +119,13 @@ export class PokerAPIRoutes {
 
   // Authentication handlers
   private async handleRegister(request: AuthenticatedRequest): Promise<Response> {
-    console.log('Register request received:', request.method, request.url);
+    const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+    logger.setContext({ correlationId, operation: 'register' });
+    
+    logger.info('Register request received', { method: request.method, url: request.url });
     try {
       const body = await request.json() as { username: string; email: string; password: string };
-      console.log('Register request body:', { username: body.username, email: body.email });
+      logger.debug('Register request body', { username: body.username, email: body.email });
       
       if (!body.username || !body.email || !body.password) {
         return this.errorResponse('Username, email, and password are required', 400);
@@ -145,12 +149,14 @@ export class PokerAPIRoutes {
         // Check username
         const existingByUsername = await playerRepo.findByUsername(body.username);
         if (existingByUsername) {
+          logger.warn('Registration failed - username already exists', { username: body.username });
           return this.errorResponse('Username already exists', 409);
         }
 
         // Check email
         const existingByEmail = await playerRepo.findByEmail(body.email);
         if (existingByEmail) {
+          logger.warn('Registration failed - email already exists', { email: body.email });
           return this.errorResponse('Email already exists', 409);
         }
 
@@ -203,6 +209,12 @@ export class PokerAPIRoutes {
           roles: ['player'],
         });
 
+        logger.info('User registration successful', { 
+          userId: playerId, 
+          username: body.username,
+          email: body.email 
+        });
+
         return this.successResponse({
           user: {
             id: playerId,
@@ -215,20 +227,29 @@ export class PokerAPIRoutes {
         });
       }
 
+      logger.error('Database not available during registration');
       return this.errorResponse('Database not available', 500);
     } catch (error) {
-      console.error('Registration error:', error);
+      logger.error('Registration error', error, { correlationId });
       return this.errorResponse(`Registration failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 400);
+    } finally {
+      logger.clearContext();
     }
   }
 
   private async handleLogin(request: AuthenticatedRequest): Promise<Response> {
+    const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+    logger.setContext({ correlationId, operation: 'login' });
+    
     try {
       const body = await request.json() as { username: string; password: string };
       
       if (!body.username || !body.password) {
+        logger.warn('Login failed - missing credentials');
         return this.errorResponse('Username and password required', 400);
       }
+
+      logger.info('Login attempt', { username: body.username });
 
       // Initialize auth manager
       if (request.env?.JWT_SECRET) {
@@ -241,8 +262,14 @@ export class PokerAPIRoutes {
       }, request.env?.DB);
 
       if (!result.success) {
+        logger.warn('Login failed - invalid credentials', { username: body.username });
         return this.errorResponse(result.error || 'Authentication failed', 401);
       }
+
+      logger.info('Login successful', { 
+        userId: result.user?.id,
+        username: body.username 
+      });
 
       return this.successResponse({
         user: result.user,
@@ -250,7 +277,10 @@ export class PokerAPIRoutes {
         message: 'Login successful'
       });
     } catch (error) {
+      logger.error('Login error', error, { correlationId });
       return this.errorResponse('Invalid request body', 400);
+    } finally {
+      logger.clearContext();
     }
   }
 
@@ -380,58 +410,58 @@ export class PokerAPIRoutes {
   }
 
   private async handleCreateTable(request: AuthenticatedRequest): Promise<Response> {
-    console.log('🚀 API - handleCreateTable called at', new Date().toISOString())
+    const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+    logger.setContext({ 
+      correlationId, 
+      operation: 'createTable',
+      userId: request.user?.userId,
+      username: request.user?.username 
+    });
+    
+    logger.info('Create table request received');
     
     if (!request.user) {
-      console.error('❌ User not authenticated')
+      logger.error('Create table failed - user not authenticated');
       return this.errorResponse('Not authenticated', 401);
     }
-    console.log('👤 User authenticated:', JSON.stringify({ userId: request.user.userId, username: request.user.username }))
 
     if (!request.env?.GAME_TABLES) {
-      console.error('❌ GAME_TABLES namespace not available')
+      logger.error('GAME_TABLES namespace not available');
       return this.errorResponse('Server configuration error', 500);
     }
-    console.log('✅ GAME_TABLES namespace available')
 
     try {
-      console.log('📖 Parsing request body...')
+      logger.debug('Parsing request body');
       const body = await request.json() as Record<string, any>;
-      console.log('✅ Body parsed successfully:', JSON.stringify(body, null, 2))
+      logger.debug('Body parsed successfully', { body });
       
       // Validate table configuration
-      console.log('🔧 Creating table config...')
       const config = {
         ...body,
         id: RandomUtils.generateUUID(),
       };
-      console.log('🆔 Generated table ID:', config.id)
-      console.log('⚙️ Full config:', JSON.stringify(config, null, 2))
+      
+      logger.info('Creating table', { tableId: config.id });
+      logger.debug('Table config', { config });
 
-      console.log('🔍 Validating config with TableConfigSchema...')
       const configResult = TableConfigSchema.safeParse(config);
 
       if (!configResult.success) {
-        console.error('❌ Table config validation failed:', configResult.error.format());
-        console.error('❌ Failed config:', JSON.stringify(config, null, 2))
+        logger.error('Table config validation failed', configResult.error.format(), { config });
         return this.errorResponse('Invalid table configuration', 400);
       }
-      console.log('✅ Config validation passed')
+      logger.debug('Config validation passed');
 
       // Create table using Durable Object
       const tableId = config.id;
-      console.log('🎯 Creating Durable Object for table:', tableId)
+      logger.debug('Creating Durable Object for table', { tableId });
       
       const durableObjectId = request.env.GAME_TABLES.idFromName(tableId);
-      console.log('🔑 Durable Object ID created')
-      
       const gameTable = request.env.GAME_TABLES.get(durableObjectId);
-      console.log('📦 Durable Object instance retrieved')
-
+      
       // Send create request to Durable Object
-      console.log('📡 Sending create request to Durable Object...')
       const requestPayload = { config: configResult.data };
-      console.log('📦 Request payload:', JSON.stringify(requestPayload, null, 2))
+      logger.debug('Sending create request to Durable Object', { tableId, payload: requestPayload });
       
       const createResponse = await gameTable.fetch(
         new Request(`http://internal/create`, {
@@ -445,40 +475,33 @@ export class PokerAPIRoutes {
         })
       );
       
-      console.log('📡 Durable Object response received - Status:', createResponse.status)
-      // Log response headers for debugging
-      const responseHeaders: [string, string][] = [];
-      createResponse.headers.forEach((value, key) => {
-        responseHeaders.push([key, value]);
-      });
-      console.log('📡 Response headers:', Object.fromEntries(responseHeaders))
+      logger.debug('Durable Object response received', { status: createResponse.status });
 
       if (!createResponse.ok) {
-        console.error('❌ Durable Object returned error status')
         const error = await createResponse.text();
-        console.error('❌ Error response body:', error)
+        logger.error('Durable Object returned error', { status: createResponse.status, error });
         return this.errorResponse(error || 'Failed to create table', createResponse.status);
       }
 
-      console.log('📄 Reading success response body...')
       const tableData = await createResponse.json() as any;
-      console.log('✅ Table data received:', JSON.stringify(tableData, null, 2))
+      logger.info('Table created successfully', { tableId, tableData });
       
       const finalResponse = {
         tableId: tableId,
         ...tableData,
       };
-      console.log('🎉 Final API response:', JSON.stringify(finalResponse, null, 2))
       
       return this.successResponse(finalResponse);
     } catch (error: any) {
-      console.error('❌ CRITICAL ERROR in API handleCreateTable:', error);
-      console.error('🔍 API Error name:', error?.name);
-      console.error('🔍 API Error message:', error?.message);
-      console.error('🔍 API Error stack:', error?.stack);
-      console.error('🔍 API Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      logger.critical('Critical error in handleCreateTable', error, {
+        correlationId,
+        tableId: config?.id,
+        errorDetails: JSON.stringify(error, Object.getOwnPropertyNames(error))
+      });
       
       return this.errorResponse(`Failed to create table: ${error?.message || 'Unknown error'}`, 500);
+    } finally {
+      logger.clearContext();
     }
   }
 
@@ -516,15 +539,28 @@ export class PokerAPIRoutes {
 
   private async handleJoinTable(request: AuthenticatedRequest): Promise<Response> {
     const tableId = request.params?.tableId;
+    const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+    
+    logger.setContext({ 
+      correlationId, 
+      operation: 'joinTable',
+      tableId,
+      userId: request.user?.userId,
+      username: request.user?.username 
+    });
+
     if (!tableId || !request.user) {
+      logger.warn('Join table failed - missing required parameters');
       return this.errorResponse('Table ID and authentication required', 400);
     }
 
     if (!request.env?.GAME_TABLES) {
+      logger.error('GAME_TABLES namespace not available');
       return this.errorResponse('Server configuration error', 500);
     }
 
     try {
+      logger.info('Join table request', { tableId, playerId: request.user.userId });
       const body = await request.json() as { buyIn?: number; password?: string };
       
       // Get the table's durable object
@@ -550,14 +586,18 @@ export class PokerAPIRoutes {
 
       if (!joinResponse.ok) {
         const error = await joinResponse.text();
+        logger.warn('Join table failed', { tableId, error, status: joinResponse.status });
         return this.errorResponse(error || 'Failed to join table', joinResponse.status);
       }
 
       const result = await joinResponse.json();
+      logger.info('Player joined table successfully', { tableId, playerId: request.user.userId });
       return this.successResponse(result);
     } catch (error) {
-      console.error('Join table error:', error);
+      logger.error('Join table error', error, { correlationId, tableId });
       return this.errorResponse('Failed to join table', 500);
+    } finally {
+      logger.clearContext();
     }
   }
 
@@ -697,29 +737,33 @@ export class PokerAPIRoutes {
 
   // Health check
   private async handleHealthCheck(request: AuthenticatedRequest): Promise<Response> {
-    const env = request.env;
-    const websocketUrl = env?.ENVIRONMENT === 'production' 
-      ? 'wss://primo-poker-server.alabamamike.workers.dev'
-      : 'ws://localhost:8787';
-    
-    return this.successResponse({ 
-      status: 'healthy', 
-      timestamp: new Date().toISOString(),
-      environment: env?.ENVIRONMENT || 'development',
-      services: {
-        database: 'D1',
-        session: 'KV',
-        tables: 'Durable Objects',
-        files: 'R2',
-        websocket: 'Available'
-      },
-      websocket: {
-        url: websocketUrl,
-        status: 'ready',
-        upgrade: 'Supported via WebSocket upgrade header',
-        authentication: 'Required (JWT token in query parameter)'
+    try {
+      if (!request.env) {
+        return this.errorResponse('Environment not available', 500);
       }
-    });
+
+      const healthChecker = new HealthChecker(request.env);
+      const healthResult = await healthChecker.performHealthCheck();
+      
+      // Return appropriate status code based on health status
+      const statusCode = healthResult.status === 'healthy' ? 200 : 
+                        healthResult.status === 'degraded' ? 200 : 503;
+      
+      return new Response(JSON.stringify({
+        success: true,
+        data: healthResult,
+        timestamp: new Date().toISOString(),
+      }), {
+        status: statusCode,
+        headers: { 
+          'Content-Type': 'application/json',
+          ...this.getCorsHeaders(),
+        },
+      });
+    } catch (error) {
+      console.error('Health check error:', error);
+      return this.errorResponse('Health check failed', 500);
+    }
   }
 
   // CORS preflight handler

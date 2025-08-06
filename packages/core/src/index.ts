@@ -55,3 +55,11 @@ export type {
 // Error recovery framework
 export * from './error-recovery';
 export { ErrorRecoveryManager } from './error-recovery';
+
+// Logging utilities
+export { Logger, LogLevel, logger } from './utils/logger';
+export type { LogContext, LogEntry } from './utils/logger';
+
+// Error reporting
+export { ErrorReporter, errorReporter } from './utils/error-reporter';
+export type { ErrorReport, ErrorReporterOptions } from './utils/error-reporter';

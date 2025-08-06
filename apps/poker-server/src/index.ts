@@ -1,6 +1,7 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
+import { logger, LogLevel, errorReporter } from '@primo-poker/core';
 
 // Export Durable Objects for Cloudflare Workers
 export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject };
@@ -9,6 +10,7 @@ export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, Rat
 interface Env {
   DB: D1Database;
   SESSION_STORE: KVNamespace;
+  METRICS_NAMESPACE: KVNamespace; // For metrics storage
   HAND_HISTORY_BUCKET: R2Bucket;
   AUDIT_BUCKET: R2Bucket; // For RNG audit logs
   TABLE_OBJECTS: DurableObjectNamespace;
@@ -37,6 +39,18 @@ let rngApiRouter: ReturnType<typeof createRNGApiRouter>;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Configure logging based on environment
+    const logLevel = env.ENVIRONMENT === 'production' ? LogLevel.INFO : LogLevel.DEBUG;
+    logger.setLogLevel(logLevel);
+    
+    // Configure error reporting
+    errorReporter.options = {
+      analyticsEndpoint: env.ANALYTICS,
+      kvNamespace: env.SESSION_STORE, // Using SESSION_STORE for error storage
+      environment: env.ENVIRONMENT,
+      samplingRate: env.ENVIRONMENT === 'production' ? 0.1 : 1.0, // 10% sampling in production
+    };
+    
     // Initialize services
     if (!apiRoutes) {
       apiRoutes = new PokerAPIRoutes();
@@ -91,9 +105,18 @@ export default {
       return new Response('Not Found', { status: 404 });
 
     } catch (error) {
-      console.error('Worker error:', error);
+      const context = { 
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries())
+      };
       
-      // Log error to analytics
+      logger.critical('Worker error', error, context);
+      
+      // Report error automatically
+      await errorReporter.report(error, context);
+      
+      // Log error to analytics (legacy, kept for compatibility)
       if (env.ANALYTICS) {
         env.ANALYTICS.writeDataPoint({
           blobs: [
@@ -117,7 +140,15 @@ export default {
         await processTournamentMessage(message.body, env);
         message.ack();
       } catch (error) {
-        console.error('Queue processing error:', error);
+        logger.error('Queue processing error', error, { 
+          messageId: message.id,
+          messageBody: message.body 
+        });
+        await errorReporter.report(error, {
+          queue: 'tournament',
+          messageId: message.id,
+          messageBody: message.body,
+        });
         message.retry();
       }
     }

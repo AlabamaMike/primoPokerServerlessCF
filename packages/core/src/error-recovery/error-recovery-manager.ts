@@ -1,6 +1,8 @@
 import { CircuitBreaker, CircuitBreakerConfig } from './circuit-breaker';
 import { RetryPolicy, RetryPolicyExecutor } from './retry-policy';
 import { ErrorSanitizer } from './error-sanitizer';
+import { CircuitBreakerMetricsCollector } from './metrics/circuit-breaker-metrics-collector';
+import { DEFAULT_RESOURCE_CONFIGS, MetricsCollectorConfig } from './metrics/types';
 
 export interface OperationContext {
   operationName: string;
@@ -64,12 +66,28 @@ export interface ErrorMetrics {
 export class ErrorRecoveryManager {
   private circuitBreakers: Map<string, CircuitBreaker> = new Map();
   private retryPolicies: Map<string, RetryPolicy> = new Map();
+  private metricsCollectors: Map<string, CircuitBreakerMetricsCollector> = new Map();
   private defaultRetryPolicy: RetryPolicy = {
     maxAttempts: 3,
     backoffStrategy: 'exponential',
     initialDelay: 100,
     maxDelay: 5000,
     jitter: true,
+  };
+  
+  private defaultMetricsConfig: MetricsCollectorConfig = {
+    retentionPeriod: 7 * 24 * 60 * 60 * 1000, // 7 days
+    aggregationIntervals: {
+      minute: true,
+      hour: true,
+      day: true,
+    },
+    alertThresholds: {
+      tripRate: 10,
+      failureRate: 50,
+      responseTime: 5000,
+    },
+    exportFormat: 'json',
   };
   
   private metrics = {
@@ -248,8 +266,19 @@ export class ErrorRecoveryManager {
   }
 
   configureCircuitBreaker(resourceType: string, config: CircuitBreakerConfig): void {
+    // Validate configuration
+    CircuitBreakerMetricsCollector.validateConfiguration(config);
+    
     const circuitBreaker = new CircuitBreaker(resourceType, config);
     this.circuitBreakers.set(resourceType, circuitBreaker);
+    
+    // Create metrics collector for this circuit breaker
+    const metricsCollector = new CircuitBreakerMetricsCollector(
+      circuitBreaker,
+      this.defaultMetricsConfig,
+      resourceType
+    );
+    this.metricsCollectors.set(resourceType, metricsCollector);
   }
 
   registerCircuitBreaker(name: string, circuitBreaker: CircuitBreaker): void {
@@ -266,6 +295,32 @@ export class ErrorRecoveryManager {
       totalErrors: this.metrics.totalErrors,
       totalRecoveries: this.metrics.totalRecoveries,
     };
+  }
+  
+  getCircuitBreakerMetrics(resourceType: string) {
+    const collector = this.metricsCollectors.get(resourceType);
+    if (!collector) {
+      return null;
+    }
+    return collector.export();
+  }
+  
+  getAllCircuitBreakerMetrics() {
+    const metrics: Record<string, any> = {};
+    for (const [resourceType, collector] of this.metricsCollectors.entries()) {
+      metrics[resourceType] = collector.export();
+    }
+    return metrics;
+  }
+  
+  exportMetricsPrometheus(): string {
+    const lines: string[] = [];
+    for (const [resourceType, collector] of this.metricsCollectors.entries()) {
+      lines.push(`# Circuit breaker metrics for ${resourceType}`);
+      lines.push(collector.exportPrometheus());
+      lines.push('');
+    }
+    return lines.join('\n');
   }
 
   getCircuitBreakerStatus(): Record<string, string> {
@@ -317,15 +372,32 @@ export class ErrorRecoveryManager {
 
   private getOrCreateCircuitBreaker(resourceType: string): CircuitBreaker {
     if (!this.circuitBreakers.has(resourceType)) {
-      const config: CircuitBreakerConfig = {
-        failureThreshold: 5,
-        resetTimeout: 60000,
-        halfOpenLimit: 2,
-        monitoringPeriod: 300000,
-      };
-      this.circuitBreakers.set(resourceType, new CircuitBreaker(resourceType, config));
+      const config = this.getCircuitBreakerConfig(resourceType);
+      const circuitBreaker = new CircuitBreaker(resourceType, config);
+      this.circuitBreakers.set(resourceType, circuitBreaker);
+      
+      // Create metrics collector for this circuit breaker
+      const metricsCollector = new CircuitBreakerMetricsCollector(
+        circuitBreaker,
+        this.defaultMetricsConfig,
+        resourceType
+      );
+      this.metricsCollectors.set(resourceType, metricsCollector);
     }
     return this.circuitBreakers.get(resourceType)!;
+  }
+  
+  private getCircuitBreakerConfig(resourceType: string): CircuitBreakerConfig {
+    // Use resource-specific configurations from the centralized config
+    const resourceConfig = DEFAULT_RESOURCE_CONFIGS[resourceType];
+    if (resourceConfig) {
+      // Validate configuration before using
+      CircuitBreakerMetricsCollector.validateConfiguration(resourceConfig.circuitBreakerConfig);
+      return resourceConfig.circuitBreakerConfig;
+    }
+    
+    // Fall back to default config - we know 'api' exists in DEFAULT_RESOURCE_CONFIGS
+    return DEFAULT_RESOURCE_CONFIGS.api!.circuitBreakerConfig;
   }
 
   private getRetryPolicy(resourceType: string): RetryPolicy {
@@ -397,6 +469,20 @@ export class ErrorRecoveryManager {
     }
 
     return merged;
+  }
+  
+  configureMetrics(config: MetricsCollectorConfig): void {
+    this.defaultMetricsConfig = config;
+    
+    // Update existing collectors
+    for (const [resourceType, circuitBreaker] of this.circuitBreakers.entries()) {
+      const newCollector = new CircuitBreakerMetricsCollector(
+        circuitBreaker,
+        config,
+        resourceType
+      );
+      this.metricsCollectors.set(resourceType, newCollector);
+    }
   }
 }
 

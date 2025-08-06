@@ -129,6 +129,14 @@ export class CircuitBreaker {
       this.metricsResetTime = now + this.config.monitoringPeriod;
     }
   }
+
+  getName(): string {
+    return this.name;
+  }
+
+  getConfig(): CircuitBreakerConfig {
+    return this.config;
+  }
 }
 
 export default CircuitBreaker;

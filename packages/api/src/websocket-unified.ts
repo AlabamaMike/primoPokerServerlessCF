@@ -13,7 +13,28 @@ import {
 } from '@primo-poker/shared';
 import { WebSocketEventType, GameEventType } from '@primo-poker/shared';
 import { validateJWT } from '@primo-poker/security';
-import { Env } from '../types';
+
+// Environment interface
+interface Env {
+  DB: D1Database;
+  SESSION_STORE: KVNamespace;
+  METRICS_NAMESPACE: KVNamespace;
+  HAND_HISTORY_BUCKET: R2Bucket;
+  AUDIT_BUCKET: R2Bucket;
+  TABLE_OBJECTS: DurableObjectNamespace;
+  GAME_TABLES: DurableObjectNamespace;
+  SECURE_RNG_DO: DurableObjectNamespace;
+  RATE_LIMIT_DO: DurableObjectNamespace;
+  GAME_TABLE_DO: DurableObjectNamespace;
+  TOURNAMENT_QUEUE: Queue;
+  ANALYTICS: AnalyticsEngineDataset;
+  JWT_SECRET: string;
+  DATABASE_ENCRYPTION_KEY: string;
+  ANTHROPIC_API_KEY?: string;
+  ENVIRONMENT: string;
+  NODE_ENV?: string;
+  ALLOWED_ORIGINS?: string;
+}
 
 export interface UnifiedWebSocketConfig {
   heartbeatInterval?: number;
@@ -27,8 +48,8 @@ export class UnifiedWebSocketManager {
   private messageQueues: Map<string, MessageQueue>;
   private webSockets: Map<string, WebSocket>;
   private broadcaster: ReturnType<typeof createWebSocketBroadcaster>;
-  private heartbeatIntervals: Map<string, NodeJS.Timeout>;
-  private reconnectTimers: Map<string, NodeJS.Timeout>;
+  private heartbeatIntervals: Map<string, number>;
+  private reconnectTimers: Map<string, number>;
   private errorHandler: ReturnType<typeof createErrorHandler>;
   private config: Required<UnifiedWebSocketConfig>;
 

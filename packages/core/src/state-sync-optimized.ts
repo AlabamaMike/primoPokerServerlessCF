@@ -1,5 +1,6 @@
-import { GameState, Player, Pot } from '@primo-poker/shared';
-import { createHash } from 'crypto';
+import { GameState, Player } from '@primo-poker/shared';
+import { SidePot } from './betting-engine';
+import { CryptoHelpers } from '@primo-poker/security';
 
 export interface StateDiff {
   path: string[];
@@ -20,9 +21,10 @@ export class StateSyncOptimizer {
   private diffCache = new Map<string, StateDiff[]>();
   private currentVersion = 0;
 
-  private calculateHash(obj: any): string {
+  private async calculateHash(obj: any): Promise<string> {
     const str = JSON.stringify(obj, Object.keys(obj).sort());
-    return createHash('sha256').update(str).digest('hex').substring(0, 8);
+    const hash = await CryptoHelpers.sha256Hex(str);
+    return hash.substring(0, 8);
   }
 
   private deepDiff(oldObj: any, newObj: any, path: string[] = []): StateDiff[] {
@@ -96,16 +98,16 @@ export class StateSyncOptimizer {
     return result;
   }
 
-  updateState(key: string, newState: any): {
+  async updateState(key: string, newState: any): Promise<{
     version: StateVersion;
     diffs: StateDiff[];
     fullState?: any;
-  } {
+  }> {
     const oldState = this.stateCache.get(key);
     const diffs = oldState ? this.deepDiff(oldState, newState) : [];
 
     this.currentVersion++;
-    const hash = this.calculateHash(newState);
+    const hash = await this.calculateHash(newState);
     
     const version: StateVersion = {
       version: this.currentVersion,
@@ -176,25 +178,28 @@ export class GameStateSyncOptimizer extends StateSyncOptimizer {
   private playerStateCache = new Map<string, any>();
   private potStateCache = new Map<string, any>();
 
-  optimizeGameState(gameState: GameState): {
+  async optimizeGameState(gameState: GameState): Promise<{
     version: StateVersion;
     diffs: StateDiff[];
     fullState?: GameState;
     playerDiffs: Map<string, StateDiff[]>;
     potDiffs: StateDiff[];
-  } {
-    const mainResult = this.updateState('game', {
-      id: gameState.id,
+  }> {
+    const mainResult = await this.updateState('game', {
+      tableId: gameState.tableId,
+      gameId: gameState.gameId,
       phase: gameState.phase,
-      currentTurn: gameState.currentTurn,
-      dealerPosition: gameState.dealerPosition,
-      smallBlindPosition: gameState.smallBlindPosition,
-      bigBlindPosition: gameState.bigBlindPosition,
+      pot: gameState.pot,
+      sidePots: gameState.sidePots,
       communityCards: gameState.communityCards,
       currentBet: gameState.currentBet,
-      totalPot: gameState.totalPot,
-      lastAction: gameState.lastAction,
+      minRaise: gameState.minRaise,
+      activePlayerId: gameState.activePlayerId,
+      dealerId: gameState.dealerId,
+      smallBlindId: gameState.smallBlindId,
+      bigBlindId: gameState.bigBlindId,
       handNumber: gameState.handNumber,
+      timestamp: gameState.timestamp,
     });
 
     const playerDiffs = new Map<string, StateDiff[]>();
@@ -212,13 +217,13 @@ export class GameStateSyncOptimizer extends StateSyncOptimizer {
       }
     }
 
-    const oldPotState = this.potStateCache.get('pots');
+    const oldPotState = this.potStateCache.get('sidePots');
     const potDiffs = oldPotState
-      ? this.deepDiff(oldPotState, gameState.pots)
+      ? this.deepDiff(oldPotState, gameState.sidePots)
       : [];
     
     if (potDiffs.length > 0 || !oldPotState) {
-      this.potStateCache.set('pots', JSON.parse(JSON.stringify(gameState.pots)));
+      this.potStateCache.set('sidePots', JSON.parse(JSON.stringify(gameState.sidePots)));
     }
 
     return {
@@ -309,7 +314,7 @@ export class GameStateSyncOptimizer extends StateSyncOptimizer {
 
 export class BatchedStateSync {
   private pendingUpdates = new Map<string, any>();
-  private batchTimer: NodeJS.Timeout | null = null;
+  private batchTimer: number | null = null;
   private batchInterval: number;
   private onFlush: (updates: Map<string, any>) => void;
 

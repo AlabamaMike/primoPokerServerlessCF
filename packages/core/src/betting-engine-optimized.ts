@@ -9,6 +9,7 @@ import {
   GameError,
   ErrorCode 
 } from '@primo-poker/shared';
+import { SidePot } from './betting-engine';
 
 export interface ValidationResult {
   valid: boolean;
@@ -18,6 +19,7 @@ export interface ValidationResult {
   callAmount?: number;
 }
 
+// Using SidePot from betting-engine.ts
 export interface Pot {
   amount: number;
   eligiblePlayerIds: string[];
@@ -393,7 +395,7 @@ export class OptimizedBettingEngine {
 
     switch (action.type) {
       case PlayerAction.FOLD:
-        updatedGamePlayer.folded = true;
+        updatedGamePlayer.isFolded = true;
         break;
 
       case PlayerAction.CHECK:
@@ -492,7 +494,7 @@ export class PotCalculator {
 
   private getCacheKey(players: GamePlayer[]): string {
     return players
-      .map(p => `${p.id}:${p.currentBet}:${p.folded}`)
+      .map(p => `${p.id}:${p.currentBet}:${p.isFolded}`)
       .sort()
       .join('|');
   }
@@ -533,7 +535,7 @@ export class PotCalculator {
       if (betLevel > previousBet) {
         const eligibleGamePlayers = sortedGamePlayers
           .slice(i)
-          .filter(p => !p.folded)
+          .filter(p => !p.isFolded)
           .map(p => p.id);
         
         if (eligibleGamePlayers.length > 0) {

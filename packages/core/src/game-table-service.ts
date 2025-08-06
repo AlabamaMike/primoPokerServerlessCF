@@ -6,7 +6,6 @@ import {
   GameEventType,
   TableConfig,
   Card,
-  Pot,
 } from '@primo-poker/shared';
 import { PokerGame } from './poker-game';
 import { OptimizedBettingEngine, BettingContext } from './betting-engine-optimized';
@@ -43,7 +42,7 @@ export class GameTableService {
   private eventHistory: GameEvent[] = [];
   private stateChangeCallback?: (state: GameState, event: GameEventType) => void;
   private errorHandler: ReturnType<typeof createErrorHandler>;
-  private nextHandTimer?: NodeJS.Timeout;
+  private nextHandTimer?: number;
 
   constructor(config: GameTableServiceConfig) {
     this.tableConfig = config.tableConfig;

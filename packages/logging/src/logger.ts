@@ -1,5 +1,6 @@
-import { LogLevel, LogEntry, LogContext, LoggerConfig, LogAggregator } from './types';
+import { LogLevel, LogEntry, LogContext, LoggerConfig, LogAggregator, LoggingEvent, LoggingMetrics } from './types';
 import { DefaultPIIFilter } from './pii-filter';
+import { SimpleEventEmitter } from './event-emitter';
 
 export class Logger {
   private static readonly LOG_LEVELS: Record<LogLevel, number> = {
@@ -8,13 +9,23 @@ export class Logger {
     warn: 2,
     error: 3,
   };
+  private static readonly MAX_BUFFER_SIZE = 10000;
 
-  protected readonly config: Required<LoggerConfig>;
+  protected readonly config: Required<Omit<LoggerConfig, 'onAggregationError' | 'onBufferOverflow' | 'onFilterError'>> & Pick<LoggerConfig, 'onAggregationError' | 'onBufferOverflow' | 'onFilterError'>;
   private readonly piiFilter: DefaultPIIFilter;
+  private readonly eventEmitter: SimpleEventEmitter;
   private buffer: LogEntry[] = [];
   private flushingBuffer: LogEntry[] = [];
   private isFlushInProgress = false;
   protected aggregator?: LogAggregator;
+  private metrics: LoggingMetrics = {
+    totalLogsProcessed: 0,
+    totalLogsDropped: 0,
+    totalAggregationErrors: 0,
+    totalFilterErrors: 0,
+    totalFlushAttempts: 0,
+    totalFlushFailures: 0,
+  };
 
   constructor(config: LoggerConfig) {
     this.config = {
@@ -25,13 +36,50 @@ export class Logger {
       customFilters: config.customFilters ?? [],
       outputFormat: config.outputFormat ?? 'json',
       namespace: config.namespace ?? 'default',
-    };
+      onAggregationError: config.onAggregationError,
+      onBufferOverflow: config.onBufferOverflow,
+      onFilterError: config.onFilterError,
+    } as any;
     
     this.piiFilter = new DefaultPIIFilter();
+    this.eventEmitter = new SimpleEventEmitter();
+    
+    // Register error callbacks as event listeners if provided
+    if (config.onAggregationError) {
+      this.eventEmitter.on((event) => {
+        if (event.type === 'aggregation_error') {
+          config.onAggregationError!(event.error, event.entries);
+        }
+      });
+    }
+    
+    if (config.onBufferOverflow) {
+      this.eventEmitter.on((event) => {
+        if (event.type === 'buffer_overflow') {
+          config.onBufferOverflow!(event.droppedCount, event.bufferSize);
+        }
+      });
+    }
+    
+    if (config.onFilterError) {
+      this.eventEmitter.on((event) => {
+        if (event.type === 'filter_error') {
+          config.onFilterError!(event.error, event.entry, event.filterIndex);
+        }
+      });
+    }
   }
 
   setAggregator(aggregator: LogAggregator): void {
     this.aggregator = aggregator;
+  }
+
+  getEventEmitter(): SimpleEventEmitter {
+    return this.eventEmitter;
+  }
+
+  getMetrics(): LoggingMetrics {
+    return { ...this.metrics }; // Return a copy
   }
 
   debug(message: string, context?: LogContext): void {
@@ -76,6 +124,11 @@ export class Logger {
 
     // Mark flush as in progress
     this.isFlushInProgress = true;
+    const startTime = Date.now();
+    const entryCount = this.buffer.length;
+
+    this.metrics.totalFlushAttempts++;
+    this.eventEmitter.emit({ type: 'flush_started', entryCount });
 
     try {
       // Swap buffers - new logs will go to the empty buffer
@@ -89,6 +142,27 @@ export class Logger {
         await this.aggregator.send([...this.flushingBuffer]);
         this.flushingBuffer.length = 0;
       }
+
+      // Update metrics on successful flush
+      const duration = Date.now() - startTime;
+      this.metrics.lastFlushDuration = duration;
+      this.metrics.lastFlushTimestamp = new Date().toISOString();
+      
+      this.eventEmitter.emit({ type: 'flush_completed', entryCount, duration });
+    } catch (error) {
+      this.metrics.totalFlushFailures++;
+      this.metrics.totalAggregationErrors++;
+      
+      const err = error as Error;
+      this.eventEmitter.emit({ type: 'flush_failed', error: err, entryCount });
+      this.eventEmitter.emit({ 
+        type: 'aggregation_error', 
+        error: err, 
+        entries: this.flushingBuffer 
+      });
+      
+      // Re-throw to maintain existing behavior
+      throw error;
     } finally {
       this.isFlushInProgress = false;
     }
@@ -124,21 +198,57 @@ export class Logger {
 
     // Apply PII filtering
     if (this.config.enablePIIFiltering) {
-      entry = this.piiFilter.filter(entry) as LogEntry;
+      try {
+        entry = this.piiFilter.filter(entry) as LogEntry;
+      } catch (filterError) {
+        this.metrics.totalFilterErrors++;
+        this.eventEmitter.emit({
+          type: 'filter_error',
+          error: filterError as Error,
+          entry,
+          filterIndex: -1, // PII filter is not indexed
+        });
+        // Continue with unfiltered entry
+      }
     }
 
     // Apply custom filters
-    for (const filter of this.config.customFilters) {
-      if (!filter(entry)) {
-        return; // Filter rejected the entry
+    for (let i = 0; i < this.config.customFilters.length; i++) {
+      const filter = this.config.customFilters[i]!;
+      try {
+        if (!filter(entry)) {
+          return; // Filter rejected the entry
+        }
+      } catch (filterError) {
+        this.metrics.totalFilterErrors++;
+        this.eventEmitter.emit({
+          type: 'filter_error',
+          error: filterError as Error,
+          entry,
+          filterIndex: i,
+        });
+        // Continue processing despite filter error
       }
     }
 
     // Output the log
     this.output(entry);
 
+    // Check buffer overflow before adding
+    if (this.buffer.length >= Logger.MAX_BUFFER_SIZE) {
+      const droppedCount = 1; // We're dropping this entry
+      this.metrics.totalLogsDropped += droppedCount;
+      this.eventEmitter.emit({
+        type: 'buffer_overflow',
+        droppedCount,
+        bufferSize: Logger.MAX_BUFFER_SIZE,
+      });
+      return; // Drop the log entry
+    }
+
     // Add to buffer for aggregation
     this.buffer.push(entry);
+    this.metrics.totalLogsProcessed++;
   }
 
   private output(entry: LogEntry): void {
@@ -202,13 +312,13 @@ class ContextualLogger extends Logger {
 
   constructor(parentLogger: Logger, baseContext: LogContext) {
     // Pass the parent's config to maintain logger behavior
-    super(parentLogger.config);
+    super((parentLogger as any).config);
     this.parentLogger = parentLogger;
     this.baseContext = baseContext;
     
     // Share the same aggregator reference
-    if (parentLogger.aggregator) {
-      this.setAggregator(parentLogger.aggregator);
+    if ((parentLogger as any).aggregator) {
+      this.setAggregator((parentLogger as any).aggregator);
     }
   }
 
@@ -238,8 +348,16 @@ class ContextualLogger extends Logger {
     return this.parentLogger.flush();
   }
 
+  getEventEmitter(): SimpleEventEmitter {
+    return this.parentLogger.getEventEmitter();
+  }
+
+  getMetrics(): LoggingMetrics {
+    return this.parentLogger.getMetrics();
+  }
+
   private contextualLog(level: LogLevel, message: string, additionalContext?: LogContext): void {
     const mergedContext = { ...this.baseContext, ...additionalContext };
-    this.parentLogger.log(level, message, mergedContext);
+    (this.parentLogger as any).log(level, message, mergedContext);
   }
 }

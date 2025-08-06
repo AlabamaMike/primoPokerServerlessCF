@@ -33,6 +33,10 @@ export interface LoggerConfig {
   customFilters?: Array<(entry: LogEntry) => boolean>;
   outputFormat?: 'json' | 'structured';
   namespace?: string;
+  // Error monitoring callbacks
+  onAggregationError?: (error: Error, entries: LogEntry[]) => void;
+  onBufferOverflow?: (droppedCount: number, bufferSize: number) => void;
+  onFilterError?: (error: Error, entry: LogEntry, filterIndex: number) => void;
 }
 
 export interface LogAggregator {
@@ -41,4 +45,33 @@ export interface LogAggregator {
 
 export interface PIIFilter {
   filter(data: any): any;
+}
+
+export type LoggingEvent = 
+  | { type: 'aggregation_error'; error: Error; entries: LogEntry[] }
+  | { type: 'buffer_overflow'; droppedCount: number; bufferSize: number }
+  | { type: 'filter_error'; error: Error; entry: LogEntry; filterIndex: number }
+  | { type: 'flush_started'; entryCount: number }
+  | { type: 'flush_completed'; entryCount: number; duration: number }
+  | { type: 'flush_failed'; error: Error; entryCount: number };
+
+export interface LoggingMetrics {
+  totalLogsProcessed: number;
+  totalLogsDropped: number;
+  totalAggregationErrors: number;
+  totalFilterErrors: number;
+  totalFlushAttempts: number;
+  totalFlushFailures: number;
+  lastFlushDuration?: number;
+  lastFlushTimestamp?: string;
+}
+
+export interface LoggingEventListener {
+  (event: LoggingEvent): void;
+}
+
+export interface LoggingEventEmitter {
+  on(listener: LoggingEventListener): void;
+  off(listener: LoggingEventListener): void;
+  emit(event: LoggingEvent): void;
 }

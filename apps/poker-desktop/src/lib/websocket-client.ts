@@ -140,6 +140,8 @@ export class WebSocketClient {
       window.addEventListener('online', this.onlineListener);
       window.addEventListener('offline', this.offlineListener);
       
+      // navigator.onLine is not always reliable but provides a basic check
+      // In a production app, consider implementing a more robust connectivity check
       this.isOnline = navigator.onLine;
     }
   }

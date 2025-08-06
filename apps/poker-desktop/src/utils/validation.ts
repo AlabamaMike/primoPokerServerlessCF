@@ -49,10 +49,13 @@ export const validators = {
   }),
 
   numeric: (message = 'Must be a number'): ValidationRule<string> => ({
-    validate: (value) => ({
-      isValid: !isNaN(Number(value)) && value.trim() !== '',
-      error: message
-    })
+    validate: (value) => {
+      const num = parseFloat(value);
+      return {
+        isValid: !isNaN(num) && isFinite(num) && value.trim() !== '',
+        error: message
+      };
+    }
   }),
 
   min: (min: number, message?: string): ValidationRule<number> => ({

@@ -55,7 +55,7 @@ export default function LoginForm({ apiUrl, onSuccess }: LoginFormProps) {
       
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded mb-4">
-          {typeof error === 'object' && error.message ? error.message : error}
+          {error?.message || 'An error occurred'}
         </div>
       )}
       

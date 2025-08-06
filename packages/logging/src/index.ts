@@ -5,4 +5,5 @@ export { CorrelationIdGenerator, RequestContext } from './correlation';
 export { DefaultPIIFilter } from './pii-filter';
 export { CloudflareAnalyticsAggregator } from './aggregators/cloudflare-analytics';
 export type { CloudflareAnalyticsConfig } from './aggregators/cloudflare-analytics';
+export { SimpleEventEmitter } from './event-emitter';
 export * from './types';

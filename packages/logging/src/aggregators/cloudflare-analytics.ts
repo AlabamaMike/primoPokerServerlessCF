@@ -35,8 +35,8 @@ type ProcessedCloudflareAnalyticsConfig = Required<Omit<CloudflareAnalyticsConfi
 export class CloudflareAnalyticsAggregator implements LogAggregator {
   private readonly config: ProcessedCloudflareAnalyticsConfig;
   private buffer: LogEntry[] = [];
-  private flushTimer?: ReturnType<typeof setInterval>;
-  private retryTimer?: ReturnType<typeof setInterval>;
+  private flushTimer?: ReturnType<typeof setInterval> | undefined;
+  private retryTimer?: ReturnType<typeof setInterval> | undefined;
   private deadLetterQueue: DeadLetterEntry[] = [];
   private metrics: AggregatorMetrics = {
     totalSent: 0,

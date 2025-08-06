@@ -11,7 +11,9 @@ export class Logger {
 
   private readonly config: Required<LoggerConfig>;
   private readonly piiFilter: DefaultPIIFilter;
-  private readonly buffer: LogEntry[] = [];
+  private buffer: LogEntry[] = [];
+  private flushingBuffer: LogEntry[] = [];
+  private isFlushInProgress = false;
   private aggregator?: LogAggregator;
 
   constructor(config: LoggerConfig) {
@@ -63,9 +65,32 @@ export class Logger {
   }
 
   async flush(): Promise<void> {
-    if (this.aggregator && this.buffer.length > 0) {
-      await this.aggregator.send([...this.buffer]);
-      this.buffer.length = 0;
+    if (!this.aggregator || this.isFlushInProgress) {
+      return;
+    }
+
+    // Double-buffer approach: swap buffers to prevent race conditions
+    if (this.buffer.length === 0) {
+      return;
+    }
+
+    // Mark flush as in progress
+    this.isFlushInProgress = true;
+
+    try {
+      // Swap buffers - new logs will go to the empty buffer
+      // while we send the current buffer's contents
+      const temp = this.buffer;
+      this.buffer = this.flushingBuffer;
+      this.flushingBuffer = temp;
+
+      // Send the contents of the flushing buffer
+      if (this.flushingBuffer.length > 0) {
+        await this.aggregator.send([...this.flushingBuffer]);
+        this.flushingBuffer.length = 0;
+      }
+    } finally {
+      this.isFlushInProgress = false;
     }
   }
 
@@ -79,8 +104,8 @@ export class Logger {
     if (this.config.enableSampling) {
       const array = new Uint8Array(1);
       crypto.getRandomValues(array);
-      const randomValue = (array[0] ?? 0) / 256; // Convert to 0-1 range
-      if (randomValue > this.config.samplingRate) {
+      const randomValue = array[0]! / 256; // Convert to 0-1 range
+      if (randomValue > this.config.samplingRate!) {
         return;
       }
     }

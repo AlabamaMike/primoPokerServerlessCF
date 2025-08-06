@@ -26,7 +26,7 @@ module.exports = {
   },
   
   // Module name mapping for monorepo packages
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@primo-poker/shared$': '<rootDir>/packages/shared/src',
     '^@primo-poker/core$': '<rootDir>/packages/core/src',
     '^@primo-poker/persistence$': '<rootDir>/packages/persistence/src',
@@ -79,8 +79,8 @@ module.exports = {
   // Clear mocks between tests
   clearMocks: true,
   
-  // Collect coverage from all files
-  collectCoverage: true,
+  // Collect coverage from all files (only in CI to improve dev performance)
+  collectCoverage: process.env.CI === 'true',
   
   // Verbose output for detailed test results
   verbose: true,
@@ -96,13 +96,13 @@ module.exports = {
       displayName: 'Integration Tests', 
       testMatch: ['<rootDir>/tests/integration/**/*.test.ts'],
       testEnvironment: 'node',
-      testTimeout: 60000
+      testTimeout: 30000
     },
     {
       displayName: 'E2E Tests',
       testMatch: ['<rootDir>/tests/e2e/**/*.test.ts'],
       testEnvironment: 'node',
-      testTimeout: 120000
+      testTimeout: 60000
     }
   ],
   

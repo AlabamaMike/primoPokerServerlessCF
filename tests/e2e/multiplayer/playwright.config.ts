@@ -7,8 +7,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   
-  // Test timeout
-  timeout: 5 * 60 * 1000, // 5 minutes per test
+  // Test timeout (reduced from 5 minutes for better performance)
+  timeout: 2 * 60 * 1000, // 2 minutes per test
   
   // Expect timeout
   expect: {
@@ -42,8 +42,8 @@ export default defineConfig({
   // Retry failed tests once
   retries: 1,
 
-  // Run tests in parallel
-  workers: 1, // Single worker for multiplayer coordination
+  // Run tests in parallel (increased from 1 for better performance)
+  workers: process.env.CI ? 2 : 1, // Allow more workers in CI, single for local development
   
   // Global setup/teardown
   globalSetup: require.resolve('./global-setup.ts'),

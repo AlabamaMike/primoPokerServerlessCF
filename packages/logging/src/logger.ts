@@ -88,9 +88,14 @@ export class Logger {
       return;
     }
 
-    // Apply sampling
-    if (this.config.enableSampling && Math.random() > this.config.samplingRate) {
-      return;
+    // Apply sampling using crypto for better randomness
+    if (this.config.enableSampling) {
+      const array = new Uint8Array(1);
+      crypto.getRandomValues(array);
+      const randomValue = array[0] / 256; // Convert to 0-1 range
+      if (randomValue > this.config.samplingRate) {
+        return;
+      }
     }
 
     // Create log entry

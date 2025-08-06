@@ -58,19 +58,16 @@ export class CloudflareAnalyticsAggregator implements LogAggregator {
         ],
       }));
 
-      // Send to Cloudflare Analytics Engine
+      // Send to Cloudflare Analytics Engine using the correct ingestion endpoint
       const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${this.config.accountId}/analytics_engine/sql`,
+        `https://api.cloudflare.com/client/v4/accounts/${this.config.accountId}/analytics_engine/${this.config.dataset}/event`,
         {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this.config.apiToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            dataset: this.config.dataset,
-            data: analyticsEvents,
-          }),
+          body: JSON.stringify(analyticsEvents),
         }
       );
 

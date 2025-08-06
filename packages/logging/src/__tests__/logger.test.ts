@@ -1,6 +1,12 @@
 import { Logger } from '../logger';
 import { DefaultPIIFilter } from '../pii-filter';
 import { LoggerFactory } from '../factory';
+import { RequestContext } from '../correlation';
+
+// Stop the cleanup timer after all tests to prevent Jest hanging
+afterAll(() => {
+  RequestContext.stopCleanupTimer();
+});
 
 describe('Logger', () => {
   let logger: Logger;
@@ -91,20 +97,29 @@ describe('Logger', () => {
         samplingRate: 0.5,
       });
 
-      // Mock Math.random to control sampling
-      const randomSpy = jest.spyOn(Math, 'random');
+      // Mock crypto.getRandomValues to control sampling
+      const originalGetRandomValues = global.crypto.getRandomValues;
+      let callCount = 0;
       
-      // First call - should log (random < 0.5)
-      randomSpy.mockReturnValueOnce(0.3);
+      global.crypto.getRandomValues = jest.fn((array: Uint8Array) => {
+        // First call - should log (value < 0.5 * 256 = 128)
+        if (callCount === 0) {
+          array[0] = 64; // 64/256 = 0.25 < 0.5
+        } else {
+          // Second call - should not log (value > 0.5 * 256 = 128)
+          array[0] = 200; // 200/256 = 0.78 > 0.5
+        }
+        callCount++;
+        return array;
+      });
+      
       logger.info('Message 1');
-      
-      // Second call - should not log (random > 0.5)
-      randomSpy.mockReturnValueOnce(0.7);
       logger.info('Message 2');
 
       expect(mockConsole.info).toHaveBeenCalledTimes(1);
       
-      randomSpy.mockRestore();
+      // Restore original function
+      global.crypto.getRandomValues = originalGetRandomValues;
     });
   });
 

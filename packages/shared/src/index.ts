@@ -1,5 +1,7 @@
 export * from './types';
 export * from './utils';
+export * from './error-handling';
+export * from './websocket-utils';
 
 // Re-export commonly used items for convenience
 export {

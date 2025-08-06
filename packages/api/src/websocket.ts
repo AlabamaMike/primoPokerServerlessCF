@@ -7,6 +7,7 @@ import {
   Player,
   ValidationUtils,
   RandomUtils,
+  createWebSocketMessage,
 } from '@primo-poker/shared';
 import { AuthenticationManager, TokenPayload } from '@primo-poker/security';
 
@@ -79,14 +80,13 @@ export class WebSocketManager {
     });
 
     // Send welcome message
-    this.sendMessage(connectionId, {
-      type: 'connection_established',
-      payload: {
+    this.sendMessage(connectionId, createWebSocketMessage(
+      'connection_established',
+      {
         playerId: connection.playerId,
         tableId: connection.tableId,
-      },
-      timestamp: new Date().toISOString(),
-    });
+      }
+    ));
 
     // Set up ping/pong for connection health
     this.setupPingPong(connectionId);
@@ -108,11 +108,7 @@ export class WebSocketManager {
           await this.handleChatMessage(connectionId, message as ChatMessage);
           break;
         case 'ping':
-          this.sendMessage(connectionId, {
-            type: 'pong',
-            payload: {},
-            timestamp: new Date().toISOString(),
-          });
+          this.sendMessage(connectionId, createWebSocketMessage('pong', {}));
           break;
         case 'join_table':
           await this.handleJoinTable(connectionId);
@@ -146,11 +142,10 @@ export class WebSocketManager {
       // In a real implementation, this would interact with the table durable object
       
       // For now, echo back the action as a game update
-      const gameUpdate: GameUpdateMessage = {
-        type: 'game_update',
-        payload: {} as GameState, // Would be actual game state
-        timestamp: new Date().toISOString(),
-      };
+      const gameUpdate: GameUpdateMessage = createWebSocketMessage(
+        'game_update',
+        {} as GameState // Would be actual game state
+      ) as GameUpdateMessage;
 
       // Broadcast to all players at the table
       this.broadcastToTable(connection.tableId, gameUpdate);
@@ -174,16 +169,15 @@ export class WebSocketManager {
       return;
     }
 
-    const chatMessage: ChatMessage = {
-      type: 'chat',
-      payload: {
+    const chatMessage: ChatMessage = createWebSocketMessage(
+      'chat',
+      {
         playerId: connection.playerId,
         username: connection.username,
         message: sanitizedMessage,
         isSystem: false,
-      },
-      timestamp: new Date().toISOString(),
-    };
+      }
+    ) as ChatMessage;
 
     // Broadcast to all players at the table
     this.broadcastToTable(connection.tableId, chatMessage);
@@ -200,23 +194,18 @@ export class WebSocketManager {
       gameState: null as GameState | null,
     };
 
-    this.sendMessage(connectionId, {
-      type: 'table_state',
-      payload: tableState,
-      timestamp: new Date().toISOString(),
-    });
+    this.sendMessage(connectionId, createWebSocketMessage('table_state', tableState));
 
     // Notify other players
-    const joinNotification: ChatMessage = {
-      type: 'chat',
-      payload: {
+    const joinNotification: ChatMessage = createWebSocketMessage(
+      'chat',
+      {
         playerId: 'system',
         username: 'System',
         message: `${connection.username} joined the table`,
         isSystem: true,
-      },
-      timestamp: new Date().toISOString(),
-    };
+      }
+    ) as ChatMessage;
 
     this.broadcastToTable(connection.tableId, joinNotification, connectionId);
   }
@@ -226,16 +215,15 @@ export class WebSocketManager {
     if (!connection) return;
 
     // Notify other players
-    const leaveNotification: ChatMessage = {
-      type: 'chat',
-      payload: {
+    const leaveNotification: ChatMessage = createWebSocketMessage(
+      'chat',
+      {
         playerId: 'system',
         username: 'System',
         message: `${connection.username} left the table`,
         isSystem: true,
-      },
-      timestamp: new Date().toISOString(),
-    };
+      }
+    ) as ChatMessage;
 
     this.broadcastToTable(connection.tableId, leaveNotification, connectionId);
     
@@ -260,16 +248,15 @@ export class WebSocketManager {
     }
 
     // Notify other players
-    const disconnectNotification: ChatMessage = {
-      type: 'chat',
-      payload: {
+    const disconnectNotification: ChatMessage = createWebSocketMessage(
+      'chat',
+      {
         playerId: 'system',
         username: 'System',
         message: `${connection.username} disconnected`,
         isSystem: true,
-      },
-      timestamp: new Date().toISOString(),
-    };
+      }
+    ) as ChatMessage;
 
     this.broadcastToTable(connection.tableId, disconnectNotification);
   }
@@ -287,11 +274,7 @@ export class WebSocketManager {
   }
 
   private sendError(connectionId: string, message: string): void {
-    this.sendMessage(connectionId, {
-      type: 'error',
-      payload: { message },
-      timestamp: new Date().toISOString(),
-    });
+    this.sendMessage(connectionId, createWebSocketMessage('error', { message }));
   }
 
   private broadcastToTable(
@@ -319,11 +302,7 @@ export class WebSocketManager {
         return;
       }
 
-      this.sendMessage(connectionId, {
-        type: 'ping',
-        payload: {},
-        timestamp: new Date().toISOString(),
-      });
+      this.sendMessage(connectionId, createWebSocketMessage('ping', {}));
     }, 30000);
 
     // Check for stale connections every minute
@@ -349,26 +328,24 @@ export class WebSocketManager {
 
   // Public methods for broadcasting game updates
   public broadcastGameUpdate(tableId: string, gameState: GameState): void {
-    const gameUpdate: GameUpdateMessage = {
-      type: 'game_update',
-      payload: gameState,
-      timestamp: new Date().toISOString(),
-    };
+    const gameUpdate: GameUpdateMessage = createWebSocketMessage(
+      'game_update',
+      gameState
+    ) as GameUpdateMessage;
 
     this.broadcastToTable(tableId, gameUpdate);
   }
 
   public broadcastSystemMessage(tableId: string, message: string): void {
-    const systemMessage: ChatMessage = {
-      type: 'chat',
-      payload: {
+    const systemMessage: ChatMessage = createWebSocketMessage(
+      'chat',
+      {
         playerId: 'system',
         username: 'System',
         message,
         isSystem: true,
-      },
-      timestamp: new Date().toISOString(),
-    };
+      }
+    ) as ChatMessage;
 
     this.broadcastToTable(tableId, systemMessage);
   }

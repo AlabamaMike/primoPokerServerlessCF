@@ -25,6 +25,41 @@ export class LoggerFactory {
     }
   }
 
+  /**
+   * Sorts object keys recursively to ensure consistent JSON stringification
+   */
+  private sortObjectKeys(obj: any): any {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.sortObjectKeys(item));
+    }
+    
+    if (typeof obj === 'object') {
+      const sorted: any = {};
+      Object.keys(obj).sort().forEach(key => {
+        sorted[key] = this.sortObjectKeys(obj[key]);
+      });
+      return sorted;
+    }
+    
+    return obj;
+  }
+
+  /**
+   * Generates a deterministic cache key for logger configurations
+   */
+  private generateDeterministicKey(namespace: string, config?: Partial<LoggerConfig>): string {
+    if (!config || Object.keys(config).length === 0) {
+      return namespace;
+    }
+    
+    const sortedConfig = this.sortObjectKeys(config);
+    return `${namespace}:${JSON.stringify(sortedConfig)}`;
+  }
+
   static initialize(config: LoggerFactoryConfig = {}): void {
     this.instance = new LoggerFactory(config);
   }
@@ -37,7 +72,7 @@ export class LoggerFactory {
   }
 
   getLogger(namespace: string, additionalConfig?: Partial<LoggerConfig>): Logger {
-    const cacheKey = `${namespace}:${JSON.stringify(additionalConfig || {})}`;
+    const cacheKey = this.generateDeterministicKey(namespace, additionalConfig);
     
     if (!this.loggers.has(cacheKey)) {
       const config: LoggerConfig = {

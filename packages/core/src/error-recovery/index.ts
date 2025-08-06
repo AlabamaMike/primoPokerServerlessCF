@@ -20,6 +20,18 @@ export type {
   RecoveryStrategy as StrategyConfig
 } from './recovery-strategies';
 export { ErrorSanitizer } from './error-sanitizer';
+export { CircuitBreakerMetricsCollector } from './metrics/circuit-breaker-metrics-collector';
+export type {
+  CircuitBreakerStateTransition,
+  CircuitBreakerMetricsSnapshot,
+  TimeSeriesDataPoint,
+  CircuitBreakerAlert,
+  MetricsAggregation,
+  MetricsExportFormat,
+  MetricsCollectorConfig,
+  ResourceSpecificConfig
+} from './metrics/types';
+export { DEFAULT_RESOURCE_CONFIGS } from './metrics/types';
 
 // Re-export the default instance for convenience
 import ErrorRecoveryManager from './error-recovery-manager';

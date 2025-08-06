@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { validators, validate } from '../utils/validation';
 
 interface ChatMessage {
   username: string;
@@ -31,8 +32,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (inputMessage.trim() && isConnected) {
-      onSendMessage(inputMessage.trim());
+    const trimmedMessage = inputMessage.trim();
+    
+    // Validate message
+    const messageValidation = validate(
+      trimmedMessage,
+      validators.required('Message cannot be empty'),
+      validators.maxLength(500, 'Message is too long (max 500 characters)')
+    );
+    
+    if (!messageValidation.isValid) {
+      // Could show error in UI, for now just prevent sending
+      return;
+    }
+    
+    if (trimmedMessage && isConnected) {
+      onSendMessage(trimmedMessage);
       setInputMessage('');
       inputRef.current?.focus();
     }

@@ -17,6 +17,8 @@ export interface WebSocketState {
   connectionState: string;
   lastMessage: IncomingMessage | null;
   messageHistory: IncomingMessage[];
+  isOnline: boolean;
+  reconnectCount: number;
 }
 
 export interface WebSocketActions {
@@ -35,7 +37,9 @@ export function useWebSocket(options: UseWebSocketOptions): [WebSocketState, Web
     error: null,
     connectionState: 'disconnected',
     lastMessage: null,
-    messageHistory: []
+    messageHistory: [],
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    reconnectCount: 0
   });
 
   const clientRef = useRef<WebSocketClient | null>(null);
@@ -80,6 +84,13 @@ export function useWebSocket(options: UseWebSocketOptions): [WebSocketState, Web
       connectionState: 'disconnected'
     }));
   }, []);
+  
+  const handleReconnectAttempt = useCallback((attempt: number) => {
+    setState(prev => ({
+      ...prev,
+      reconnectCount: attempt
+    }));
+  }, []);
 
   const connect = useCallback(() => {
     if (clientRef.current?.isConnected || state.isConnecting) {
@@ -101,12 +112,13 @@ export function useWebSocket(options: UseWebSocketOptions): [WebSocketState, Web
       onMessage: handleMessage,
       onError: handleError,
       onConnect: handleConnect,
-      onDisconnect: handleDisconnect
+      onDisconnect: handleDisconnect,
+      onReconnectAttempt: handleReconnectAttempt
     };
 
     clientRef.current = new WebSocketClient(clientOptions);
     clientRef.current.connect();
-  }, [state.isConnecting, handleMessage, handleError, handleConnect, handleDisconnect]);
+  }, [state.isConnecting, handleMessage, handleError, handleConnect, handleDisconnect, handleReconnectAttempt]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -170,6 +182,27 @@ export function useWebSocket(options: UseWebSocketOptions): [WebSocketState, Web
     }, 1000);
 
     return () => clearInterval(interval);
+  }, []);
+  
+  // Monitor network status
+  useEffect(() => {
+    const handleOnline = () => {
+      setState(prev => ({ ...prev, isOnline: true }));
+    };
+    
+    const handleOffline = () => {
+      setState(prev => ({ ...prev, isOnline: false }));
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
   }, []);
 
   // Cleanup on unmount

@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { useAuthStore } from '../stores/auth-store';
+import { useFormValidation, validators } from '../utils/validation';
 
 interface LoginFormProps {
   apiUrl: string;
@@ -7,23 +8,38 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ apiUrl, onSuccess }: LoginFormProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { login, error } = useAuthStore();
+  
+  const validationRules = {
+    email: [validators.required(), validators.email()],
+    password: [validators.required(), validators.minLength(8)]
+  };
+  
+  const {
+    values,
+    errors,
+    touched,
+    handleChange,
+    handleBlur,
+    validateAll
+  } = useFormValidation(
+    { email: '', password: '' },
+    validationRules
+  );
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     
-    if (!email || !password) {
+    if (!validateAll()) {
       return;
     }
 
     setIsSubmitting(true);
     
     try {
-      await login(apiUrl, email, password);
+      await login(apiUrl, values.email, values.password);
       onSuccess?.();
     } catch (error) {
       // Error is handled by the store
@@ -39,7 +55,7 @@ export default function LoginForm({ apiUrl, onSuccess }: LoginFormProps) {
       
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded mb-4">
-          {error}
+          {typeof error === 'object' && error.message ? error.message : error}
         </div>
       )}
       
@@ -50,14 +66,21 @@ export default function LoginForm({ apiUrl, onSuccess }: LoginFormProps) {
         <input
           id="email"
           type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2 bg-black/50 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+          value={values.email}
+          onChange={(e) => handleChange('email', e.target.value)}
+          onBlur={() => handleBlur('email')}
+          className={`w-full px-4 py-2 bg-black/50 border rounded text-white focus:outline-none ${
+            errors.email && touched.email 
+              ? 'border-red-500 focus:border-red-500' 
+              : 'border-gray-600 focus:border-green-500'
+          }`}
           placeholder="you@example.com"
-          required
           disabled={isSubmitting}
           data-testid="email"
         />
+        {errors.email && touched.email && (
+          <p className="mt-1 text-red-400 text-sm">{errors.email}</p>
+        )}
       </div>
       
       <div className="mb-6">
@@ -67,14 +90,21 @@ export default function LoginForm({ apiUrl, onSuccess }: LoginFormProps) {
         <input
           id="password"
           type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-2 bg-black/50 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+          value={values.password}
+          onChange={(e) => handleChange('password', e.target.value)}
+          onBlur={() => handleBlur('password')}
+          className={`w-full px-4 py-2 bg-black/50 border rounded text-white focus:outline-none ${
+            errors.password && touched.password
+              ? 'border-red-500 focus:border-red-500'
+              : 'border-gray-600 focus:border-green-500'
+          }`}
           placeholder="••••••••"
-          required
           disabled={isSubmitting}
           data-testid="password"
         />
+        {errors.password && touched.password && (
+          <p className="mt-1 text-red-400 text-sm">{errors.password}</p>
+        )}
       </div>
       
       <button

@@ -1,0 +1,139 @@
+name: Logging Benchmarks
+
+on:
+  # Run on pushes to main to track performance over time
+  push:
+    branches: [main]
+    paths:
+      - 'packages/logging/**'
+      - '.github/workflows/benchmarks.yml'
+  
+  # Run on PRs that affect logging
+  pull_request:
+    paths:
+      - 'packages/logging/**'
+      - '.github/workflows/benchmarks.yml'
+  
+  # Allow manual runs
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for running benchmarks'
+        required: false
+        default: 'Manual benchmark run'
+
+jobs:
+  benchmark:
+    name: Run Logging Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for baseline comparison
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run benchmark tests
+        run: |
+          cd packages/logging
+          npm test -- benchmark.test.ts --verbose
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Generate benchmark report
+        if: always()
+        run: |
+          echo "## 📊 Logging Performance Benchmarks" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cd packages/logging
+          npm test -- benchmark.test.ts --verbose --no-coverage 2>&1 | grep -E "(ops/sec|overhead:|Overflow events:)" || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: packages/logging/benchmark-results/
+          retention-days: 30
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+            
+            // Run benchmarks and capture output
+            let benchmarkOutput = '';
+            try {
+              benchmarkOutput = execSync('cd packages/logging && npm test -- benchmark.test.ts --verbose --no-coverage 2>&1 || true', { encoding: 'utf8' });
+            } catch (e) {
+              benchmarkOutput = e.stdout || e.toString();
+            }
+            
+            // Extract performance metrics
+            const opsSecRegex = /(\w+.*?):\s*([\d,]+)\s*ops\/sec/g;
+            const overheadRegex = /overhead:\s*([\d.]+)%/g;
+            
+            let metrics = [];
+            let match;
+            
+            while ((match = opsSecRegex.exec(benchmarkOutput)) !== null) {
+              metrics.push(`- **${match[1]}**: ${match[2]} ops/sec`);
+            }
+            
+            while ((match = overheadRegex.exec(benchmarkOutput)) !== null) {
+              metrics.push(`- **PII filtering overhead**: ${match[1]}%`);
+            }
+            
+            const comment = `## 🚀 Logging Performance Results
+            
+            ${metrics.length > 0 ? metrics.join('\n') : 'No performance metrics found in test output.'}
+            
+            ### Benchmark Areas Tested
+            - ✅ Logger instantiation performance
+            - ✅ Logging throughput with various configurations  
+            - ✅ PII filtering performance impact
+            - ✅ Context merging overhead
+            - ✅ Buffer management efficiency
+            
+            _Note: Performance may vary based on CI environment. For consistent results, run benchmarks locally._`;
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Check performance regression
+        if: github.event_name == 'pull_request'
+        run: |
+          cd packages/logging
+          
+          # Run tests and check if they pass (performance thresholds)
+          if ! npm test -- benchmark.test.ts --verbose; then
+            echo "❌ Performance regression detected!" >> $GITHUB_STEP_SUMMARY
+            echo "Some benchmarks fell below acceptable thresholds." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ All performance benchmarks passed!" >> $GITHUB_STEP_SUMMARY
+          fi

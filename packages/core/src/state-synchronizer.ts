@@ -9,7 +9,10 @@ import {
   StateConflict,
   ConflictResolutionStrategy,
   StateSyncOptions,
-  PlayerState
+  PlayerState,
+  PlayerRole,
+  AuthorityLevel,
+  AuthorityRules
 } from './state-snapshot'
 
 export * from './state-snapshot'
@@ -214,8 +217,29 @@ export class StateSynchronizer {
     const conflicts: StateConflict[] = []
     const actionsByPlayer = new Map<string, PlayerActionRecord[]>()
     
+    // Enrich actions with player authority information from snapshot
+    const enrichedActions = actions.map(action => {
+      if (currentSnapshot?.playerStates.has(action.playerId)) {
+        const playerState = currentSnapshot.playerStates.get(action.playerId)!
+        const enriched: PlayerActionRecord = {
+          ...action,
+          playerRole: action.playerRole || playerState.role || PlayerRole.PLAYER
+        }
+        
+        // Only set authorityLevel if we have a value
+        if (action.authorityLevel !== undefined) {
+          enriched.authorityLevel = action.authorityLevel
+        } else if (playerState.isDealer) {
+          enriched.authorityLevel = AuthorityLevel.DEALER
+        }
+        
+        return enriched
+      }
+      return action
+    })
+    
     // Group actions by player
-    for (const action of actions) {
+    for (const action of enrichedActions) {
       if (!actionsByPlayer.has(action.playerId)) {
         actionsByPlayer.set(action.playerId, [])
       }
@@ -238,7 +262,8 @@ export class StateSynchronizer {
         if (actions.length > 1) {
           conflicts.push({
             type: 'duplicate_action',
-            actions: actions
+            actions: actions,
+            resolution: 'Use AUTHORITY_BASED strategy to resolve based on player roles'
           })
         }
       }
@@ -246,15 +271,22 @@ export class StateSynchronizer {
     
     // Check for out-of-turn actions if snapshot provided
     if (currentSnapshot?.gameState.activePlayerId) {
-      const outOfTurn = actions.filter(
+      const outOfTurn = enrichedActions.filter(
         action => action.playerId !== currentSnapshot.gameState.activePlayerId
       )
       
       for (const action of outOfTurn) {
-        conflicts.push({
-          type: 'out_of_turn',
-          actions: [action]
-        })
+        // Check if player has authority to act out of turn (e.g., admin override)
+        const hasOverrideAuthority = action.playerRole === PlayerRole.ADMIN || 
+                                   (action.authorityLevel && action.authorityLevel >= AuthorityLevel.ADMIN)
+        
+        if (!hasOverrideAuthority) {
+          conflicts.push({
+            type: 'out_of_turn',
+            actions: [action],
+            resolution: 'Player lacks authority to act out of turn'
+          })
+        }
       }
     }
     
@@ -263,7 +295,8 @@ export class StateSynchronizer {
 
   async resolveConflicts(
     actions: PlayerActionRecord[],
-    strategy: ConflictResolutionStrategy
+    strategy: ConflictResolutionStrategy,
+    options?: StateSyncOptions
   ): Promise<PlayerActionRecord[]> {
     switch (strategy) {
       case ConflictResolutionStrategy.TIMESTAMP_FIRST:
@@ -284,12 +317,133 @@ export class StateSynchronizer {
         return [...actions].sort((a, b) => a.timestamp - b.timestamp)
         
       case ConflictResolutionStrategy.AUTHORITY_BASED:
-        // In a real implementation, this would check player authority/roles
-        return actions
+        return this.resolveByAuthority(actions, options?.authorityRules)
         
       default:
         return actions
     }
+  }
+
+  private async resolveByAuthority(
+    actions: PlayerActionRecord[],
+    authorityRules?: AuthorityRules
+  ): Promise<PlayerActionRecord[]> {
+    // Use custom resolver if provided
+    if (authorityRules?.customResolver) {
+      const resolved: PlayerActionRecord[] = []
+      const actionsByTimestamp = new Map<number, PlayerActionRecord[]>()
+      
+      // Group actions by timestamp
+      for (const action of actions) {
+        if (!actionsByTimestamp.has(action.timestamp)) {
+          actionsByTimestamp.set(action.timestamp, [])
+        }
+        actionsByTimestamp.get(action.timestamp)!.push(action)
+      }
+      
+      // Resolve conflicts at each timestamp
+      for (const [timestamp, timestampActions] of actionsByTimestamp) {
+        if (timestampActions.length === 1) {
+          resolved.push(timestampActions[0]!)
+        } else {
+          // Use custom resolver to pick winner
+          let winner = timestampActions[0]!
+          for (let i = 1; i < timestampActions.length; i++) {
+            winner = authorityRules.customResolver(winner, timestampActions[i]!)
+          }
+          resolved.push(winner)
+        }
+      }
+      
+      return resolved.sort((a, b) => a.timestamp - b.timestamp)
+    }
+    
+    // Default authority-based resolution
+    const authorityLevels = this.getAuthorityLevels(authorityRules)
+    
+    // Group actions by timestamp to detect conflicts
+    // Use Math.floor to group by integer timestamp (ignore microseconds for grouping)
+    const actionsByTimestamp = new Map<number, PlayerActionRecord[]>()
+    for (const action of actions) {
+      const timestampInt = Math.floor(action.timestamp)
+      if (!actionsByTimestamp.has(timestampInt)) {
+        actionsByTimestamp.set(timestampInt, [])
+      }
+      actionsByTimestamp.get(timestampInt)!.push(action)
+    }
+    
+    const resolved: PlayerActionRecord[] = []
+    
+    // Process each timestamp group
+    for (const [timestamp, timestampActions] of actionsByTimestamp) {
+      if (timestampActions.length === 1) {
+        resolved.push(timestampActions[0]!)
+      } else {
+        // Multiple actions at same timestamp - resolve by authority
+        const sortedByAuthority = timestampActions.sort((a, b) => {
+          const aAuth = this.getActionAuthority(a, authorityLevels)
+          const bAuth = this.getActionAuthority(b, authorityLevels)
+          
+          if (aAuth !== bAuth) {
+            return bAuth - aAuth // Higher authority wins
+          }
+          
+          // Equal authority - use timestamp tiebreaker if enabled
+          if (authorityRules?.useTimestampTiebreaker !== false) {
+            // Prefer action with more precise timestamp (microseconds)
+            const aMicros = Math.floor((a.timestamp % 1) * 1000000)
+            const bMicros = Math.floor((b.timestamp % 1) * 1000000)
+            if (aMicros !== bMicros) {
+              return aMicros - bMicros // Earlier microseconds win
+            }
+          }
+          
+          // As final tiebreaker, use player ID for deterministic ordering
+          return a.playerId.localeCompare(b.playerId)
+        })
+        
+        // Keep only the highest authority action
+        resolved.push(sortedByAuthority[0]!)
+        
+        // Log conflict resolution for debugging
+        if (this.options.enableLogging && timestampActions.length > 1) {
+          const winner = sortedByAuthority[0]!
+          const winnerAuth = this.getActionAuthority(winner, authorityLevels)
+          this.log(`Authority conflict resolved: ${timestampActions.length} actions at timestamp ${timestamp}, ` +
+                   `winner: ${winner.playerId} (authority: ${winnerAuth})`)
+        }
+      }
+    }
+    
+    return resolved.sort((a, b) => a.timestamp - b.timestamp)
+  }
+  
+  private getAuthorityLevels(rules?: AuthorityRules): Record<PlayerRole, number> {
+    if (rules?.roleAuthority) {
+      return rules.roleAuthority
+    }
+    
+    // Default authority levels
+    return {
+      [PlayerRole.ADMIN]: AuthorityLevel.ADMIN,
+      [PlayerRole.DEALER]: AuthorityLevel.DEALER,
+      [PlayerRole.PLAYER]: AuthorityLevel.PLAYER
+    }
+  }
+  
+  private getActionAuthority(action: PlayerActionRecord, authorityLevels: Record<PlayerRole, number>): number {
+    // Use explicit authority level if provided
+    if (action.authorityLevel !== undefined) {
+      return action.authorityLevel
+    }
+    
+    // Use role-based authority
+    if (action.playerRole) {
+      return authorityLevels[action.playerRole] || AuthorityLevel.PLAYER
+    }
+    
+    // Default to player authority
+    return AuthorityLevel.PLAYER
   }
 
   async rollback(

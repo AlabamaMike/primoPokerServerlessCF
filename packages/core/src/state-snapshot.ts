@@ -18,6 +18,20 @@ export interface PlayerState {
   isAllIn?: boolean
   position?: { seat: number }
   cards?: any[]
+  role?: PlayerRole
+  isDealer?: boolean
+}
+
+export enum PlayerRole {
+  ADMIN = 'admin',
+  DEALER = 'dealer',
+  PLAYER = 'player'
+}
+
+export enum AuthorityLevel {
+  ADMIN = 3,
+  DEALER = 2,
+  PLAYER = 1
 }
 
 export interface StateDelta {
@@ -53,6 +67,8 @@ export interface PlayerActionRecord {
   action: string
   amount?: number
   timestamp: number
+  playerRole?: PlayerRole
+  authorityLevel?: number
 }
 
 export interface StateConflict {
@@ -71,4 +87,14 @@ export interface StateSyncOptions {
   maxDeltaSize?: number
   compressionEnabled?: boolean
   conflictStrategy?: ConflictResolutionStrategy
+  authorityRules?: AuthorityRules
+}
+
+export interface AuthorityRules {
+  // Allow customizing authority levels for different roles
+  roleAuthority?: Record<PlayerRole, number>
+  // Whether to use timestamp as tiebreaker when authority is equal
+  useTimestampTiebreaker?: boolean
+  // Custom authority resolver function
+  customResolver?: (action1: PlayerActionRecord, action2: PlayerActionRecord) => PlayerActionRecord
 }

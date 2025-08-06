@@ -6,6 +6,7 @@
  */
 
 import { GamePhase, PlayerStatus, GameState, WebSocketMessage, createWebSocketMessage } from '@primo-poker/shared'
+import { logger } from '@primo-poker/core'
 
 // Enhanced message types for real-time gameplay
 export interface GameMessage extends WebSocketMessage {
@@ -98,7 +99,13 @@ export class WebSocketManager {
     }
     this.tableClients.get(tableId)!.add(playerId)
 
-    console.log(`Client ${username} (${playerId}) connected to table ${tableId} as ${isSpectator ? 'spectator' : 'player'}`)
+    logger.info('Client connected', {
+      username,
+      playerId,
+      tableId,
+      isSpectator,
+      connectionId: client.connectionId
+    })
     
     return client
   }
@@ -127,7 +134,11 @@ export class WebSocketManager {
     // Remove client
     this.clients.delete(playerId)
     
-    console.log(`Client ${client.username} (${playerId}) disconnected from table ${client.tableId}`)
+    logger.info('Client disconnected', {
+      username: client.username,
+      playerId,
+      tableId: client.tableId
+    })
   }
 
   /**
@@ -158,7 +169,11 @@ export class WebSocketManager {
     Promise.allSettled(broadcastPromises).then(results => {
       const failures = results.filter(result => result.status === 'rejected')
       if (failures.length > 0) {
-        console.warn(`Failed to broadcast to ${failures.length} clients at table ${tableId}`)
+        logger.warn('Failed to broadcast to some clients', {
+          failureCount: failures.length,
+          tableId,
+          messageType: message.type
+        })
       }
     })
   }
@@ -179,7 +194,11 @@ export class WebSocketManager {
       await this.sendToClient(client, message)
       return true
     } catch (error) {
-      console.error(`Failed to send message to player ${playerId}:`, error)
+      logger.error('Failed to send message to player', error, {
+        playerId,
+        messageType: message.type,
+        tableId: message.tableId
+      })
       return false
     }
   }
@@ -209,7 +228,12 @@ export class WebSocketManager {
       // Send missed messages
       await this.sendMissedMessages(existingClient, lastStateVersion)
       
-      console.log(`Client ${username} (${playerId}) reconnected to table ${tableId}`)
+      logger.info('Client reconnected', {
+        username,
+        playerId,
+        tableId,
+        reconnectAttempts: existingClient.reconnectAttempts
+      })
       return existingClient
     } else {
       // Create new client connection
@@ -259,13 +283,20 @@ export class WebSocketManager {
         const message = JSON.parse(event.data)
         this.handleClientMessage(client, message)
       } catch (error) {
-        console.error(`Error parsing message from client ${playerId}:`, error)
+        logger.error('Error parsing WebSocket message', error, {
+          playerId,
+          rawData: data
+        })
       }
     }
 
     connection.onclose = () => {
       client.isConnected = false
-      console.log(`Client ${client.username} (${playerId}) connection closed`)
+      logger.info('WebSocket connection closed', {
+        username: client.username,
+        playerId,
+        tableId: client.tableId
+      })
       
       // Don't immediately remove - allow for reconnection
       setTimeout(() => {
@@ -276,7 +307,11 @@ export class WebSocketManager {
     }
 
     connection.onerror = (error) => {
-      console.error(`WebSocket error for client ${playerId}:`, error)
+      logger.error('WebSocket connection error', error, {
+        playerId,
+        username: client.username,
+        tableId: client.tableId
+      })
       client.isConnected = false
     }
 
@@ -315,7 +350,12 @@ export class WebSocketManager {
 
       default:
         // Forward game messages (will be handled by GameTable DO)
-        console.log(`Received ${message.type} from ${client.username} (${client.playerId})`)
+        logger.debug('Received game message', {
+          messageType: message.type,
+          username: client.username,
+          playerId: client.playerId,
+          tableId: client.tableId
+        })
         break
     }
   }
@@ -362,11 +402,19 @@ export class WebSocketManager {
       try {
         await this.sendToClient(client, message)
       } catch (error) {
-        console.error(`Failed to send missed message to ${client.playerId}:`, error)
+        logger.error('Failed to send missed message', error, {
+          playerId: client.playerId,
+          messageIndex: i,
+          totalMissed: missedMessages.length
+        })
       }
     }
 
-    console.log(`Sent ${missedMessages.length} missed messages to ${client.username}`)
+    logger.info('Missed messages sent', {
+      count: missedMessages.length,
+      username: client.username,
+      playerId: client.playerId
+    })
   }
 
   /**
@@ -381,7 +429,11 @@ export class WebSocketManager {
    */
   private handleStateRequest(client: GameClient, lastStateVersion: number): void {
     // This would typically trigger a full state update from the GameTable DO
-    console.log(`State sync requested by ${client.username} from version ${lastStateVersion}`)
+    logger.info('State sync requested', {
+      username: client.username,
+      playerId: client.playerId,
+      lastStateVersion
+    })
   }
 
   /**
@@ -427,7 +479,12 @@ export class WebSocketManager {
 
         // Check if client is responsive
         if (now - client.lastPong > this.connectionTimeout) {
-          console.warn(`Client ${client.username} (${playerId}) timed out`)
+          logger.warn('Client connection timed out', {
+            username: client.username,
+            playerId,
+            lastPong: client.lastPong,
+            timeout: this.connectionTimeout
+          })
           client.isConnected = false
           this.removeClient(playerId)
           continue
@@ -441,7 +498,9 @@ export class WebSocketManager {
             sequenceId: this.getNextSequenceId(),
             priority: 'high'
           } as GameMessage).catch(error => {
-            console.error(`Failed to send ping to ${playerId}:`, error)
+            logger.error('Failed to send ping', error, {
+              playerId
+            })
           })
           
           client.lastPing = now

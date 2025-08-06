@@ -36,7 +36,8 @@
       "@primo-poker/api": ["./packages/api/src"],
       "@primo-poker/persistence": ["./packages/persistence/src"],
       "@primo-poker/security": ["./packages/security/src"],
-      "@primo-poker/shared": ["./packages/shared/src"]
+      "@primo-poker/shared": ["./packages/shared/src"],
+      "@primo-poker/logging": ["./packages/logging/src"]
     }
   },
   "include": [
@@ -51,6 +52,7 @@
   ],
   "references": [
     { "path": "./packages/shared" },
+    { "path": "./packages/logging" },
     { "path": "./packages/core" },
     { "path": "./packages/security" },
     { "path": "./packages/persistence" },

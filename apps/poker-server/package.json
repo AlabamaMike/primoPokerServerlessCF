@@ -18,7 +18,8 @@
     "@primo-poker/core": "^1.0.0",
     "@primo-poker/persistence": "^1.0.0",
     "@primo-poker/security": "^1.0.0",
-    "@primo-poker/shared": "^1.0.0"
+    "@primo-poker/shared": "^1.0.0",
+    "@primo-poker/logging": "^1.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",

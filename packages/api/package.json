@@ -22,6 +22,7 @@
     "@primo-poker/core": "^1.0.0",
     "@primo-poker/security": "^1.0.0",
     "@primo-poker/persistence": "^1.0.0",
+    "@primo-poker/logging": "^1.0.0",
     "itty-router": "^4.0.13"
   },
   "devDependencies": {

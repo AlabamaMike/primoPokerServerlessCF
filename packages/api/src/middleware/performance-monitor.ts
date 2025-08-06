@@ -1,5 +1,6 @@
 import { MetricsCollector } from '@primo-poker/persistence';
 import { RandomUtils, WorkerEnvironment } from '@primo-poker/shared';
+import { logger } from '@primo-poker/core';
 
 export type Middleware = (request: Request, env: WorkerEnvironment, next: (request: Request, env: WorkerEnvironment) => Promise<Response>) => Promise<Response>;
 
@@ -40,7 +41,11 @@ export class PerformanceMonitor {
 
       await this.metricsCollector?.recordRequest(requestMetric);
     } catch (error) {
-      console.error('Failed to record request metric:', error);
+      logger.error('Failed to record request metric', error, {
+        correlationId,
+        path,
+        method: request.method
+      });
     }
 
     try {

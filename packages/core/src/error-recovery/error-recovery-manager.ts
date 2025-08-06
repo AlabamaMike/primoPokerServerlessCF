@@ -3,6 +3,18 @@ import { RetryPolicy, RetryPolicyExecutor } from './retry-policy';
 import { ErrorSanitizer } from './error-sanitizer';
 import { CircuitBreakerMetricsCollector } from './metrics/circuit-breaker-metrics-collector';
 import { DEFAULT_RESOURCE_CONFIGS, MetricsCollectorConfig } from './metrics/types';
+import { Logger, LoggerFactory, LogContext } from '@primo-poker/logging';
+
+// Helper function to create clean log contexts without undefined values
+function createLogContext(context: Record<string, any>): LogContext {
+  const cleanContext: LogContext = {};
+  Object.entries(context).forEach(([key, value]) => {
+    if (value !== undefined) {
+      (cleanContext as any)[key] = value;
+    }
+  });
+  return cleanContext;
+}
 
 export interface OperationContext {
   operationName: string;
@@ -67,6 +79,7 @@ export class ErrorRecoveryManager {
   private circuitBreakers: Map<string, CircuitBreaker> = new Map();
   private retryPolicies: Map<string, RetryPolicy> = new Map();
   private metricsCollectors: Map<string, CircuitBreakerMetricsCollector> = new Map();
+  private readonly logger: Logger;
   private defaultRetryPolicy: RetryPolicy = {
     maxAttempts: 3,
     backoffStrategy: 'exponential',
@@ -98,7 +111,9 @@ export class ErrorRecoveryManager {
   };
 
   constructor() {
+    this.logger = LoggerFactory.getInstance().getLogger('error-recovery');
     this.initializeDefaultPolicies();
+    this.logger.info('ErrorRecoveryManager initialized');
   }
 
   async executeWithRecovery<T>(
@@ -113,6 +128,11 @@ export class ErrorRecoveryManager {
       // Check if we should use circuit breaker
       if (context.useCircuitBreaker || this.shouldUseCircuitBreaker(context)) {
         const circuitBreaker = this.getOrCreateCircuitBreaker(context.resourceType);
+        this.logger.debug('Executing operation with circuit breaker', {
+          operation: context.operationName,
+          resource: context.resourceType,
+          resourceId: context.resourceId,
+        });
         result = await circuitBreaker.execute(operation);
         this.metrics.successfulOperations++;
         return result;
@@ -133,6 +153,11 @@ export class ErrorRecoveryManager {
           // Check if we recovered at some point
           if (this.wasRecovered(error)) {
             this.metrics.totalRecoveries++;
+            this.logger.info('Operation recovered after retry', {
+              operation: context.operationName,
+              resource: context.resourceType,
+              resourceId: context.resourceId,
+            });
           }
           
           throw error;
@@ -146,6 +171,13 @@ export class ErrorRecoveryManager {
     } catch (error) {
       this.metrics.totalErrors++;
       
+      this.logger.error('Operation failed', error as Error, {
+        operation: context.operationName,
+        resource: context.resourceType,
+        resourceId: context.resourceId,
+        critical: context.critical,
+      });
+      
       if (context.critical) {
         this.handleCriticalError(error as Error, context);
       }
@@ -158,8 +190,18 @@ export class ErrorRecoveryManager {
     const maxReconnectAttempts = 5;
     const maxDisconnectTime = 5 * 60 * 1000; // 5 minutes
 
+    this.logger.info('Handling connection failure', {
+      clientId,
+      attemptCount: context.attemptCount,
+      connectionType: context.connectionType,
+    });
+
     // Check if we should terminate
     if (context.attemptCount >= maxReconnectAttempts) {
+      this.logger.warn('Max reconnection attempts reached', {
+        clientId,
+        attemptCount: context.attemptCount,
+      });
       return {
         action: 'terminate',
         reason: 'Max reconnection attempts reached',
@@ -168,6 +210,10 @@ export class ErrorRecoveryManager {
 
     const disconnectDuration = Date.now() - context.disconnectTime;
     if (disconnectDuration > maxDisconnectTime) {
+      this.logger.warn('Connection timeout exceeded', {
+        clientId,
+        duration: disconnectDuration,
+      });
       return {
         action: 'terminate',
         reason: 'Connection timeout exceeded',
@@ -176,6 +222,10 @@ export class ErrorRecoveryManager {
 
     // Check if graceful degradation is appropriate
     if (context.connectionType === 'spectator') {
+      this.logger.info('Applying graceful degradation for spectator', {
+        clientId,
+        fallbackMode: 'polling',
+      });
       return {
         action: 'graceful-degrade',
         fallbackMode: 'polling',
@@ -184,6 +234,11 @@ export class ErrorRecoveryManager {
 
     // Default to reconnect with exponential backoff
     const delay = Math.min(1000 * Math.pow(2, context.attemptCount - 1), 30000);
+    this.logger.info('Scheduling reconnection', {
+      clientId,
+      delay,
+      attemptCount: context.attemptCount,
+    });
     return {
       action: 'reconnect',
       delay,
@@ -191,8 +246,17 @@ export class ErrorRecoveryManager {
   }
 
   handleStateConflict(conflict: StateConflict): ConflictResolution {
+    this.logger.warn('State conflict detected', {
+      conflictType: conflict.conflictType,
+      field: conflict.field,
+    });
+
     // Critical game state conflicts require manual intervention
     if (this.isCriticalField(conflict.field)) {
+      this.logger.error('Critical field conflict requires manual intervention', undefined, {
+        field: conflict.field,
+        conflictType: conflict.conflictType,
+      });
       return {
         strategy: 'manual-intervention',
         requiresAdmin: true,
@@ -223,20 +287,38 @@ export class ErrorRecoveryManager {
   }
 
   handleGameError(error: GameError): FallbackAction {
+    this.logger.info('Handling game error', createLogContext({
+      errorType: error.errorType,
+      playerId: error.playerId,
+      gameId: error.gameId,
+    }));
+
     switch (error.errorType) {
       case 'player-disconnected':
         if (error.context.inHand) {
+          this.logger.info('Player disconnected during hand, auto-folding', createLogContext({
+            playerId: error.playerId,
+            gameId: error.gameId,
+          }));
           return {
             action: 'auto-fold',
             notifyOthers: true,
           };
         }
+        this.logger.info('Player disconnected, removing from table', createLogContext({
+          playerId: error.playerId,
+          gameId: error.gameId,
+        }));
         return {
           action: 'remove-from-table',
           notifyOthers: true,
         };
 
       case 'state-corruption':
+        this.logger.error('Game state corruption detected', undefined, {
+          gameId: error.gameId,
+          context: error.context,
+        });
         return {
           action: 'pause-game',
           alertAdmin: true,
@@ -268,6 +350,11 @@ export class ErrorRecoveryManager {
   configureCircuitBreaker(resourceType: string, config: CircuitBreakerConfig): void {
     // Validate configuration
     CircuitBreakerMetricsCollector.validateConfiguration(config);
+    
+    this.logger.info('Configuring circuit breaker', {
+      resourceType,
+      config,
+    });
     
     const circuitBreaker = new CircuitBreaker(resourceType, config);
     this.circuitBreakers.set(resourceType, circuitBreaker);
@@ -407,7 +494,13 @@ export class ErrorRecoveryManager {
   private handleCriticalError(error: Error, context: OperationContext): void {
     // Sanitize error before logging to prevent sensitive data exposure
     const sanitizedError = ErrorSanitizer.sanitizeForLogging(error);
-    console.error(`Critical error in ${context.operationName}:`, sanitizedError);
+    
+    this.logger.error(`Critical error in operation`, sanitizedError, {
+      operation: context.operationName,
+      resource: context.resourceType,
+      resourceId: context.resourceId,
+      critical: true,
+    });
     
     // In a real implementation, this would also send alerts to monitoring service
   }

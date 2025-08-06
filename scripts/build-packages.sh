@@ -15,6 +15,10 @@ find "$ROOT_DIR/packages" -name "tsconfig.tsbuildinfo" -type f -exec rm {} + 2>/
 echo "Building @primo-poker/shared..."
 (cd "$ROOT_DIR/packages/shared" && npx tsc)
 
+# Build logging (depends on shared)
+echo "Building @primo-poker/logging..."
+(cd "$ROOT_DIR/packages/logging" && npx tsc --build)
+
 # Build security (depends on shared)
 echo "Building @primo-poker/security..."
 (cd "$ROOT_DIR/packages/security" && npx tsc)

@@ -399,7 +399,7 @@ export class PokerAPIRoutes {
             });
           }
         } catch (error) {
-          console.error('Error fetching table state:', error);
+          logger.error('Error fetching table state', error);
         }
       }
       
@@ -532,7 +532,7 @@ export class PokerAPIRoutes {
       const tableState = await stateResponse.json();
       return this.successResponse(tableState);
     } catch (error) {
-      console.error('Get table error:', error);
+      logger.error('Get table error', error);
       return this.errorResponse('Failed to fetch table', 500);
     }
   }
@@ -635,7 +635,7 @@ export class PokerAPIRoutes {
       const result = await leaveResponse.json();
       return this.successResponse(result);
     } catch (error) {
-      console.error('Leave table error:', error);
+      logger.error('Leave table error', error);
       return this.errorResponse('Failed to leave table', 500);
     }
   }
@@ -761,14 +761,14 @@ export class PokerAPIRoutes {
         },
       });
     } catch (error) {
-      console.error('Health check error:', error);
+      logger.error('Health check error', error);
       return this.errorResponse('Health check failed', 500);
     }
   }
 
   // CORS preflight handler
   private async handleOptionsRequest(request: AuthenticatedRequest): Promise<Response> {
-    console.log('OPTIONS request received for:', request.url);
+    logger.debug('OPTIONS request received', { url: request.url });
     return new Response(null, {
       status: 204,
       headers: this.getCorsHeaders(),
@@ -815,7 +815,7 @@ export class PokerAPIRoutes {
       const wallet = await this.walletManager.getWallet(request.user.userId);
       return this.successResponse(wallet);
     } catch (error) {
-      console.error('Get wallet error:', error);
+      logger.error('Get wallet error', error);
       return this.errorResponse('Failed to get wallet information');
     }
   }
@@ -838,7 +838,7 @@ export class PokerAPIRoutes {
       
       return this.successResponse(result);
     } catch (error) {
-      console.error('Buy-in error:', error);
+      logger.error('Buy-in error', error);
       return this.errorResponse('Failed to process buy-in');
     }
   }
@@ -864,7 +864,7 @@ export class PokerAPIRoutes {
         cashedOut: body.chipAmount
       });
     } catch (error) {
-      console.error('Cash-out error:', error);
+      logger.error('Cash-out error', error);
       return this.errorResponse('Failed to process cash-out');
     }
   }
@@ -881,7 +881,7 @@ export class PokerAPIRoutes {
       const transactions = await this.walletManager.getTransactionHistory(request.user.userId, limit);
       return this.successResponse(transactions);
     } catch (error) {
-      console.error('Get transactions error:', error);
+      logger.error('Get transactions error', error);
       return this.errorResponse('Failed to get transaction history');
     }
   }
@@ -914,7 +914,7 @@ export class PokerAPIRoutes {
         availableSeats
       });
     } catch (error) {
-      console.error('Get table seats error:', error);
+      logger.error('Get table seats error', error);
       return this.errorResponse('Failed to get table seat information');
     }
   }

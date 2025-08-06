@@ -18,7 +18,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@primo-poker/shared": "^1.0.0"
+    "@primo-poker/shared": "^1.0.0",
+    "@primo-poker/logging": "^1.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",

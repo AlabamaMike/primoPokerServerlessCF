@@ -309,4 +309,185 @@ test.describe('Button Rotation and Blind Tests', () => {
       logger.minimal('✅ Button correctly skips eliminated players');
     }
   });
+
+  test('Button rotation with disconnected players and grace period', async ({
+    config,
+    logger,
+    apiClient,
+    wsHelper,
+    playerSimulator,
+    gameValidator,
+  }) => {
+    logger.minimal('Testing button rotation with disconnected players');
+    
+    // Setup 4 players
+    const players = await setupPlayers(playerSimulator, 4, config.testUsers);
+    
+    const tableId = await createTestTable(apiClient, players[0].tokens!.accessToken, {
+      maxPlayers: 6,
+      smallBlind: 10,
+      bigBlind: 20,
+    });
+    
+    // Join all players
+    for (const player of players) {
+      await playerSimulator.joinTable(player.id, tableId, 500);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Play first hand to establish button position
+    logger.minimal('\nEstablishing initial button position');
+    let gameState = await waitForGamePhase(wsHelper, players[0].id, 'pre_flop', 30000);
+    const initialButtonPos = gameState.buttonPosition;
+    
+    // Quick fold to end hand
+    const activePlayerId = gameState.activePlayerId || gameState.currentPlayer;
+    if (activePlayerId) {
+      await wsHelper.sendAction(activePlayerId, 'fold');
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Now disconnect player who should get button next
+    const nextButtonIdx = (initialButtonPos + 1) % players.length;
+    const disconnectingPlayer = players[nextButtonIdx];
+    
+    logger.minimal(`\nDisconnecting player ${disconnectingPlayer.username} who should get button next`);
+    await wsHelper.disconnect(disconnectingPlayer.id);
+    
+    // Start next hand - button should skip disconnected player
+    gameState = await waitForGamePhase(wsHelper, players[0].id, 'pre_flop', 30000);
+    
+    logger.log(`Button moved from position ${initialButtonPos} to ${gameState.buttonPosition}`);
+    
+    // Verify button skipped the disconnected player
+    expect(gameState.buttonPosition).not.toBe(nextButtonIdx);
+    
+    // The button should go to the next active player after the disconnected one
+    const expectedButtonPos = (nextButtonIdx + 1) % players.length;
+    expect(gameState.buttonPosition).toBe(expectedButtonPos);
+    
+    logger.minimal('✅ Button correctly skipped disconnected player');
+  });
+
+  test('Button properly initializes on first game', async ({
+    config,
+    logger,
+    apiClient,
+    wsHelper,
+    playerSimulator,
+    gameValidator,
+  }) => {
+    logger.minimal('Testing button initialization on first game');
+    
+    // Setup 3 players
+    const players = await setupPlayers(playerSimulator, 3, config.testUsers);
+    
+    const tableId = await createTestTable(apiClient, players[0].tokens!.accessToken, {
+      maxPlayers: 6,
+      smallBlind: 5,
+      bigBlind: 10,
+    });
+    
+    // Join all players
+    for (const player of players) {
+      await playerSimulator.joinTable(player.id, tableId, 500);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Wait for first game to start
+    const gameState = await waitForGamePhase(wsHelper, players[0].id, 'pre_flop', 30000);
+    
+    // Verify button was assigned
+    expect(gameState.buttonPosition).toBeGreaterThanOrEqual(0);
+    expect(gameState.buttonPosition).toBeLessThan(players.length);
+    
+    // Verify button player exists and is active
+    const buttonPlayer = gameState.players.find((p: any) => p.position === gameState.buttonPosition);
+    expect(buttonPlayer).toBeDefined();
+    expect(buttonPlayer?.status).toBe('active');
+    
+    // Verify blinds are properly assigned relative to button
+    const activePlayers = gameState.players
+      .filter((p: any) => p.status === 'active')
+      .sort((a: any, b: any) => a.position - b.position);
+    
+    const buttonIdx = activePlayers.findIndex((p: any) => p.position === gameState.buttonPosition);
+    const sbIdx = (buttonIdx + 1) % activePlayers.length;
+    const bbIdx = (buttonIdx + 2) % activePlayers.length;
+    
+    const sbPlayer = activePlayers[sbIdx];
+    const bbPlayer = activePlayers[bbIdx];
+    
+    expect(sbPlayer?.currentBet).toBe(5);
+    expect(bbPlayer?.currentBet).toBe(10);
+    
+    logger.minimal(`✅ Button initialized correctly at position ${gameState.buttonPosition}`);
+    logger.minimal(`   SB: ${sbPlayer?.username} (pos ${sbPlayer?.position})`);
+    logger.minimal(`   BB: ${bbPlayer?.username} (pos ${bbPlayer?.position})`);
+  });
+
+  test('Button rotation when last button holder leaves table', async ({
+    config,
+    logger,
+    apiClient,
+    wsHelper,
+    playerSimulator,
+    gameValidator,
+  }) => {
+    logger.minimal('Testing button rotation when button holder leaves');
+    
+    // Setup 4 players
+    const players = await setupPlayers(playerSimulator, 4, config.testUsers);
+    
+    const tableId = await createTestTable(apiClient, players[0].tokens!.accessToken, {
+      maxPlayers: 6,
+      smallBlind: 10,
+      bigBlind: 20,
+    });
+    
+    // Join all players
+    for (const player of players) {
+      await playerSimulator.joinTable(player.id, tableId, 500);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Play a hand to establish button position
+    let gameState = await waitForGamePhase(wsHelper, players[0].id, 'pre_flop', 30000);
+    const buttonPosition = gameState.buttonPosition;
+    const buttonPlayer = gameState.players.find((p: any) => p.position === buttonPosition);
+    const buttonPlayerId = buttonPlayer?.id;
+    
+    logger.minimal(`\nButton is at position ${buttonPosition} (player ${buttonPlayer?.username})`);
+    
+    // Quick fold to end hand
+    const activePlayerId = gameState.activePlayerId || gameState.currentPlayer;
+    if (activePlayerId) {
+      await wsHelper.sendAction(activePlayerId, 'fold');
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Now have the button holder leave the table
+    logger.minimal(`\nButton holder ${buttonPlayer?.username} leaving table...`);
+    await playerSimulator.leaveTable(buttonPlayerId!);
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Start next hand - button should move to next active player
+    gameState = await waitForGamePhase(wsHelper, players[0].id, 'pre_flop', 30000);
+    
+    logger.log(`After button holder left, new button position: ${gameState.buttonPosition}`);
+    
+    // Verify button moved to a different position
+    expect(gameState.buttonPosition).not.toBe(buttonPosition);
+    
+    // Verify new button is on an active player
+    const newButtonPlayer = gameState.players.find((p: any) => p.position === gameState.buttonPosition);
+    expect(newButtonPlayer).toBeDefined();
+    expect(newButtonPlayer?.status).toBe('active');
+    expect(newButtonPlayer?.id).not.toBe(buttonPlayerId);
+    
+    logger.minimal(`✅ Button correctly moved to ${newButtonPlayer?.username} after previous holder left`);
+  });
 });

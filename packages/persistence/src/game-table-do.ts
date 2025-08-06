@@ -43,6 +43,9 @@ export interface SeatReservation {
   expiresAt: number
 }
 
+// Grace period for temporarily disconnected players before skipping their turn (30 seconds)
+const RECONNECTION_GRACE_PERIOD_MS = 30000
+
 export interface GameTablePlayer extends Player {
   // Additional runtime properties for table management
   isFolded: boolean
@@ -1915,12 +1918,13 @@ export class GameTableDurableObject {
       // Allow recently disconnected players to keep their turn
       if (connection && !connection.isConnected) {
         const disconnectTime = Date.now() - connection.lastHeartbeat
-        // Give players 30 seconds to reconnect before skipping them
-        return disconnectTime < 30000
+        // Give players time to reconnect before skipping them
+        return disconnectTime < RECONNECTION_GRACE_PERIOD_MS
       }
       return connection ? connection.isConnected : false
     }
     
+    // Player has no chips - not active
     return false
   }
 
@@ -1973,7 +1977,8 @@ export class GameTableDurableObject {
     
     // If still not found, button is on disconnected/eliminated player
     if (currentButtonPlayerIndex === -1) {
-      // Find the next active player clockwise from the last known button position
+      // Button holder is no longer active - need to find next clockwise active player
+      // Strategy: Use last known seat position and find next active player clockwise
       if (this.state.buttonPosition >= 0) {
         // Sort active players by seat position
         const sortedActivePlayers = [...activePlayers].sort(
@@ -1991,11 +1996,11 @@ export class GameTableDurableObject {
         }
       }
       
-      // No valid next player found, assign to first active player
+      // No valid next player found after button position, wrap around to first active player
       if (!activePlayers[0]) {
         throw new GameRuleError(
           'NO_ACTIVE_PLAYER',
-          'No active player found to assign the dealer button'
+          `No active player found to assign the dealer button. Table has ${sortedPlayers.length} total players but only ${activePlayers.length} are active and connected.`
         )
       }
       return activePlayers[0].index

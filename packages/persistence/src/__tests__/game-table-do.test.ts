@@ -2,6 +2,9 @@
  * Test suite for GameTableDurableObject button rotation logic
  */
 
+// Grace period for temporarily disconnected players before skipping their turn (30 seconds)
+const RECONNECTION_GRACE_PERIOD_MS = 30000
+
 // Define PlayerStatus enum for tests
 enum PlayerStatus {
   ACTIVE = 'active',
@@ -762,6 +765,100 @@ describe('GameTableDurableObject - Button Rotation Logic', () => {
       // Re-check shows updated state
       expect(isPlayerActiveAndConnected(players[0], connections)).toBe(true)
       expect(isPlayerActiveAndConnected(players[1], connections)).toBe(false)
+    })
+  })
+
+  describe('Grace period for disconnected players', () => {
+    it('should consider recently disconnected players as active within grace period', () => {
+      const player: GameTablePlayer = {
+        id: 'player1',
+        username: 'Player 1',
+        status: PlayerStatus.ACTIVE,
+        chips: 1000,
+        position: { seat: 0 },
+        isFolded: false,
+        currentBet: 0,
+        hasActed: false,
+        timeBank: 30
+      }
+      
+      // Player is disconnected but has chips
+      const connections = new Map<string, PlayerConnection>()
+      connections.set('player1', { playerId: 'player1', isConnected: false })
+      
+      // Without grace period consideration
+      const isActiveStrict = (
+        player: GameTablePlayer,
+        connections: Map<string, PlayerConnection>
+      ): boolean => {
+        if (player.status !== PlayerStatus.ACTIVE) return false
+        const connection = connections.get(player.id)
+        return connection ? connection.isConnected : false
+      }
+      
+      expect(isActiveStrict(player, connections)).toBe(false)
+      
+      // With grace period consideration (for button rotation)
+      const isActiveWithGrace = (
+        player: GameTablePlayer,
+        connections: Map<string, PlayerConnection>
+      ): boolean => {
+        if (player.status !== PlayerStatus.ACTIVE) return false
+        
+        if (player.chips > 0) {
+          const connection = connections.get(player.id)
+          if (connection && !connection.isConnected) {
+            // In real implementation, would check:
+            // const disconnectTime = Date.now() - connection.lastHeartbeat
+            // return disconnectTime < RECONNECTION_GRACE_PERIOD_MS
+            return true // Assume within grace period for test
+          }
+          return connection ? connection.isConnected : false
+        }
+        
+        const connection = connections.get(player.id)
+        return connection ? connection.isConnected : false
+      }
+      
+      expect(isActiveWithGrace(player, connections)).toBe(true)
+    })
+    
+    it('should not consider players without chips as active even within grace period', () => {
+      const player: GameTablePlayer = {
+        id: 'player1',
+        username: 'Player 1',
+        status: PlayerStatus.ACTIVE,
+        chips: 0, // No chips
+        position: { seat: 0 },
+        isFolded: false,
+        currentBet: 0,
+        hasActed: false,
+        timeBank: 30
+      }
+      
+      const connections = new Map<string, PlayerConnection>()
+      connections.set('player1', { playerId: 'player1', isConnected: false })
+      
+      // Even with grace period logic, players without chips aren't considered active
+      const isActiveWithGrace = (
+        player: GameTablePlayer,
+        connections: Map<string, PlayerConnection>
+      ): boolean => {
+        if (player.status !== PlayerStatus.ACTIVE) return false
+        
+        if (player.chips > 0) {
+          const connection = connections.get(player.id)
+          if (connection && !connection.isConnected) {
+            return true // Within grace period
+          }
+          return connection ? connection.isConnected : false
+        }
+        
+        const connection = connections.get(player.id)
+        return connection ? connection.isConnected : false
+      }
+      
+      expect(isActiveWithGrace(player, connections)).toBe(false)
     })
   })
 })

@@ -79,6 +79,9 @@ export class GameTableDurableObject {
   private env: any
   private initialized: boolean = false
 
+  // Constants
+  private static readonly MIN_PLAYERS_FOR_GAME = 2
+
   constructor(state: DurableObjectState, env: any) {
     this.durableObjectState = state
     this.env = env
@@ -1433,20 +1436,19 @@ export class GameTableDurableObject {
     try {
       if (this.state.buttonPosition === -1) {
         // First game - randomly assign button among active players
-        const activePlayers = playerArray
-          .map((p, i) => ({ player: p, index: i }))
-          .filter(({ player }) => {
-            const connection = this.state.connections.get(player.id)
-            return player.status === PlayerStatus.ACTIVE && connection && connection.isConnected
-          })
+        const activePlayers = this.getActivePlayersWithIndices(playerArray)
         
-        if (activePlayers.length < 2) {
+        if (activePlayers.length < GameTableDurableObject.MIN_PLAYERS_FOR_GAME) {
           console.log('Not enough active players to start game')
           return
         }
         
         const randomActiveIndex = Math.floor(Math.random() * activePlayers.length)
-        dealerIndex = activePlayers[randomActiveIndex]!.index
+        if (!activePlayers[randomActiveIndex]) {
+          console.error('Randomly selected active player does not exist. Aborting game start.')
+          return
+        }
+        dealerIndex = activePlayers[randomActiveIndex].index
         this.state.buttonPosition = playerArray[dealerIndex]?.position?.seat ?? 0
       } else {
         // Find next active player clockwise from current button
@@ -1884,23 +1886,41 @@ export class GameTableDurableObject {
   }
 
   /**
+   * Check if player is active and connected
+   */
+  private isPlayerActiveAndConnected(player: GameTablePlayer): boolean {
+    if (player.status !== PlayerStatus.ACTIVE) return false
+    
+    // Re-check connection state to avoid race conditions
+    const connection = this.state.connections.get(player.id)
+    return connection ? connection.isConnected : false
+  }
+
+  /**
+   * Get active players with their indices - optimized version
+   */
+  private getActivePlayersWithIndices(sortedPlayers: GameTablePlayer[]): Array<{ player: GameTablePlayer, index: number }> {
+    const activePlayers: Array<{ player: GameTablePlayer, index: number }> = []
+    
+    for (let i = 0; i < sortedPlayers.length; i++) {
+      const player = sortedPlayers[i]
+      if (player && this.isPlayerActiveAndConnected(player)) {
+        activePlayers.push({ player, index: i })
+      }
+    }
+    
+    return activePlayers
+  }
+
+  /**
    * Find next dealer index by rotating button clockwise
    */
   private findNextDealerIndex(sortedPlayers: GameTablePlayer[]): number {
-    // Filter for active, connected players only
-    const activePlayers = sortedPlayers
-      .map((p, i) => ({ player: p, index: i }))
-      .filter(({ player }) => {
-        // Check if player is active
-        if (player.status !== PlayerStatus.ACTIVE) return false
-        
-        // Check if player has an active connection
-        const connection = this.state.connections.get(player.id)
-        return connection && connection.isConnected
-      })
+    // Get active players using optimized helper
+    const activePlayers = this.getActivePlayersWithIndices(sortedPlayers)
     
-    // Need at least 2 active players for a game
-    if (activePlayers.length < 2) {
+    // Need at least minimum active players for a game
+    if (activePlayers.length < GameTableDurableObject.MIN_PLAYERS_FOR_GAME) {
       throw new GameRuleError(
         'INSUFFICIENT_PLAYERS',
         'Not enough active players to continue the game'
@@ -1915,7 +1935,13 @@ export class GameTableDurableObject {
     if (!currentButtonPlayer) {
       // Button position is invalid or on disconnected player
       // Assign to first active player
-      return activePlayers[0]!.index
+      if (!activePlayers[0]) {
+        throw new GameRuleError(
+          'NO_ACTIVE_PLAYER',
+          'No active player found to assign the dealer button'
+        )
+      }
+      return activePlayers[0].index
     }
     
     // Find index of current button holder in active players array
@@ -1925,7 +1951,13 @@ export class GameTableDurableObject {
     const nextActiveIndex = (currentIndex + 1) % activePlayers.length
     
     // Return the original index in sortedPlayers array
-    return activePlayers[nextActiveIndex]!.index
+    if (!activePlayers[nextActiveIndex]) {
+      throw new GameRuleError(
+        'INVALID_DEALER_INDEX',
+        'Failed to find next dealer index: activePlayers array out of bounds'
+      )
+    }
+    return activePlayers[nextActiveIndex].index
   }
 
   /**

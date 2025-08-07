@@ -1,10 +1,33 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import PokerTable from '../PokerTable';
 import SpectatorIndicator from './SpectatorIndicator';
 import SpectatorControls from './SpectatorControls';
 import SpectatorChat from './SpectatorChat';
 import HiddenCards from './HiddenCards';
 import type { ChatMessage } from '../Chat/types';
+
+// Position constants for card overlays
+const CARD_POSITIONS = {
+  TOP_ROW_Y: '20%',
+  BOTTOM_ROW_Y: '60%',
+  LEFT_X: '20%',
+  CENTER_X: '50%',
+  RIGHT_X: '80%'
+} as const;
+
+// Helper function to get card position based on player position
+const getPlayerCardPosition = (playerPosition: number) => {
+  const isTopRow = playerPosition < 3;
+  const columnIndex = playerPosition % 3;
+  
+  return {
+    top: isTopRow ? CARD_POSITIONS.TOP_ROW_Y : CARD_POSITIONS.BOTTOM_ROW_Y,
+    left: columnIndex === 0 ? CARD_POSITIONS.LEFT_X : 
+          columnIndex === 1 ? CARD_POSITIONS.CENTER_X : 
+          CARD_POSITIONS.RIGHT_X,
+    transform: 'translate(-50%, -50%)'
+  };
+};
 
 interface GameState {
   tableId: string;
@@ -102,13 +125,7 @@ const SpectatorView: React.FC<SpectatorViewProps> = ({
                   <div
                     key={player.id}
                     className="absolute"
-                    style={{
-                      // Position based on player position
-                      // This is simplified - in real app would calculate exact positions
-                      top: player.position < 3 ? '20%' : '60%',
-                      left: player.position % 3 === 0 ? '20%' : player.position % 3 === 1 ? '50%' : '80%',
-                      transform: 'translate(-50%, -50%)'
-                    }}
+                    style={getPlayerCardPosition(player.position)}
                   >
                     <HiddenCards count={player.cards.length} />
                   </div>

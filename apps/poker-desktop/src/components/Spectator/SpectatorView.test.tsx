@@ -59,7 +59,7 @@ describe('SpectatorView', () => {
       username: 'Spectator1',
       userId: 'spec1',
       message: 'Nice hand!',
-      timestamp: new Date(),
+      timestamp: new Date('2025-01-01T12:00:00Z'),
       isSystem: false,
       channel: 'spectator'
     }

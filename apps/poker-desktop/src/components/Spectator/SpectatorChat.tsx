@@ -35,7 +35,7 @@ const SpectatorChat: React.FC<SpectatorChatProps> = ({
 
   // Filter messages to show only spectator channel messages
   const spectatorMessages = messages.filter(msg => 
-    msg.channel === 'spectator'
+    msg.channel === 'spectator' || (!msg.channel && msg.isSystem)
   );
 
   return (
@@ -60,7 +60,7 @@ const SpectatorChat: React.FC<SpectatorChatProps> = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2" role="log" aria-label="Spectator chat messages" aria-live="polite">
         {spectatorMessages.map((message) => (
           <div 
             key={message.id} 

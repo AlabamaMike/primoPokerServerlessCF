@@ -6,7 +6,7 @@ export interface ChatMessage {
   timestamp: Date;
   isSystem: boolean;
   isCommand?: boolean;
-  channel?: 'game' | 'spectator';
+  channel: 'game' | 'spectator';
 }
 
 export interface ChatCommand {

@@ -8,7 +8,7 @@
  * - Player statistics and analysis
  */
 
-import { GameState, Player, GamePlayer, Card, HandRanking } from '@primo-poker/shared'
+import { GameState, Player, GamePlayer, Card, HandRanking, GamePhase } from '@primo-poker/shared'
 
 export interface SpectatorInfo {
   spectatorId: string
@@ -205,7 +205,7 @@ export class SpectatorManager {
 
     // Show player hands only if they're revealed (showdown) or player folded
     players.forEach((player: GamePlayer) => {
-      if (player.isFolded || gameState.phase === 'showdown') {
+      if (player.isFolded || gameState.phase === GamePhase.SHOWDOWN) {
         // In a real implementation, you'd check if cards should be visible
         result.playerHands[player.id] = player.cards || null
       } else {

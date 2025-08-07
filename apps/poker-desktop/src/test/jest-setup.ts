@@ -74,3 +74,17 @@ jest.mock('react-router-dom', () => ({
 jest.mock('../utils/test-utils', () => ({
   testSafeInvoke: jest.fn(),
 }));
+
+// Mock URL.createObjectURL and URL.revokeObjectURL
+global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+global.URL.revokeObjectURL = jest.fn();
+
+// Mock document.createElement for download
+const originalCreateElement = document.createElement.bind(document);
+document.createElement = jest.fn((tagName) => {
+  const element = originalCreateElement(tagName);
+  if (tagName === 'a') {
+    element.click = jest.fn();
+  }
+  return element;
+});

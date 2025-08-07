@@ -25,8 +25,8 @@ export class WebSocketManager {
   private tableConnections = new Map<string, Set<string>>();
   protected authManager: AuthenticationManager;
 
-  constructor(jwtSecret: string) {
-    this.authManager = new AuthenticationManager(jwtSecret);
+  constructor(jwtSecret: string, authManager?: AuthenticationManager) {
+    this.authManager = authManager || new AuthenticationManager(jwtSecret);
   }
 
   async handleConnection(ws: WebSocket, request: Request): Promise<void> {
@@ -277,7 +277,7 @@ export class WebSocketManager {
     this.sendMessage(connectionId, createWebSocketMessage('error', { message }));
   }
 
-  private broadcastToTable(
+  protected broadcastToTable(
     tableId: string,
     message: WebSocketMessage,
     excludeConnectionId?: string

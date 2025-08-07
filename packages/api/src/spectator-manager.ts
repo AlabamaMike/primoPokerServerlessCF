@@ -128,8 +128,6 @@ export class SpectatorManager {
       }
       
       this.tableViewers.get(tableId)!.add(spectatorInfo.spectatorId)
-      
-      console.log(`Spectator ${spectatorInfo.username} joined table ${tableId}`)
       return true
     } catch (error) {
       console.error('Error adding spectator:', error)
@@ -151,7 +149,6 @@ export class SpectatorManager {
       }
       
       this.spectators.delete(spectatorId)
-      console.log(`Spectator ${spectatorId} left table ${tableId}`)
       return true
     } catch (error) {
       console.error('Error removing spectator:', error)

@@ -14,6 +14,7 @@ import { TableManager, logger, LogLevel } from '@primo-poker/core';
 import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-poker/security';
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 import { HealthChecker } from './routes/health';
+import { LobbyTablesRoute } from './routes/lobby/tables';
 
 // Extended request interface with authentication
 interface AuthenticatedRequest extends IRequest {
@@ -72,6 +73,9 @@ export class PokerAPIRoutes {
     this.router.get('/api/tournaments', this.handleGetTournaments.bind(this));
     this.router.post('/api/tournaments', this.authenticateRequest.bind(this), this.handleCreateTournament.bind(this));
     this.router.post('/api/tournaments/:tournamentId/register', this.authenticateRequest.bind(this), this.handleRegisterTournament.bind(this));
+
+    // Lobby routes
+    this.router.get('/api/lobby/tables', this.handleGetLobbyTables.bind(this));
 
     // Health check
     this.router.get('/api/health', this.handleHealthCheck.bind(this));
@@ -716,6 +720,12 @@ export class PokerAPIRoutes {
 
     // Implementation would register player for tournament
     return this.successResponse({ message: 'Tournament registration not implemented' });
+  }
+
+  // Lobby handlers
+  private async handleGetLobbyTables(request: AuthenticatedRequest): Promise<Response> {
+    const lobbyRoute = new LobbyTablesRoute(request.env as WorkerEnv);
+    return lobbyRoute.handleGetTables(request);
   }
 
   // Health check

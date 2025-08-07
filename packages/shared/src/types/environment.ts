@@ -18,6 +18,7 @@ export interface WorkerEnvironment {
   SECURE_RNG_DO: DurableObjectNamespace;
   RATE_LIMIT_DO: DurableObjectNamespace;
   GAME_TABLE_DO: DurableObjectNamespace;
+  LOBBY_COORDINATOR: DurableObjectNamespace;
   
   // Queues
   TOURNAMENT_QUEUE: Queue;

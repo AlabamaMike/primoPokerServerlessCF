@@ -33,6 +33,32 @@ export { WalletManager } from './wallet-manager';
 export { SecureRNGDurableObject } from './secure-rng-do';
 export type { RNGRequest, RNGResponse, RNGStatus, AuditLog, StoredState } from './secure-rng-do';
 export { RateLimitDurableObject } from './rate-limit-do';
+
+// Phase 2 Durable Objects
+export { LobbyCoordinatorDurableObject } from './lobby-coordinator-do';
+export type { LobbyCoordinatorState, SeatReservation, LobbyWebSocketConnection } from './lobby-coordinator-do';
+export { WalletManagerDurableObject } from './wallet-manager-do';
+export type { 
+  WalletManagerState, 
+  WalletTransaction, 
+  DailyLimit, 
+  FrozenAmount, 
+  TransferRequest, 
+  TransactionFilter 
+} from './wallet-manager-do';
+export { ChatModeratorDurableObject } from './chat-moderator-do';
+export type { 
+  ChatModeratorState, 
+  ChatHistoryEntry, 
+  MutedUser, 
+  ReportedMessage, 
+  ChannelConfig, 
+  ModerationStats, 
+  ChatWebSocketConnection, 
+  MessageFilter 
+} from './chat-moderator-do';
+
+// Monitoring exports
 export { MetricsCollector } from './monitoring/metrics';
 export type { 
   RequestMetric, 
@@ -50,3 +76,24 @@ export {
   FLUSH_INTERVALS,
   PERCENTILES 
 } from './monitoring/constants';
+
+// Sharding exports
+export { ShardingStrategy, ShardingManager } from './sharding-strategy';
+export type { ShardingConfig, ShardInfo } from './sharding-strategy';
+export { 
+  getShardedDurableObject, 
+  getWalletDurableObject, 
+  getChatDurableObject, 
+  getLobbyDurableObject 
+} from './sharding-strategy';
+
+// Migration exports
+export { DurableObjectMigrator, migrator } from './do-migration';
+export type { MigrationConfig, Migration, MigrationResult, VersionedState } from './do-migration';
+export { 
+  lobbyCoordinatorMigrations, 
+  walletManagerMigrations, 
+  chatModeratorMigrations,
+  ensureLatestVersion,
+  getMigrationStatus
+} from './do-migration';

@@ -16,6 +16,7 @@ import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poke
 import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
 import { friendRoutes } from './routes/friends';
+import { playerNotesRoutes } from './routes/player-notes';
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -99,6 +100,9 @@ export class PokerAPIRoutes {
 
     // Friend routes - mount the sub-router
     this.router.all('/api/friends/*', friendRoutes.handle);
+
+    // Player notes routes - mount the sub-router
+    this.router.all('/api/notes/*', playerNotesRoutes.handle);
 
     // CORS preflight handler - more specific patterns first
     this.router.options('/api/*', this.handleOptionsRequest.bind(this));

@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<<<<<<< HEAD
 <coverage generated="1754604926899" clover="3.2.0">
   <project timestamp="1754604926899" name="All files">
+=======
+<coverage generated="1754604814909" clover="3.2.0">
+  <project timestamp="1754604814909" name="All files">
+>>>>>>> origin/main
     <metrics statements="550" coveredstatements="317" conditionals="237" coveredconditionals="164" methods="104" coveredmethods="69" elements="891" coveredelements="550" complexity="0" loc="550" ncloc="550" packages="3" files="9" classes="9"/>
     <package name="src">
       <metrics statements="308" coveredstatements="249" conditionals="159" coveredconditionals="130" methods="71" coveredmethods="55"/>
@@ -68,7 +73,11 @@
         <line num="4" count="34077" type="stmt"/>
         <line num="7" count="37" type="stmt"/>
         <line num="11" count="2" type="stmt"/>
+<<<<<<< HEAD
         <line num="15" count="250421" type="stmt"/>
+=======
+        <line num="15" count="250529" type="stmt"/>
+>>>>>>> origin/main
         <line num="16" count="1028" type="stmt"/>
         <line num="17" count="1028" type="stmt"/>
         <line num="20" count="0" type="stmt"/>
@@ -210,6 +219,7 @@
         <line num="307" count="51002" type="stmt"/>
         <line num="308" count="51002" type="stmt"/>
         <line num="309" count="51002" type="cond" truecount="2" falsecount="0"/>
+<<<<<<< HEAD
         <line num="310" count="25327" type="stmt"/>
         <line num="315" count="389730" type="stmt"/>
         <line num="327" count="389730" type="cond" truecount="2" falsecount="0"/>
@@ -218,12 +228,23 @@
         <line num="331" count="1" type="stmt"/>
         <line num="332" count="1" type="stmt"/>
         <line num="343" count="389730" type="stmt"/>
+=======
+        <line num="310" count="25224" type="stmt"/>
+        <line num="315" count="389833" type="stmt"/>
+        <line num="327" count="389833" type="cond" truecount="2" falsecount="0"/>
+        <line num="328" count="98833" type="stmt"/>
+        <line num="329" count="98833" type="stmt"/>
+        <line num="331" count="1" type="stmt"/>
+        <line num="332" count="1" type="stmt"/>
+        <line num="343" count="389833" type="stmt"/>
+>>>>>>> origin/main
         <line num="344" count="3" type="stmt"/>
         <line num="345" count="3" type="stmt"/>
         <line num="346" count="3" type="cond" truecount="2" falsecount="0"/>
         <line num="347" count="1" type="stmt"/>
         <line num="350" count="1" type="stmt"/>
         <line num="351" count="1" type="stmt"/>
+<<<<<<< HEAD
         <line num="362" count="389729" type="stmt"/>
         <line num="365" count="389729" type="cond" truecount="2" falsecount="0"/>
         <line num="366" count="249687" type="stmt"/>
@@ -238,6 +259,22 @@
         <line num="390" count="2" type="stmt"/>
         <line num="392" count="389717" type="stmt"/>
         <line num="393" count="389717" type="stmt"/>
+=======
+        <line num="362" count="389832" type="stmt"/>
+        <line num="365" count="389832" type="cond" truecount="2" falsecount="0"/>
+        <line num="366" count="249795" type="stmt"/>
+        <line num="367" count="249795" type="stmt"/>
+        <line num="368" count="249795" type="stmt"/>
+        <line num="373" count="249795" type="stmt"/>
+        <line num="377" count="140037" type="stmt"/>
+        <line num="378" count="140037" type="stmt"/>
+        <line num="382" count="389832" type="cond" truecount="2" falsecount="0"/>
+        <line num="387" count="389832" type="cond" truecount="4" falsecount="0"/>
+        <line num="389" count="2" type="stmt"/>
+        <line num="390" count="2" type="stmt"/>
+        <line num="392" count="389820" type="stmt"/>
+        <line num="393" count="389820" type="stmt"/>
+>>>>>>> origin/main
         <line num="395" count="5" type="stmt"/>
         <line num="396" count="5" type="stmt"/>
         <line num="398" count="5" type="stmt"/>
@@ -281,15 +318,24 @@
         <line num="3" count="7" type="stmt"/>
         <line num="4" count="34103" type="stmt"/>
         <line num="13" count="34103" type="stmt"/>
+<<<<<<< HEAD
         <line num="24" count="1014566" type="cond" truecount="2" falsecount="0"/>
         <line num="25" count="98779" type="stmt"/>
         <line num="28" count="1014566" type="cond" truecount="2" falsecount="0"/>
         <line num="29" count="685740" type="stmt"/>
         <line num="32" count="328826" type="cond" truecount="2" falsecount="0"/>
+=======
+        <line num="24" count="1015801" type="cond" truecount="2" falsecount="0"/>
+        <line num="25" count="98882" type="stmt"/>
+        <line num="28" count="1015801" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="686563" type="stmt"/>
+        <line num="32" count="329238" type="cond" truecount="2" falsecount="0"/>
+>>>>>>> origin/main
         <line num="34" count="6" type="cond" truecount="2" falsecount="0"/>
         <line num="35" count="1" type="stmt"/>
         <line num="37" count="5" type="stmt"/>
         <line num="39" count="21" type="stmt"/>
+<<<<<<< HEAD
         <line num="42" count="328820" type="cond" truecount="4" falsecount="0"/>
         <line num="44" count="201403" type="cond" truecount="2" falsecount="0"/>
         <line num="45" count="2" type="stmt"/>
@@ -310,6 +356,28 @@
         <line num="78" count="1026791" type="stmt"/>
         <line num="95" count="1026791" type="stmt"/>
         <line num="96" count="13131816" type="stmt"/>
+=======
+        <line num="42" count="329232" type="cond" truecount="4" falsecount="0"/>
+        <line num="44" count="201609" type="cond" truecount="2" falsecount="0"/>
+        <line num="45" count="2" type="stmt"/>
+        <line num="47" count="201607" type="stmt"/>
+        <line num="49" count="201607" type="stmt"/>
+        <line num="50" count="201607" type="stmt"/>
+        <line num="52" count="1027923" type="cond" truecount="2" falsecount="0"/>
+        <line num="53" count="111025" type="stmt"/>
+        <line num="55" count="916898" type="stmt"/>
+        <line num="58" count="201607" type="stmt"/>
+        <line num="61" count="127623" type="stmt"/>
+        <line num="65" count="686563" type="stmt"/>
+        <line num="67" count="686563" type="stmt"/>
+        <line num="68" count="4119378" type="stmt"/>
+        <line num="69" count="4119378" type="cond" truecount="1" falsecount="1"/>
+        <line num="70" count="4119378" type="stmt"/>
+        <line num="74" count="686563" type="stmt"/>
+        <line num="78" count="1027923" type="stmt"/>
+        <line num="95" count="1027923" type="stmt"/>
+        <line num="96" count="13147664" type="stmt"/>
+>>>>>>> origin/main
       </file>
       <file name="types.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/logging/src/types.ts">
         <metrics statements="16" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="3" coveredmethods="0"/>
@@ -366,6 +434,7 @@
         <line num="117" count="4" type="stmt"/>
         <line num="118" count="0" type="stmt"/>
         <line num="124" count="10" type="stmt"/>
+<<<<<<< HEAD
         <line num="125" count="32" type="stmt"/>
         <line num="126" count="0" type="stmt"/>
         <line num="132" count="32" type="stmt"/>
@@ -376,6 +445,18 @@
         <line num="139" count="5" type="stmt"/>
         <line num="141" count="4" type="stmt"/>
         <line num="145" count="32" type="stmt"/>
+=======
+        <line num="125" count="31" type="stmt"/>
+        <line num="126" count="0" type="stmt"/>
+        <line num="132" count="31" type="stmt"/>
+        <line num="133" count="31" type="stmt"/>
+        <line num="136" count="31" type="stmt"/>
+        <line num="137" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="138" count="5" type="stmt"/>
+        <line num="139" count="5" type="stmt"/>
+        <line num="141" count="3" type="stmt"/>
+        <line num="145" count="31" type="stmt"/>
+>>>>>>> origin/main
         <line num="146" count="5" type="stmt"/>
         <line num="148" count="5" type="stmt"/>
         <line num="150" count="5" type="stmt"/>
@@ -391,7 +472,11 @@
         <line num="168" count="0" type="stmt"/>
         <line num="172" count="1" type="stmt"/>
         <line num="173" count="1" type="stmt"/>
+<<<<<<< HEAD
         <line num="178" count="32" type="stmt"/>
+=======
+        <line num="178" count="31" type="stmt"/>
+>>>>>>> origin/main
         <line num="183" count="29" type="stmt"/>
         <line num="204" count="16" type="stmt"/>
         <line num="216" count="6" type="cond" truecount="2" falsecount="0"/>

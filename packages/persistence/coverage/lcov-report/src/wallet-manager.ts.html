@@ -23,30 +23,54 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
+<<<<<<< HEAD
                 <span class="strong">61.4% </span>
                 <span class="quiet">Statements</span>
                 <span class='fraction'>70/114</span>
+=======
+                <span class="strong">98.48% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>65/66</span>
+>>>>>>> origin/main
             </div>
         
             
             <div class='fl pad1y space-right2'>
+<<<<<<< HEAD
                 <span class="strong">55.88% </span>
                 <span class="quiet">Branches</span>
                 <span class='fraction'>19/34</span>
+=======
+                <span class="strong">100% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>17/17</span>
+>>>>>>> origin/main
             </div>
         
             
             <div class='fl pad1y space-right2'>
+<<<<<<< HEAD
                 <span class="strong">80% </span>
                 <span class="quiet">Functions</span>
                 <span class='fraction'>20/25</span>
+=======
+                <span class="strong">95.23% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>20/21</span>
+>>>>>>> origin/main
             </div>
         
             
             <div class='fl pad1y space-right2'>
+<<<<<<< HEAD
                 <span class="strong">61.81% </span>
                 <span class="quiet">Lines</span>
                 <span class='fraction'>68/110</span>
+=======
+                <span class="strong">98.43% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>63/64</span>
+>>>>>>> origin/main
             </div>
         
             
@@ -61,7 +85,11 @@
             </div>
         </template>
     </div>
+<<<<<<< HEAD
     <div class='status-line medium'></div>
+=======
+    <div class='status-line high'></div>
+>>>>>>> origin/main
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -333,6 +361,7 @@
 <a name='L268'></a><a href='#L268'>268</a>
 <a name='L269'></a><a href='#L269'>269</a>
 <a name='L270'></a><a href='#L270'>270</a>
+<<<<<<< HEAD
 <a name='L271'></a><a href='#L271'>271</a>
 <a name='L272'></a><a href='#L272'>272</a>
 <a name='L273'></a><a href='#L273'>273</a>
@@ -501,6 +530,9 @@
 <a name='L436'></a><a href='#L436'>436</a>
 <a name='L437'></a><a href='#L437'>437</a>
 <a name='L438'></a><a href='#L438'>438</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+=======
+<a name='L271'></a><a href='#L271'>271</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+>>>>>>> origin/main
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -700,6 +732,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<<<<<<< HEAD
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -720,6 +753,11 @@
 <span class="cline-any cline-yes">14x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+=======
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-yes">1088x</span>
+<span class="cline-any cline-yes">4086x</span>
+>>>>>>> origin/main
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -754,6 +792,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<<<<<<< HEAD
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -904,6 +943,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+=======
+>>>>>>> origin/main
 <span class="cline-any cline-yes">1167x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1136,6 +1177,7 @@ export class WalletManager {
   /**
    * Get player transaction history
    */
+<<<<<<< HEAD
   async getTransactionHistory(playerId: string, limit: number = 50, cursor?: string): Promise&lt;{
     transactions: WalletTransaction[];
     nextCursor?: string;
@@ -1158,6 +1200,13 @@ export class WalletManager {
       transactions,
       nextCursor: hasMore ? transactions[transactions.length - 1]?.id : undefined
     };
+=======
+  async getTransactionHistory(playerId: string, limit: number = 50): Promise&lt;WalletTransaction[]&gt; {
+    return this.transactions
+      .filter(t =&gt; t.playerId === playerId)
+      .sort((a, b) =&gt; b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
+>>>>>>> origin/main
   }
 &nbsp;
   /**
@@ -1188,6 +1237,7 @@ export class WalletManager {
   }
 &nbsp;
   /**
+<<<<<<< HEAD
    * Process deposit request
    */
 <span class="fstat-no" title="function not covered" >  async </span>deposit(playerId: string, amount: number, method: 'credit_card' | 'bank'): Promise&lt;{
@@ -1338,6 +1388,8 @@ export class WalletManager {
   }
 &nbsp;
   /**
+=======
+>>>>>>> origin/main
    * Record a wallet transaction
    */
   private async recordTransaction(transaction: WalletTransaction): Promise&lt;void&gt; {
@@ -1381,7 +1433,11 @@ export class WalletManager {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+<<<<<<< HEAD
                 at 2025-08-07T22:15:35.929Z
+=======
+                at 2025-08-07T22:13:44.610Z
+>>>>>>> origin/main
             </div>
         <script src="../prettify.js"></script>
         <script>

@@ -1,0 +1,11 @@
+{
+  "HIGH": [
+    "fuck", "fucking", "fucker", "fucked", "fucks", "motherfucker"
+  ],
+  "MEDIUM": [
+    "shit", "shits", "shitty", "bullshit", "damn", "damned", "bitch", "bitches", "ass", "asshole"
+  ],
+  "LOW": [
+    "hell", "sucks", "suck", "crap", "piss", "pissed"
+  ]
+}

@@ -362,7 +362,8 @@ export class LobbyCoordinatorDurableObject {
         gameType: table.gameType,
         stakes: {
           smallBlind: table.stakes.smallBlind,
-          bigBlind: table.stakes.bigBlind
+          bigBlind: table.stakes.bigBlind,
+          currency: table.stakes.currency || 'USD'
         },
         seats: {
           total: table.maxPlayers,
@@ -375,7 +376,7 @@ export class LobbyCoordinatorDurableObject {
           playersPerFlop: this.calculatePlayersPerFlop(table)
         },
         waitingList: table.waitingList || 0,
-        isActive: table.status === 'active',
+        isActive: table.status === 'playing',
         createdAt: new Date(table.createdAt).toISOString()
       }))
 
@@ -1130,7 +1131,7 @@ export class LobbyCoordinatorDurableObject {
 
     return {
       tables: paginatedTables,
-      nextCursor: nextCursor || undefined,
+      nextCursor,
       hasMore
     }
   }

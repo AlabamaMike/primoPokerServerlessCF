@@ -15,6 +15,7 @@ import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-pok
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
+import { friendRoutes } from './routes/friends';
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -95,6 +96,9 @@ export class PokerAPIRoutes {
 
     // Health check
     this.router.get('/api/health', this.handleHealthCheck.bind(this));
+
+    // Friend routes - mount the sub-router
+    this.router.all('/api/friends/*', friendRoutes.handle);
 
     // CORS preflight handler - more specific patterns first
     this.router.options('/api/*', this.handleOptionsRequest.bind(this));

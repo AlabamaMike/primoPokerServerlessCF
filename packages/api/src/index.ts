@@ -27,3 +27,9 @@ export { ConnectionPoolManager } from './websocket-connection-pool';
 
 // RNG API exports
 export { RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from './rng-api';
+
+// Chat Infrastructure exports
+export { ChatEnhancedWebSocketManager } from './websocket-chat-enhanced';
+export { ChatPersistenceRepository } from './repositories/chat-repository';
+export type { ChatMessageRecord, ChatMessageInput, ChatHistoryParams, ChatStats } from './repositories/chat-repository';
+export type { ChatWebSocketEnv, ChatHistoryRequest, ChatCommand } from './websocket-chat-enhanced';

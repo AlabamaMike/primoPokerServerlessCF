@@ -35,7 +35,7 @@ const SpectatorChat: React.FC<SpectatorChatProps> = ({
 
   // Filter messages to show only spectator channel messages
   const spectatorMessages = messages.filter(msg => 
-    msg.channel === 'spectator' || (msg as any).channel === 'spectator'
+    msg.channel === 'spectator'
   );
 
   return (

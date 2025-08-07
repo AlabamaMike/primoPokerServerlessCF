@@ -15,7 +15,6 @@ import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-pok
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
-<<<<<<< HEAD
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -26,8 +25,6 @@ import {
 } from './validation/wallet-schemas';
 import { walletRateLimiter } from './middleware/rate-limiter';
 import { IdempotencyManager } from './middleware/idempotency';
-=======
->>>>>>> origin/main
 
 // Extended request interface with authentication
 interface AuthenticatedRequest extends IRequest {
@@ -42,10 +39,7 @@ export class PokerAPIRoutes {
   private tableManager: TableManager;
   private authManager: AuthenticationManager;
   private walletManager: WalletManager;
-<<<<<<< HEAD
   private idempotencyManager: IdempotencyManager;
-=======
->>>>>>> origin/main
 
   constructor() {
     this.router = Router();
@@ -832,6 +826,9 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Get wallet error', error);
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
       return this.errorResponse('Failed to get wallet information', 500);
     }
   }
@@ -953,8 +950,11 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Transfer error', error);
       return this.errorResponse('Failed to process transfer', 500);
+<<<<<<< HEAD
 =======
       return this.errorResponse('Failed to get wallet information');
+>>>>>>> origin/main
+=======
 >>>>>>> origin/main
     }
   }
@@ -979,9 +979,13 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Buy-in error', error);
 <<<<<<< HEAD
+<<<<<<< HEAD
       return this.errorResponse('Failed to process buy-in', 500);
 =======
       return this.errorResponse('Failed to process buy-in');
+>>>>>>> origin/main
+=======
+      return this.errorResponse('Failed to process buy-in', 500);
 >>>>>>> origin/main
     }
   }
@@ -1009,9 +1013,13 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Cash-out error', error);
 <<<<<<< HEAD
+<<<<<<< HEAD
       return this.errorResponse('Failed to process cash-out', 500);
 =======
       return this.errorResponse('Failed to process cash-out');
+>>>>>>> origin/main
+=======
+      return this.errorResponse('Failed to process cash-out', 500);
 >>>>>>> origin/main
     }
   }
@@ -1024,6 +1032,9 @@ export class PokerAPIRoutes {
 
       const url = new URL(request.url);
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
       const validation = validateQueryParams(TransactionQuerySchema, url.searchParams);
       
       if (!validation.success) {
@@ -1040,6 +1051,7 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Get transactions error', error);
       return this.errorResponse('Failed to get transaction history', 500);
+<<<<<<< HEAD
 =======
       const limit = parseInt(url.searchParams.get('limit') || '50');
       
@@ -1048,6 +1060,8 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Get transactions error', error);
       return this.errorResponse('Failed to get transaction history');
+>>>>>>> origin/main
+=======
 >>>>>>> origin/main
     }
   }
@@ -1082,9 +1096,13 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Get table seats error', error);
 <<<<<<< HEAD
+<<<<<<< HEAD
       return this.errorResponse('Failed to get table seat information', 500);
 =======
       return this.errorResponse('Failed to get table seat information');
+>>>>>>> origin/main
+=======
+      return this.errorResponse('Failed to get table seat information', 500);
 >>>>>>> origin/main
     }
   }

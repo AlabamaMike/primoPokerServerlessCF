@@ -15,6 +15,16 @@ import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-pok
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
+import { 
+  DepositRequestSchema, 
+  WithdrawRequestSchema, 
+  TransferRequestSchema,
+  TransactionQuerySchema,
+  validateRequestBody,
+  validateQueryParams
+} from './validation/wallet-schemas';
+import { walletRateLimiter } from './middleware/rate-limiter';
+import { IdempotencyManager } from './middleware/idempotency';
 
 // Extended request interface with authentication
 interface AuthenticatedRequest extends IRequest {
@@ -29,12 +39,14 @@ export class PokerAPIRoutes {
   private tableManager: TableManager;
   private authManager: AuthenticationManager;
   private walletManager: WalletManager;
+  private idempotencyManager: IdempotencyManager;
 
   constructor() {
     this.router = Router();
     this.tableManager = new TableManager();
     this.authManager = new AuthenticationManager(''); // Will be set from env
     this.walletManager = new WalletManager();
+    this.idempotencyManager = new IdempotencyManager();
     
     this.setupRoutes();
   }
@@ -51,10 +63,14 @@ export class PokerAPIRoutes {
     this.router.put('/api/players/me', this.authenticateRequest.bind(this), this.handleUpdateProfile.bind(this));
 
     // Wallet routes
-    this.router.get('/api/wallet', this.authenticateRequest.bind(this), this.handleGetWallet.bind(this));
-    this.router.post('/api/wallet/buyin', this.authenticateRequest.bind(this), this.handleBuyIn.bind(this));
-    this.router.post('/api/wallet/cashout', this.authenticateRequest.bind(this), this.handleCashOut.bind(this));
-    this.router.get('/api/wallet/transactions', this.authenticateRequest.bind(this), this.handleGetTransactions.bind(this));
+    this.router.get('/api/wallet', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.handleGetWallet.bind(this));
+    this.router.get('/api/wallet/balance', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.handleGetBalance.bind(this));
+    this.router.post('/api/wallet/deposit', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleDeposit.bind(this));
+    this.router.post('/api/wallet/withdraw', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleWithdraw.bind(this));
+    this.router.post('/api/wallet/transfer', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleTransfer.bind(this));
+    this.router.post('/api/wallet/buyin', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleBuyIn.bind(this));
+    this.router.post('/api/wallet/cashout', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleCashOut.bind(this));
+    this.router.get('/api/wallet/transactions', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.handleGetTransactions.bind(this));
 
     // Table routes
     this.router.get('/api/tables', this.handleGetTables.bind(this));
@@ -809,7 +825,127 @@ export class PokerAPIRoutes {
       return this.successResponse(wallet);
     } catch (error) {
       logger.error('Get wallet error', error);
-      return this.errorResponse('Failed to get wallet information');
+      return this.errorResponse('Failed to get wallet information', 500);
+    }
+  }
+
+  private async handleGetBalance(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const wallet = await this.walletManager.getWallet(request.user.userId);
+      return this.successResponse({
+        balance: wallet.balance - wallet.frozen,
+        pending: wallet.frozen
+      });
+    } catch (error) {
+      logger.error('Get balance error', error);
+      return this.errorResponse('Failed to get balance information', 500);
+    }
+  }
+
+  private async handleDeposit(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const body = await request.json();
+      const validation = validateRequestBody(DepositRequestSchema, body);
+      
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
+
+      const result = await this.walletManager.deposit(
+        request.user.userId, 
+        validation.data.amount, 
+        validation.data.method
+      );
+
+      if (!result.success) {
+        return this.errorResponse(result.error || 'Deposit failed', 400);
+      }
+
+      return this.successResponse({
+        success: true,
+        newBalance: result.newBalance,
+        transactionId: result.transactionId
+      });
+    } catch (error) {
+      logger.error('Deposit error', error);
+      return this.errorResponse('Failed to process deposit', 500);
+    }
+  }
+
+  private async handleWithdraw(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const body = await request.json();
+      const validation = validateRequestBody(WithdrawRequestSchema, body);
+      
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
+
+      const result = await this.walletManager.withdraw(
+        request.user.userId,
+        validation.data.amount,
+        validation.data.method
+      );
+
+      if (!result.success) {
+        return this.errorResponse(result.error || 'Withdrawal failed', 400);
+      }
+
+      return this.successResponse({
+        success: true,
+        newBalance: result.newBalance,
+        transactionId: result.transactionId
+      });
+    } catch (error) {
+      logger.error('Withdraw error', error);
+      return this.errorResponse('Failed to process withdrawal', 500);
+    }
+  }
+
+  private async handleTransfer(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const body = await request.json();
+      const validation = validateRequestBody(TransferRequestSchema, body);
+      
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
+
+      const result = await this.walletManager.transfer(
+        request.user.userId,
+        validation.data.to_table_id,
+        validation.data.amount
+      );
+
+      if (!result.success) {
+        return this.errorResponse(result.error || 'Transfer failed', 400);
+      }
+
+      return this.successResponse({
+        success: true,
+        newBalance: result.newBalance,
+        transferredAmount: result.transferredAmount,
+        transactionId: result.transactionId
+      });
+    } catch (error) {
+      logger.error('Transfer error', error);
+      return this.errorResponse('Failed to process transfer', 500);
     }
   }
 
@@ -832,7 +968,7 @@ export class PokerAPIRoutes {
       return this.successResponse(result);
     } catch (error) {
       logger.error('Buy-in error', error);
-      return this.errorResponse('Failed to process buy-in');
+      return this.errorResponse('Failed to process buy-in', 500);
     }
   }
 
@@ -858,7 +994,7 @@ export class PokerAPIRoutes {
       });
     } catch (error) {
       logger.error('Cash-out error', error);
-      return this.errorResponse('Failed to process cash-out');
+      return this.errorResponse('Failed to process cash-out', 500);
     }
   }
 
@@ -869,13 +1005,22 @@ export class PokerAPIRoutes {
       }
 
       const url = new URL(request.url);
-      const limit = parseInt(url.searchParams.get('limit') || '50');
+      const validation = validateQueryParams(TransactionQuerySchema, url.searchParams);
       
-      const transactions = await this.walletManager.getTransactionHistory(request.user.userId, limit);
-      return this.successResponse(transactions);
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
+
+      const { limit = 20, cursor } = validation.data;
+      
+      const result = await this.walletManager.getTransactionHistory(request.user.userId, limit, cursor);
+      return this.successResponse({
+        transactions: result.transactions,
+        next_cursor: result.nextCursor
+      });
     } catch (error) {
       logger.error('Get transactions error', error);
-      return this.errorResponse('Failed to get transaction history');
+      return this.errorResponse('Failed to get transaction history', 500);
     }
   }
 
@@ -908,7 +1053,7 @@ export class PokerAPIRoutes {
       });
     } catch (error) {
       logger.error('Get table seats error', error);
-      return this.errorResponse('Failed to get table seat information');
+      return this.errorResponse('Failed to get table seat information', 500);
     }
   }
 

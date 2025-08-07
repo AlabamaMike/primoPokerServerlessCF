@@ -25,14 +25,30 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
+<<<<<<< HEAD
                 <span class='fraction'>0/393</span>
+=======
+<<<<<<< HEAD
+                <span class='fraction'>0/395</span>
+=======
+                <span class='fraction'>0/393</span>
+>>>>>>> origin/main
+>>>>>>> origin/main
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
+<<<<<<< HEAD
                 <span class='fraction'>0/165</span>
+=======
+<<<<<<< HEAD
+                <span class='fraction'>0/166</span>
+=======
+                <span class='fraction'>0/165</span>
+>>>>>>> origin/main
+>>>>>>> origin/main
             </div>
         
             
@@ -46,7 +62,15 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
+<<<<<<< HEAD
                 <span class='fraction'>0/371</span>
+=======
+<<<<<<< HEAD
+                <span class='fraction'>0/373</span>
+=======
+                <span class='fraction'>0/371</span>
+>>>>>>> origin/main
+>>>>>>> origin/main
             </div>
         
             
@@ -1218,7 +1242,17 @@
 <a name='L1153'></a><a href='#L1153'>1153</a>
 <a name='L1154'></a><a href='#L1154'>1154</a>
 <a name='L1155'></a><a href='#L1155'>1155</a>
+<<<<<<< HEAD
 <a name='L1156'></a><a href='#L1156'>1156</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+=======
+<<<<<<< HEAD
+<a name='L1156'></a><a href='#L1156'>1156</a>
+<a name='L1157'></a><a href='#L1157'>1157</a>
+<a name='L1158'></a><a href='#L1158'>1158</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+=======
+<a name='L1156'></a><a href='#L1156'>1156</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+>>>>>>> origin/main
+>>>>>>> origin/main
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1599,7 +1633,14 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<<<<<<< HEAD
 <span class="cline-any cline-neutral">&nbsp;</span>
+=======
+<<<<<<< HEAD
+=======
+<span class="cline-any cline-neutral">&nbsp;</span>
+>>>>>>> origin/main
+>>>>>>> origin/main
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2272,11 +2313,20 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+=======
+>>>>>>> origin/main
+>>>>>>> origin/main
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2737,8 +2787,17 @@ export interface LobbyWebSocketConnection {
         gameType: table.gameType,
         stakes: {
           smallBlind: table.stakes.smallBlind,
+<<<<<<< HEAD
           bigBlind: table.stakes.bigBlind,
           currency: table.stakes.currency || 'USD'
+=======
+<<<<<<< HEAD
+          bigBlind: table.stakes.bigBlind
+=======
+          bigBlind: table.stakes.bigBlind,
+          currency: table.stakes.currency || 'USD'
+>>>>>>> origin/main
+>>>>>>> origin/main
         },
         seats: {
           total: table.maxPlayers,
@@ -2751,7 +2810,15 @@ export interface LobbyWebSocketConnection {
           playersPerFlop: this.calculatePlayersPerFlop(table)
         },
         waitingList: table.waitingList || 0,
+<<<<<<< HEAD
         isActive: table.status === 'playing',
+=======
+<<<<<<< HEAD
+        isActive: table.status === 'active',
+=======
+        isActive: table.status === 'playing',
+>>>>>>> origin/main
+>>>>>>> origin/main
         createdAt: new Date(table.createdAt).toISOString()
       }))
 &nbsp;
@@ -3428,10 +3495,26 @@ export interface LobbyWebSocketConnection {
 &nbsp;
       // Filter by available seats
 <span class="cstat-no" title="statement not covered" >      <span class="missing-if-branch" title="if path not taken" >I</span>if (filters.seatsAvailable) {</span>
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        const parts = <span class="cstat-no" title="statement not covered" >filters.seatsAvailable.split('-').map(Number)</span>
+<span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (parts.length === 2) {</span>
+          const [min, max] = <span class="cstat-no" title="statement not covered" >parts</span>
+          const availableSeats = <span class="cstat-no" title="statement not covered" >table.maxPlayers - table.currentPlayers</span>
+<span class="cstat-no" title="statement not covered" >          <span class="missing-if-branch" title="if path not taken" >I</span>if (availableSeats &lt; min || availableSeats &gt; max) {</span>
+<span class="cstat-no" title="statement not covered" >            return false</span>
+          }
+=======
+>>>>>>> origin/main
         const [min, max] = <span class="cstat-no" title="statement not covered" >filters.seatsAvailable.split('-').map(Number)</span>
         const availableSeats = <span class="cstat-no" title="statement not covered" >table.maxPlayers - table.currentPlayers</span>
 <span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (availableSeats &lt; min || availableSeats &gt; max) {</span>
 <span class="cstat-no" title="statement not covered" >          return false</span>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
+>>>>>>> origin/main
         }
       }
 &nbsp;
@@ -3503,7 +3586,15 @@ export interface LobbyWebSocketConnection {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    return {</span>
       tables: paginatedTables,
+<<<<<<< HEAD
       nextCursor,
+=======
+<<<<<<< HEAD
+      nextCursor: nextCursor || undefined,
+=======
+      nextCursor,
+>>>>>>> origin/main
+>>>>>>> origin/main
       hasMore
     }
   }
@@ -3535,7 +3626,15 @@ export interface LobbyWebSocketConnection {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+<<<<<<< HEAD
                 at 2025-08-07T22:13:44.610Z
+=======
+<<<<<<< HEAD
+                at 2025-08-07T22:15:35.929Z
+=======
+                at 2025-08-07T22:13:44.610Z
+>>>>>>> origin/main
+>>>>>>> origin/main
             </div>
         <script src="../prettify.js"></script>
         <script>

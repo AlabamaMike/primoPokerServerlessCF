@@ -26,5 +26,6 @@ module.exports = {
     '^@primo-poker/core$': '<rootDir>/../core/src',
     '^@primo-poker/security$': '<rootDir>/../security/src',
     '^@primo-poker/persistence$': '<rootDir>/../persistence/src',
+    '^@primo-poker/logging$': '<rootDir>/../logging/src',
   },
 };

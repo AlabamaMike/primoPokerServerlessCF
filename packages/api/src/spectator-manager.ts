@@ -112,14 +112,13 @@ export interface SpectatorUpdate {
   players: GamePlayer[]
   timestamp: number
 }
-
 export class SpectatorManager {
   private spectators: Map<string, SpectatorInfo> = new Map()
   private tableViewers: Map<string, Set<string>> = new Map() // tableId -> spectatorIds
   private handHistories: Map<string, HandReplay[]> = new Map() // tableId -> hands
   private playerStats: Map<string, PlayerStats> = new Map() // playerId -> stats
   private updateQueues: Map<string, SpectatorUpdate[]> = new Map() // tableId -> pending updates
-  private updateTimers: Map<string, NodeJS.Timeout> = new Map() // tableId -> timer
+  private updateTimers: Map<string, number> = new Map() // tableId -> timer
   private readonly SPECTATOR_DELAY_MS = 500
   private readonly MAX_SPECTATORS_PER_TABLE = 50
   
@@ -140,7 +139,6 @@ export class SpectatorManager {
         console.log(`Table ${tableId} has reached max spectator limit`)
         return false
       }
-
       this.spectators.set(spectatorInfo.spectatorId, spectatorInfo)
       
       if (!this.tableViewers.has(tableId)) {

@@ -1053,10 +1053,13 @@ export class LobbyCoordinatorDurableObject {
 
       // Filter by available seats
       if (filters.seatsAvailable) {
-        const [min, max] = filters.seatsAvailable.split('-').map(Number)
-        const availableSeats = table.maxPlayers - table.currentPlayers
-        if (availableSeats < min || availableSeats > max) {
-          return false
+        const parts = filters.seatsAvailable.split('-').map(Number)
+        if (parts.length === 2) {
+          const [min, max] = parts
+          const availableSeats = table.maxPlayers - table.currentPlayers
+          if (availableSeats < min || availableSeats > max) {
+            return false
+          }
         }
       }
 

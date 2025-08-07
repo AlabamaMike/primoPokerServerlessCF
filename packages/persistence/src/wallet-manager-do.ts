@@ -411,6 +411,7 @@ export class WalletManagerDurableObject {
     const existingLock = this.transactionLocks.get(playerId)
     
     // Create a new lock that waits for the existing one to complete
+    // eslint-disable-next-line prefer-const
     let lockPromise: Promise<T>
     
     const lockExecutor = async () => {
@@ -1023,6 +1024,17 @@ export class WalletManagerDurableObject {
     try {
       const { playerId, amount, description = 'Withdrawal' } = await validateRequestBody(request, walletWithdrawSchema)
 
+      const wallet = this.state.wallets.get(playerId)
+      if (!wallet) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Wallet not found'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
       // Check if player is blocked
       if (this.securityManager.isPlayerBlocked(playerId)) {
         this.securityManager.recordAuditLog({
@@ -1045,7 +1057,6 @@ export class WalletManagerDurableObject {
         })
       }
 
-      const wallet = this.state.wallets.get(playerId)
       if (!wallet) {
         this.securityManager.recordFailedAttempt(playerId)
         this.securityManager.recordAuditLog({

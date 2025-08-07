@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@primo-poker/shared": "^1.0.0",
-    "@primo-poker/core": "^1.0.0"
+    "@primo-poker/core": "^1.0.0",
+    "zod": "^3.22.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",

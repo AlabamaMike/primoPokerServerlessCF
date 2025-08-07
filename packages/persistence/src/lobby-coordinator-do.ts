@@ -315,6 +315,18 @@ export class LobbyCoordinatorDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
+    // Check authorization header
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Authorization required'
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
     const body = await request.json() as { tableId: string; config: LobbyTableConfig; creatorId: string }
     const { tableId, config, creatorId } = body
 
@@ -368,6 +380,18 @@ export class LobbyCoordinatorDurableObject {
   private async handleUpdateTable(request: Request): Promise<Response> {
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    // Check authorization header
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Authorization required'
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
 
     const body = await request.json() as { 
@@ -450,6 +474,18 @@ export class LobbyCoordinatorDurableObject {
   private async handleRemoveTable(request: Request): Promise<Response> {
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    // Check authorization header
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Authorization required'
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
 
     const body = await request.json() as { tableId: string }
@@ -746,14 +782,24 @@ export class LobbyCoordinatorDurableObject {
    */
   private async broadcast(message: WebSocketMessage): Promise<void> {
     const messageStr = JSON.stringify(message)
+    const deadConnections: string[] = []
     
     for (const [clientId, connection] of this.connections) {
       try {
-        connection.websocket.send(messageStr)
+        if (connection.websocket.readyState === WebSocket.OPEN) {
+          connection.websocket.send(messageStr)
+        } else {
+          deadConnections.push(clientId)
+        }
       } catch (error) {
         logger.error(`Failed to send to client ${clientId}:`, error as Error)
-        this.connections.delete(clientId)
+        deadConnections.push(clientId)
       }
+    }
+    
+    // Clean up dead connections
+    for (const clientId of deadConnections) {
+      this.connections.delete(clientId)
     }
   }
 
@@ -774,9 +820,26 @@ export class LobbyCoordinatorDurableObject {
    */
   private sendMessage(websocket: WebSocket, message: WebSocketMessage): void {
     try {
-      websocket.send(JSON.stringify(message))
+      if (websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify(message))
+      } else {
+        logger.warn('WebSocket not open, skipping message', { 
+          readyState: websocket.readyState,
+          messageType: message.type 
+        })
+        // Remove the connection if it's closed
+        const connection = this.findConnection(websocket)
+        if (connection) {
+          this.connections.delete(connection.clientId)
+        }
+      }
     } catch (error) {
       logger.error('Failed to send WebSocket message:', error as Error)
+      // Remove the connection on error
+      const connection = this.findConnection(websocket)
+      if (connection) {
+        this.connections.delete(connection.clientId)
+      }
     }
   }
 

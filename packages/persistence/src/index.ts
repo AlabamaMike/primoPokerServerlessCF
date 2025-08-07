@@ -97,3 +97,6 @@ export {
   ensureLatestVersion,
   getMigrationStatus
 } from './do-migration';
+
+// Validation exports
+export * from './validation';

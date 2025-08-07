@@ -14,6 +14,14 @@ import {
 } from '@primo-poker/shared'
 import { logger } from '@primo-poker/core'
 import { MetricsCollector, DurableObjectHealthMetric } from './monitoring/metrics'
+import { 
+  walletInitializeSchema, 
+  walletDepositSchema, 
+  walletWithdrawSchema, 
+  walletTransferSchema,
+  walletCashOutSchema,
+  validateRequestBody 
+} from './validation'
 
 export interface WalletTransaction {
   id: string
@@ -78,6 +86,7 @@ export class WalletManagerDurableObject {
   private env: any
   private initialized: boolean = false
   private metrics?: MetricsCollector
+  private transactionLocks: Map<string, Promise<void>> = new Map()
 
   // Constants
   private static readonly DEFAULT_INITIAL_BALANCE = 10000
@@ -205,6 +214,40 @@ export class WalletManagerDurableObject {
   }
 
   /**
+   * Execute a transaction with locking to prevent race conditions
+   */
+  private async executeWithLock<T>(playerId: string, operation: () => Promise<T>): Promise<T> {
+    // Get or create a lock promise for this player
+    const existingLock = this.transactionLocks.get(playerId)
+    
+    // Create a new lock that waits for the existing one to complete
+    let lockPromise: Promise<T>
+    
+    const lockExecutor = async () => {
+      if (existingLock) {
+        await existingLock
+      }
+      
+      try {
+        // Execute the operation
+        return await operation()
+      } finally {
+        // Clean up the lock when we're done
+        if (this.transactionLocks.get(playerId) === lockPromise) {
+          this.transactionLocks.delete(playerId)
+        }
+      }
+    }
+    
+    lockPromise = lockExecutor()
+    
+    // Store the lock promise
+    this.transactionLocks.set(playerId, lockPromise.then(() => undefined).catch(() => undefined))
+    
+    return lockPromise
+  }
+
+  /**
    * Save state to storage with transaction
    */
   private async saveState(): Promise<void> {
@@ -270,27 +313,37 @@ export class WalletManagerDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const body = await request.json() as { playerId: string; initialBalance?: number }
-    const { playerId, initialBalance = WalletManagerDurableObject.DEFAULT_INITIAL_BALANCE } = body
+    try {
+      const body = await validateRequestBody(request, walletInitializeSchema)
+      const { playerId, initialBalance = WalletManagerDurableObject.DEFAULT_INITIAL_BALANCE } = body
 
-    if (this.state.wallets.has(playerId)) {
+      if (this.state.wallets.has(playerId)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Wallet already exists'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      const wallet = await this.createWallet(playerId, initialBalance)
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: { wallet }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Wallet already exists'
+        error: error instanceof Error ? error.message : 'Invalid request'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       })
     }
-
-    const wallet = await this.createWallet(playerId, initialBalance)
-
-    return new Response(JSON.stringify({
-      success: true,
-      data: { wallet }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
   }
 
   /**
@@ -314,70 +367,73 @@ export class WalletManagerDurableObject {
       })
     }
 
-    // Check daily limits
-    if (!await this.checkDailyLimit(buyInRequest.playerId, 'buyIns', buyInRequest.amount)) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Daily buy-in limit exceeded'
-      }), {
-        status: 400,
+    // Execute with lock to prevent race conditions
+    return this.executeWithLock(buyInRequest.playerId, async () => {
+      // Check daily limits
+      if (!await this.checkDailyLimit(buyInRequest.playerId, 'buyIns', buyInRequest.amount)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Daily buy-in limit exceeded'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      const wallet = await this.getOrCreateWallet(buyInRequest.playerId)
+      const availableBalance = wallet.balance - this.calculateFrozenAmount(buyInRequest.playerId)
+
+      if (availableBalance < buyInRequest.amount) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Insufficient funds. Available: $${availableBalance}, Required: $${buyInRequest.amount}`
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Freeze the buy-in amount
+      const frozenAmount: FrozenAmount = {
+        id: crypto.randomUUID(),
+        playerId: buyInRequest.playerId,
+        amount: buyInRequest.amount,
+        tableId: buyInRequest.tableId,
+        frozenAt: Date.now(),
+        reason: 'buy_in'
+      }
+
+      let playerFrozenAmounts = this.state.frozenAmounts.get(buyInRequest.playerId) || []
+      playerFrozenAmounts.push(frozenAmount)
+      this.state.frozenAmounts.set(buyInRequest.playerId, playerFrozenAmounts)
+
+      // Record transaction
+      await this.recordTransaction({
+        id: crypto.randomUUID(),
+        playerId: buyInRequest.playerId,
+        type: 'buy_in',
+        amount: -buyInRequest.amount,
+        balance: wallet.balance, // Balance doesn't change yet, just frozen
+        tableId: buyInRequest.tableId,
+        timestamp: Date.now(),
+        description: `Buy-in to table ${buyInRequest.tableId}`,
+        metadata: { frozenAmountId: frozenAmount.id }
+      })
+
+      // Update daily limit
+      await this.updateDailyLimit(buyInRequest.playerId, 'buyIns', buyInRequest.amount)
+
+      await this.saveState()
+
+      const response: BuyInResponse = {
+        success: true,
+        chipCount: buyInRequest.amount,
+        walletBalance: wallet.balance - this.calculateFrozenAmount(buyInRequest.playerId)
+      }
+
+      return new Response(JSON.stringify(response), {
         headers: { 'Content-Type': 'application/json' }
       })
-    }
-
-    const wallet = await this.getOrCreateWallet(buyInRequest.playerId)
-    const availableBalance = wallet.balance - this.calculateFrozenAmount(buyInRequest.playerId)
-
-    if (availableBalance < buyInRequest.amount) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: `Insufficient funds. Available: $${availableBalance}, Required: $${buyInRequest.amount}`
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Freeze the buy-in amount
-    const frozenAmount: FrozenAmount = {
-      id: crypto.randomUUID(),
-      playerId: buyInRequest.playerId,
-      amount: buyInRequest.amount,
-      tableId: buyInRequest.tableId,
-      frozenAt: Date.now(),
-      reason: 'buy_in'
-    }
-
-    let playerFrozenAmounts = this.state.frozenAmounts.get(buyInRequest.playerId) || []
-    playerFrozenAmounts.push(frozenAmount)
-    this.state.frozenAmounts.set(buyInRequest.playerId, playerFrozenAmounts)
-
-    // Record transaction
-    await this.recordTransaction({
-      id: crypto.randomUUID(),
-      playerId: buyInRequest.playerId,
-      type: 'buy_in',
-      amount: -buyInRequest.amount,
-      balance: wallet.balance, // Balance doesn't change yet, just frozen
-      tableId: buyInRequest.tableId,
-      timestamp: Date.now(),
-      description: `Buy-in to table ${buyInRequest.tableId}`,
-      metadata: { frozenAmountId: frozenAmount.id }
-    })
-
-    // Update daily limit
-    await this.updateDailyLimit(buyInRequest.playerId, 'buyIns', buyInRequest.amount)
-
-    await this.saveState()
-
-    const response: BuyInResponse = {
-      success: true,
-      chipCount: buyInRequest.amount,
-      walletBalance: wallet.balance - this.calculateFrozenAmount(buyInRequest.playerId)
-    }
-
-    return new Response(JSON.stringify(response), {
-      headers: { 'Content-Type': 'application/json' }
     })
   }
 
@@ -389,10 +445,10 @@ export class WalletManagerDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const body = await request.json() as { playerId: string; tableId: string; chipAmount: number }
-    const { playerId, tableId, chipAmount } = body
+    try {
+      const { playerId, tableId, chipAmount } = await validateRequestBody(request, walletCashOutSchema)
 
-    const wallet = this.state.wallets.get(playerId)
+      const wallet = this.state.wallets.get(playerId)
     if (!wallet) {
       return new Response(JSON.stringify({
         success: false,
@@ -463,6 +519,15 @@ export class WalletManagerDurableObject {
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
   }
 
   /**
@@ -547,56 +612,55 @@ export class WalletManagerDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const body = await request.json() as { playerId: string; amount: number; description?: string }
-    const { playerId, amount, description = 'Deposit' } = body
+    try {
+      const { playerId, amount, description = 'Deposit' } = await validateRequestBody(request, walletDepositSchema)
 
-    if (amount <= 0) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Deposit amount must be positive'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Check daily limits
-    if (!await this.checkDailyLimit(playerId, 'deposits', amount)) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Daily deposit limit exceeded'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const wallet = await this.getOrCreateWallet(playerId)
-    wallet.balance += amount
-    wallet.lastUpdated = new Date()
-
-    await this.recordTransaction({
-      id: crypto.randomUUID(),
-      playerId,
-      type: 'deposit',
-      amount,
-      balance: wallet.balance,
-      timestamp: Date.now(),
-      description
-    })
-
-    await this.updateDailyLimit(playerId, 'deposits', amount)
-    await this.saveState()
-
-    return new Response(JSON.stringify({
-      success: true,
-      data: {
-        newBalance: wallet.balance,
-        depositAmount: amount
+      // Check daily limits
+      if (!await this.checkDailyLimit(playerId, 'deposits', amount)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Daily deposit limit exceeded'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
       }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
+
+      const wallet = await this.getOrCreateWallet(playerId)
+      wallet.balance += amount
+      wallet.lastUpdated = new Date()
+
+      await this.recordTransaction({
+        id: crypto.randomUUID(),
+        playerId,
+        type: 'deposit',
+        amount,
+        balance: wallet.balance,
+        timestamp: Date.now(),
+        description
+      })
+
+      await this.updateDailyLimit(playerId, 'deposits', amount)
+      await this.saveState()
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          newBalance: wallet.balance,
+          depositAmount: amount
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
   }
 
   /**
@@ -607,77 +671,76 @@ export class WalletManagerDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const body = await request.json() as { playerId: string; amount: number; description?: string }
-    const { playerId, amount, description = 'Withdrawal' } = body
+    try {
+      const { playerId, amount, description = 'Withdrawal' } = await validateRequestBody(request, walletWithdrawSchema)
 
-    if (amount <= 0) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Withdrawal amount must be positive'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const wallet = this.state.wallets.get(playerId)
-    if (!wallet) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Wallet not found'
-      }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const availableBalance = wallet.balance - this.calculateFrozenAmount(playerId)
-    if (availableBalance < amount) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Insufficient available balance'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Check daily limits
-    if (!await this.checkDailyLimit(playerId, 'withdrawals', amount)) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Daily withdrawal limit exceeded'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    wallet.balance -= amount
-    wallet.lastUpdated = new Date()
-
-    await this.recordTransaction({
-      id: crypto.randomUUID(),
-      playerId,
-      type: 'withdrawal',
-      amount: -amount,
-      balance: wallet.balance,
-      timestamp: Date.now(),
-      description
-    })
-
-    await this.updateDailyLimit(playerId, 'withdrawals', amount)
-    await this.saveState()
-
-    return new Response(JSON.stringify({
-      success: true,
-      data: {
-        newBalance: wallet.balance,
-        withdrawalAmount: amount
+      const wallet = this.state.wallets.get(playerId)
+      if (!wallet) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Wallet not found'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        })
       }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
+
+      const availableBalance = wallet.balance - this.calculateFrozenAmount(playerId)
+      if (availableBalance < amount) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Insufficient available balance'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Check daily limits
+      if (!await this.checkDailyLimit(playerId, 'withdrawals', amount)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Daily withdrawal limit exceeded'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      wallet.balance -= amount
+      wallet.lastUpdated = new Date()
+
+      await this.recordTransaction({
+        id: crypto.randomUUID(),
+        playerId,
+        type: 'withdrawal',
+        amount: -amount,
+        balance: wallet.balance,
+        timestamp: Date.now(),
+        description
+      })
+
+      await this.updateDailyLimit(playerId, 'withdrawals', amount)
+      await this.saveState()
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          newBalance: wallet.balance,
+          withdrawalAmount: amount
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
   }
 
   /**
@@ -688,100 +751,106 @@ export class WalletManagerDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const transfer = await request.json() as TransferRequest
+    try {
+      const transfer = await validateRequestBody(request, walletTransferSchema)
 
-    // Validate amount
-    if (transfer.amount < WalletManagerDurableObject.MIN_TRANSFER_AMOUNT || 
-        transfer.amount > WalletManagerDurableObject.MAX_TRANSFER_AMOUNT) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: `Transfer amount must be between $${WalletManagerDurableObject.MIN_TRANSFER_AMOUNT} and $${WalletManagerDurableObject.MAX_TRANSFER_AMOUNT}`
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    if (transfer.fromPlayerId === transfer.toPlayerId) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Cannot transfer to yourself'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const fromWallet = this.state.wallets.get(transfer.fromPlayerId)
-    if (!fromWallet) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Sender wallet not found'
-      }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const availableBalance = fromWallet.balance - this.calculateFrozenAmount(transfer.fromPlayerId)
-    if (availableBalance < transfer.amount) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Insufficient available balance'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const toWallet = await this.getOrCreateWallet(transfer.toPlayerId)
-
-    // Perform atomic transfer
-    fromWallet.balance -= transfer.amount
-    fromWallet.lastUpdated = new Date()
-    toWallet.balance += transfer.amount
-    toWallet.lastUpdated = new Date()
-
-    // Record both transactions
-    const timestamp = Date.now()
-    const transactionId = crypto.randomUUID()
-
-    await this.recordTransaction({
-      id: `${transactionId}_from`,
-      playerId: transfer.fromPlayerId,
-      type: 'transfer',
-      amount: -transfer.amount,
-      balance: fromWallet.balance,
-      relatedPlayerId: transfer.toPlayerId,
-      timestamp,
-      description: transfer.description || `Transfer to ${transfer.toPlayerId}`,
-      metadata: { transferId: transactionId, direction: 'outgoing' }
-    })
-
-    await this.recordTransaction({
-      id: `${transactionId}_to`,
-      playerId: transfer.toPlayerId,
-      type: 'transfer',
-      amount: transfer.amount,
-      balance: toWallet.balance,
-      relatedPlayerId: transfer.fromPlayerId,
-      timestamp,
-      description: transfer.description || `Transfer from ${transfer.fromPlayerId}`,
-      metadata: { transferId: transactionId, direction: 'incoming' }
-    })
-
-    await this.saveState()
-
-    return new Response(JSON.stringify({
-      success: true,
-      data: {
-        transferId: transactionId,
-        fromBalance: fromWallet.balance,
-        toBalance: toWallet.balance
+      if (transfer.fromPlayerId === transfer.toPlayerId) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Cannot transfer to yourself'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
       }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
+
+      // Lock both accounts in a consistent order to prevent deadlocks
+      const playerIds = [transfer.fromPlayerId, transfer.toPlayerId].sort()
+      const [firstId, secondId] = playerIds as [string, string]
+      
+      return this.executeWithLock(firstId, async () => {
+        return this.executeWithLock(secondId, async () => {
+        const fromWallet = this.state.wallets.get(transfer.fromPlayerId)
+        if (!fromWallet) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Sender wallet not found'
+          }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+
+        const availableBalance = fromWallet.balance - this.calculateFrozenAmount(transfer.fromPlayerId)
+        if (availableBalance < transfer.amount) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Insufficient available balance'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+
+        const toWallet = await this.getOrCreateWallet(transfer.toPlayerId)
+
+        // Perform atomic transfer
+        fromWallet.balance -= transfer.amount
+        fromWallet.lastUpdated = new Date()
+        toWallet.balance += transfer.amount
+        toWallet.lastUpdated = new Date()
+
+        // Record both transactions
+        const timestamp = Date.now()
+        const transactionId = crypto.randomUUID()
+
+        await this.recordTransaction({
+          id: `${transactionId}_from`,
+          playerId: transfer.fromPlayerId,
+          type: 'transfer',
+          amount: -transfer.amount,
+          balance: fromWallet.balance,
+          relatedPlayerId: transfer.toPlayerId,
+          timestamp,
+          description: transfer.description || `Transfer to ${transfer.toPlayerId}`,
+          metadata: { transferId: transactionId, direction: 'outgoing' }
+        })
+
+        await this.recordTransaction({
+          id: `${transactionId}_to`,
+          playerId: transfer.toPlayerId,
+          type: 'transfer',
+          amount: transfer.amount,
+          balance: toWallet.balance,
+          relatedPlayerId: transfer.fromPlayerId,
+          timestamp,
+          description: transfer.description || `Transfer from ${transfer.fromPlayerId}`,
+          metadata: { transferId: transactionId, direction: 'incoming' }
+        })
+
+        await this.saveState()
+
+        return new Response(JSON.stringify({
+          success: true,
+          data: {
+            transferId: transactionId,
+            fromBalance: fromWallet.balance,
+            toBalance: toWallet.balance
+          }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        })
+      })
     })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
   }
 
   /**

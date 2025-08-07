@@ -149,17 +149,23 @@ export class ShardingStrategy {
   }
 
   /**
-   * Hash function using Web Crypto API
+   * Hash function using FNV-1a algorithm for better distribution
    */
   private hash(key: string): number {
-    // Simple hash function for Cloudflare Workers environment
-    let hash = 0
+    // FNV-1a 32-bit hash for better distribution
+    const FNV_PRIME = 0x01000193
+    const FNV_OFFSET_BASIS = 0x811c9dc5
+    
+    let hash = FNV_OFFSET_BASIS
+    
     for (let i = 0; i < key.length; i++) {
-      const char = key.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash // Convert to 32bit integer
+      hash ^= key.charCodeAt(i)
+      // Multiply by FNV prime with proper 32-bit arithmetic
+      hash = Math.imul(hash, FNV_PRIME)
     }
-    return Math.abs(hash)
+    
+    // Ensure positive value
+    return hash >>> 0
   }
 
   /**
@@ -172,10 +178,21 @@ export class ShardingStrategy {
 
     while (left <= right) {
       const mid = Math.floor((left + right) / 2)
-      if (this.sortedHashKeys[mid] === hash) {
-        return this.hashRing.get(this.sortedHashKeys[mid])!
+      const midKey = this.sortedHashKeys[mid]
+      
+      if (midKey === undefined) {
+        throw new Error(`No hash key found at index ${mid}`)
       }
-      if (this.sortedHashKeys[mid]! < hash) {
+      
+      if (midKey === hash) {
+        const shard = this.hashRing.get(midKey)
+        if (shard === undefined) {
+          throw new Error(`No shard found for hash key ${midKey}`)
+        }
+        return shard
+      }
+      
+      if (midKey < hash) {
         left = mid + 1
       } else {
         right = mid - 1
@@ -185,10 +202,17 @@ export class ShardingStrategy {
     // If exact match not found, use the next higher hash (with wraparound)
     const index = left >= this.sortedHashKeys.length ? 0 : left
     const key = this.sortedHashKeys[index]
+    
     if (key === undefined) {
-      throw new Error('No hash key found for index')
+      throw new Error(`No hash key found at index ${index}`)
     }
-    return this.hashRing.get(key)!
+    
+    const shard = this.hashRing.get(key)
+    if (shard === undefined) {
+      throw new Error(`No shard found for hash key ${key}`)
+    }
+    
+    return shard
   }
 
   /**

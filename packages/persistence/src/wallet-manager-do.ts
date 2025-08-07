@@ -26,7 +26,7 @@ import {
 export interface WalletTransaction {
   id: string
   playerId: string
-  type: 'buy_in' | 'cash_out' | 'win' | 'loss' | 'deposit' | 'withdrawal' | 'transfer'
+  type: 'buy_in' | 'cash_out' | 'win' | 'loss' | 'deposit' | 'withdrawal' | 'transfer' | 'refund' | 'rake'
   amount: number
   balance: number // Balance after transaction
   tableId?: string
@@ -42,6 +42,8 @@ export interface WalletManagerState {
   transactions: Map<string, WalletTransaction[]> // playerId -> transactions
   dailyLimits: Map<string, DailyLimit>
   frozenAmounts: Map<string, FrozenAmount[]> // playerId -> frozen amounts
+  idempotencyKeys: Map<string, IdempotencyRecord> // key -> record
+  rakeStatistics: Map<string, RakeStatistics> // period -> stats
   createdAt: number
   lastUpdated: number
   totalTransactions: number
@@ -80,6 +82,30 @@ export interface TransactionFilter {
   limit?: number
 }
 
+export interface IdempotencyRecord {
+  key: string
+  response: any
+  statusCode: number
+  timestamp: number
+}
+
+export interface RakeStatistics {
+  period: string
+  totalRake: number
+  handCount: number
+  lastUpdated: number
+}
+
+export interface RakeCollectionRequest {
+  tableId: string
+  handId: string
+  potAmount: number
+  rakePercentage: number
+  maxRake: number
+  winnerPlayerId?: string
+  winners?: Array<{ playerId: string; share: number }>
+}
+
 export class WalletManagerDurableObject {
   private state: WalletManagerState
   private durableObjectState: DurableObjectState
@@ -107,6 +133,8 @@ export class WalletManagerDurableObject {
       transactions: new Map(),
       dailyLimits: new Map(),
       frozenAmounts: new Map(),
+      idempotencyKeys: new Map(),
+      rakeStatistics: new Map(),
       createdAt: Date.now(),
       lastUpdated: Date.now(),
       totalTransactions: 0
@@ -162,6 +190,18 @@ export class WalletManagerDurableObject {
         case '/wallet/stats':
           response = await this.handleGetStats(request)
           break
+        case '/wallet/rollback-buy-in':
+          response = await this.handleRollbackBuyIn(request)
+          break
+        case '/wallet/rollback-hand':
+          response = await this.handleRollbackHand(request)
+          break
+        case '/wallet/collect-rake':
+          response = await this.handleCollectRake(request)
+          break
+        case '/wallet/rake-stats':
+          response = await this.handleRakeStats(request)
+          break
         case '/health':
           response = await this.handleHealthCheck(request)
           break
@@ -202,7 +242,9 @@ export class WalletManagerDurableObject {
           wallets: new Map(Object.entries(savedState.wallets || {})),
           transactions: new Map(Object.entries(savedState.transactions || {})),
           dailyLimits: new Map(Object.entries(savedState.dailyLimits || {})),
-          frozenAmounts: new Map(Object.entries(savedState.frozenAmounts || {}))
+          frozenAmounts: new Map(Object.entries(savedState.frozenAmounts || {})),
+          idempotencyKeys: new Map(Object.entries(savedState.idempotencyKeys || {})),
+          rakeStatistics: new Map(Object.entries(savedState.rakeStatistics || {}))
         }
         logger.info('Loaded saved wallet state', { walletCount: this.state.wallets.size })
       }
@@ -259,6 +301,8 @@ export class WalletManagerDurableObject {
           transactions: Object.fromEntries(this.state.transactions),
           dailyLimits: Object.fromEntries(this.state.dailyLimits),
           frozenAmounts: Object.fromEntries(this.state.frozenAmounts),
+          idempotencyKeys: Object.fromEntries(this.state.idempotencyKeys),
+          rakeStatistics: Object.fromEntries(this.state.rakeStatistics),
           lastUpdated: Date.now()
         }
 
@@ -347,12 +391,68 @@ export class WalletManagerDurableObject {
   }
 
   /**
+   * Check and handle idempotency
+   */
+  private async checkIdempotency(request: Request): Promise<Response | null> {
+    const idempotencyKey = request.headers.get('Idempotency-Key')
+    if (!idempotencyKey) return null
+
+    const record = this.state.idempotencyKeys.get(idempotencyKey)
+    if (record) {
+      // Return cached response
+      const response = new Response(JSON.stringify(record.response), {
+        status: record.statusCode,
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Idempotent-Replayed': 'true'
+        }
+      })
+      return response
+    }
+
+    return null
+  }
+
+  /**
+   * Store idempotent response
+   */
+  private async storeIdempotentResponse(
+    request: Request, 
+    response: Response
+  ): Promise<void> {
+    const idempotencyKey = request.headers.get('Idempotency-Key')
+    if (!idempotencyKey) return
+
+    const responseBody = await response.clone().json()
+    const record: IdempotencyRecord = {
+      key: idempotencyKey,
+      response: responseBody,
+      statusCode: response.status,
+      timestamp: Date.now()
+    }
+
+    this.state.idempotencyKeys.set(idempotencyKey, record)
+
+    // Clean up old idempotency keys (older than 24 hours)
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    for (const [key, rec] of this.state.idempotencyKeys) {
+      if (rec.timestamp < cutoff) {
+        this.state.idempotencyKeys.delete(key)
+      }
+    }
+  }
+
+  /**
    * Process buy-in request
    */
   private async handleBuyIn(request: Request): Promise<Response> {
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 })
     }
+
+    // Check idempotency
+    const cachedResponse = await this.checkIdempotency(request)
+    if (cachedResponse) return cachedResponse
 
     const buyInRequest = await request.json() as BuyInRequest
 
@@ -425,15 +525,20 @@ export class WalletManagerDurableObject {
 
       await this.saveState()
 
-      const response: BuyInResponse = {
+      const responseData: BuyInResponse = {
         success: true,
         chipCount: buyInRequest.amount,
         walletBalance: wallet.balance - this.calculateFrozenAmount(buyInRequest.playerId)
       }
 
-      return new Response(JSON.stringify(response), {
+      const response = new Response(JSON.stringify(responseData), {
         headers: { 'Content-Type': 'application/json' }
       })
+
+      // Store for idempotency
+      await this.storeIdempotentResponse(request, response)
+
+      return response
     })
   }
 
@@ -751,8 +856,24 @@ export class WalletManagerDurableObject {
       return new Response('Method Not Allowed', { status: 405 })
     }
 
+    // Check idempotency
+    const cachedResponse = await this.checkIdempotency(request)
+    if (cachedResponse) return cachedResponse
+
     try {
       const transfer = await validateRequestBody(request, walletTransferSchema)
+
+      // Additional validation for transfer limits
+      if (transfer.amount < WalletManagerDurableObject.MIN_TRANSFER_AMOUNT || 
+          transfer.amount > WalletManagerDurableObject.MAX_TRANSFER_AMOUNT) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Transfer amount must be between ${WalletManagerDurableObject.MIN_TRANSFER_AMOUNT} and ${WalletManagerDurableObject.MAX_TRANSFER_AMOUNT}`
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
 
       if (transfer.fromPlayerId === transfer.toPlayerId) {
         return new Response(JSON.stringify({
@@ -830,7 +951,7 @@ export class WalletManagerDurableObject {
 
         await this.saveState()
 
-        return new Response(JSON.stringify({
+        const response = new Response(JSON.stringify({
           success: true,
           data: {
             transferId: transactionId,
@@ -840,6 +961,11 @@ export class WalletManagerDurableObject {
         }), {
           headers: { 'Content-Type': 'application/json' }
         })
+
+        // Store for idempotency
+        await this.storeIdempotentResponse(request, response)
+
+        return response
       })
     })
     } catch (error) {
@@ -1126,6 +1252,326 @@ export class WalletManagerDurableObject {
     }
     
     return groups
+  }
+
+  /**
+   * Handle buy-in rollback
+   */
+  private async handleRollbackBuyIn(request: Request): Promise<Response> {
+    if (request.method !== 'POST') {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    try {
+      const body = await request.json() as {
+        playerId: string
+        tableId: string
+        amount: number
+        reason: string
+      }
+
+      const wallet = this.state.wallets.get(body.playerId)
+      if (!wallet) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Wallet not found'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Find and remove frozen amount for this table
+      const playerFrozenAmounts = this.state.frozenAmounts.get(body.playerId) || []
+      const frozenIndex = playerFrozenAmounts.findIndex(f => f.tableId === body.tableId)
+      
+      if (frozenIndex === -1) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No frozen amount found for this table'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      const frozen = playerFrozenAmounts[frozenIndex]
+      playerFrozenAmounts.splice(frozenIndex, 1)
+
+      // Record refund transaction
+      await this.recordTransaction({
+        id: crypto.randomUUID(),
+        playerId: body.playerId,
+        type: 'refund',
+        amount: frozen?.amount || body.amount,
+        balance: wallet.balance,
+        tableId: body.tableId,
+        timestamp: Date.now(),
+        description: `Refund: ${body.reason}`,
+        metadata: { 
+          reason: body.reason,
+          originalFrozenAmountId: frozen?.id
+        }
+      })
+
+      await this.saveState()
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          refundAmount: frozen?.amount || body.amount,
+          newBalance: wallet.balance,
+          reason: body.reason
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
+   * Handle hand rollback
+   */
+  private async handleRollbackHand(request: Request): Promise<Response> {
+    if (request.method !== 'POST') {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    try {
+      const body = await request.json() as {
+        tableId: string
+        handId: string
+        players: Array<{ playerId: string; refundAmount: number }>
+        reason: string
+      }
+
+      const transactions = []
+
+      for (const player of body.players) {
+        const wallet = await this.getOrCreateWallet(player.playerId)
+        wallet.balance += player.refundAmount
+        wallet.lastUpdated = new Date()
+
+        const transaction: WalletTransaction = {
+          id: crypto.randomUUID(),
+          playerId: player.playerId,
+          type: 'refund',
+          amount: player.refundAmount,
+          balance: wallet.balance,
+          tableId: body.tableId,
+          handId: body.handId,
+          timestamp: Date.now(),
+          description: `Hand rollback: ${body.reason}`,
+          metadata: { 
+            reason: body.reason,
+            handId: body.handId
+          }
+        }
+
+        await this.recordTransaction(transaction)
+        transactions.push(transaction)
+      }
+
+      await this.saveState()
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          transactionCount: transactions.length,
+          totalRefunded: body.players.reduce((sum, p) => sum + p.refundAmount, 0),
+          reason: body.reason
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
+   * Handle rake collection
+   */
+  private async handleCollectRake(request: Request): Promise<Response> {
+    if (request.method !== 'POST') {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    try {
+      const body = await request.json() as RakeCollectionRequest
+
+      // Calculate rake amount
+      let rakeAmount = Math.floor(body.potAmount * body.rakePercentage / 100)
+      rakeAmount = Math.min(rakeAmount, body.maxRake)
+
+      const netPot = body.potAmount - rakeAmount
+
+      // Process house rake
+      const houseWallet = await this.getOrCreateWallet('house')
+      houseWallet.balance += rakeAmount
+      houseWallet.lastUpdated = new Date()
+
+      await this.recordTransaction({
+        id: crypto.randomUUID(),
+        playerId: 'house',
+        type: 'rake',
+        amount: rakeAmount,
+        balance: houseWallet.balance,
+        tableId: body.tableId,
+        handId: body.handId,
+        timestamp: Date.now(),
+        description: `Rake collection from hand ${body.handId}`
+      })
+
+      // Update rake statistics
+      const period = this.getCurrentPeriod('daily')
+      let stats = this.state.rakeStatistics.get(period)
+      if (!stats) {
+        stats = {
+          period,
+          totalRake: 0,
+          handCount: 0,
+          lastUpdated: Date.now()
+        }
+      }
+      stats.totalRake += rakeAmount
+      stats.handCount++
+      stats.lastUpdated = Date.now()
+      this.state.rakeStatistics.set(period, stats)
+
+      // Process winner payouts
+      const payouts = []
+      
+      if (body.winnerPlayerId) {
+        // Single winner
+        const winnerWallet = await this.getOrCreateWallet(body.winnerPlayerId)
+        winnerWallet.balance += netPot
+        winnerWallet.lastUpdated = new Date()
+
+        await this.recordTransaction({
+          id: crypto.randomUUID(),
+          playerId: body.winnerPlayerId,
+          type: 'win',
+          amount: netPot,
+          balance: winnerWallet.balance,
+          tableId: body.tableId,
+          handId: body.handId,
+          timestamp: Date.now(),
+          description: `Won pot of ${body.potAmount} (after ${rakeAmount} rake)`
+        })
+
+        payouts.push({ playerId: body.winnerPlayerId, amount: netPot })
+      } else if (body.winners && body.winners.length > 0) {
+        // Multiple winners
+        for (const winner of body.winners) {
+          const winAmount = Math.floor(netPot * winner.share)
+          const winnerWallet = await this.getOrCreateWallet(winner.playerId)
+          winnerWallet.balance += winAmount
+          winnerWallet.lastUpdated = new Date()
+
+          await this.recordTransaction({
+            id: crypto.randomUUID(),
+            playerId: winner.playerId,
+            type: 'win',
+            amount: winAmount,
+            balance: winnerWallet.balance,
+            tableId: body.tableId,
+            handId: body.handId,
+            timestamp: Date.now(),
+            description: `Won ${winner.share * 100}% of pot (${winAmount} after rake)`
+          })
+
+          payouts.push({ playerId: winner.playerId, amount: winAmount })
+        }
+      }
+
+      await this.saveState()
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          rakeAmount,
+          winnerPayout: body.winnerPlayerId ? netPot : undefined,
+          payouts: payouts.length > 1 ? payouts : undefined
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid request'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
+   * Get rake statistics
+   */
+  private async handleRakeStats(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    const period = url.searchParams.get('period') || 'daily'
+
+    const currentPeriod = this.getCurrentPeriod(period)
+    const stats = this.state.rakeStatistics.get(currentPeriod)
+
+    if (!stats) {
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          period: currentPeriod,
+          totalRake: 0,
+          handCount: 0,
+          averageRake: 0
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      data: {
+        ...stats,
+        averageRake: stats.handCount > 0 ? stats.totalRake / stats.handCount : 0
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  /**
+   * Get current period for statistics
+   */
+  private getCurrentPeriod(type: string): string {
+    const now = new Date()
+    switch (type) {
+      case 'daily':
+        return now.toISOString().split('T')[0] || now.toISOString().substring(0, 10)
+      case 'monthly':
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      case 'yearly':
+        return String(now.getFullYear())
+      default:
+        return now.toISOString().split('T')[0] || now.toISOString().substring(0, 10)
+    }
   }
 
   /**

@@ -52,6 +52,9 @@ export class LobbyCoordinatorDurableObject {
   private updateInterval: number | null = null
   private cleanupInterval: number | null = null
   private metrics?: MetricsCollector
+  // Cache for table queries
+  private tableCache: Map<string, { data: any; timestamp: number }> = new Map()
+  private cacheMaxAge = 5000 // 5 seconds cache TTL
 
   // Constants
   private static readonly RESERVATION_DURATION = 60000 // 60 seconds
@@ -286,25 +289,128 @@ export class LobbyCoordinatorDurableObject {
   }
 
   /**
-   * Get filtered tables
+   * Get filtered tables with advanced filtering, sorting, and pagination
    */
   private async handleGetTables(request: Request): Promise<Response> {
-    const url = new URL(request.url)
-    const filters = this.parseFilters(url.searchParams)
-    
-    const tables = this.getFilteredTables(filters)
-    
-    return new Response(JSON.stringify({
-      success: true,
-      data: {
-        tables,
-        totalTables: tables.length,
-        activePlayers: this.calculateActivePlayers(tables),
-        lastUpdated: this.state.lastUpdated
+    if (request.method === 'GET') {
+      // Legacy GET support
+      const url = new URL(request.url)
+      const filters = this.parseFilters(url.searchParams)
+      
+      const tables = this.getFilteredTables(filters)
+      
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          tables,
+          totalTables: tables.length,
+          activePlayers: this.calculateActivePlayers(tables),
+          lastUpdated: this.state.lastUpdated
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    // New POST endpoint with advanced features
+    if (request.method === 'POST') {
+      const body = await request.json() as {
+        filters?: {
+          stakes?: string[];
+          seatsAvailable?: string;
+          gameType?: string;
+        };
+        sort?: {
+          field: 'players' | 'stakes' | 'avgPot' | 'handsPerHour';
+          direction: 'asc' | 'desc';
+        };
+        cursor?: string;
+        limit?: number;
       }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
+
+      const { filters, sort, cursor, limit = 50 } = body
+
+      // Check cache
+      const cacheKey = JSON.stringify({ filters, sort, cursor, limit })
+      const cached = this.tableCache.get(cacheKey)
+      if (cached && Date.now() - cached.timestamp < this.cacheMaxAge) {
+        return new Response(JSON.stringify(cached.data), {
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Get all tables
+      let tables = Array.from(this.state.tables.values())
+
+      // Apply filters
+      if (filters) {
+        tables = this.applyAdvancedFilters(tables, filters)
+      }
+
+      // Apply sorting
+      if (sort) {
+        tables = this.applySorting(tables, sort)
+      }
+
+      // Apply pagination
+      const paginatedResult = this.applyPagination(tables, cursor, Math.min(limit, 100))
+
+      // Transform to the expected format
+      const transformedTables = paginatedResult.tables.map(table => ({
+        id: table.tableId,
+        name: table.name,
+        gameType: table.gameType,
+        stakes: {
+          smallBlind: table.stakes.smallBlind,
+          bigBlind: table.stakes.bigBlind,
+          currency: table.stakes.currency || 'USD'
+        },
+        seats: {
+          total: table.maxPlayers,
+          occupied: table.currentPlayers,
+          available: table.maxPlayers - table.currentPlayers
+        },
+        statistics: {
+          avgPot: table.avgPot || 0,
+          handsPerHour: table.handsPerHour || 0,
+          playersPerFlop: this.calculatePlayersPerFlop(table)
+        },
+        waitingList: table.waitingList || 0,
+        isActive: table.status === 'playing',
+        createdAt: new Date(table.createdAt).toISOString()
+      }))
+
+      const responseData = {
+        tables: transformedTables,
+        pagination: {
+          cursor: paginatedResult.nextCursor,
+          hasMore: paginatedResult.hasMore,
+          total: tables.length
+        }
+      }
+
+      // Cache the result
+      this.tableCache.set(cacheKey, {
+        data: responseData,
+        timestamp: Date.now()
+      })
+
+      // Clean old cache entries
+      if (this.tableCache.size > 100) {
+        const now = Date.now()
+        for (const [key, value] of this.tableCache) {
+          if (now - value.timestamp > this.cacheMaxAge * 2) {
+            this.tableCache.delete(key)
+          }
+        }
+      }
+
+      return new Response(JSON.stringify(responseData), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    return new Response('Method Not Allowed', { status: 405 })
   }
 
   /**
@@ -926,6 +1032,114 @@ export class LobbyCoordinatorDurableObject {
     if (stateChanged) {
       await this.saveState()
     }
+  }
+
+  /**
+   * Apply advanced filters to tables
+   */
+  private applyAdvancedFilters(tables: TableListing[], filters: {
+    stakes?: string[];
+    seatsAvailable?: string;
+    gameType?: string;
+  }): TableListing[] {
+    return tables.filter(table => {
+      // Filter by stakes levels
+      if (filters.stakes && filters.stakes.length > 0) {
+        const tableStakeLevel = this.getStakeLevel(table.stakes.bigBlind)
+        if (!filters.stakes.includes(tableStakeLevel)) {
+          return false
+        }
+      }
+
+      // Filter by available seats
+      if (filters.seatsAvailable) {
+        const [min, max] = filters.seatsAvailable.split('-').map(Number)
+        const availableSeats = table.maxPlayers - table.currentPlayers
+        if (availableSeats < min || availableSeats > max) {
+          return false
+        }
+      }
+
+      // Filter by game type
+      if (filters.gameType && table.gameType !== filters.gameType) {
+        return false
+      }
+
+      return true
+    })
+  }
+
+  /**
+   * Get stake level from big blind amount
+   */
+  private getStakeLevel(bigBlind: number): string {
+    if (bigBlind <= 2) return 'low'
+    if (bigBlind <= 10) return 'medium'
+    return 'high'
+  }
+
+  /**
+   * Apply sorting to tables
+   */
+  private applySorting(tables: TableListing[], sort: {
+    field: 'players' | 'stakes' | 'avgPot' | 'handsPerHour';
+    direction: 'asc' | 'desc';
+  }): TableListing[] {
+    const { field, direction } = sort
+    const multiplier = direction === 'asc' ? 1 : -1
+
+    return [...tables].sort((a, b) => {
+      switch (field) {
+        case 'players':
+          return (a.currentPlayers - b.currentPlayers) * multiplier
+        case 'stakes':
+          return (a.stakes.bigBlind - b.stakes.bigBlind) * multiplier
+        case 'avgPot':
+          return ((a.avgPot || 0) - (b.avgPot || 0)) * multiplier
+        case 'handsPerHour':
+          return ((a.handsPerHour || 0) - (b.handsPerHour || 0)) * multiplier
+        default:
+          return 0
+      }
+    })
+  }
+
+  /**
+   * Apply pagination to tables
+   */
+  private applyPagination(
+    tables: TableListing[], 
+    cursor?: string, 
+    limit: number = 50
+  ): { tables: TableListing[]; nextCursor?: string; hasMore: boolean } {
+    let startIndex = 0
+    
+    if (cursor) {
+      // Find the index of the cursor table
+      const cursorIndex = tables.findIndex(t => t.tableId === cursor)
+      if (cursorIndex >= 0) {
+        startIndex = cursorIndex + 1
+      }
+    }
+
+    const paginatedTables = tables.slice(startIndex, startIndex + limit)
+    const hasMore = startIndex + limit < tables.length
+    const nextCursor = hasMore ? paginatedTables[paginatedTables.length - 1]?.tableId : undefined
+
+    return {
+      tables: paginatedTables,
+      nextCursor,
+      hasMore
+    }
+  }
+
+  /**
+   * Calculate players per flop percentage
+   */
+  private calculatePlayersPerFlop(table: TableListing): number {
+    // This would need actual game statistics tracking
+    // For now, return a placeholder value
+    return 45.5
   }
 
   /**

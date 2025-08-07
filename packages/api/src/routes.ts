@@ -52,6 +52,10 @@ export class PokerAPIRoutes {
 
     // Wallet routes
     this.router.get('/api/wallet', this.authenticateRequest.bind(this), this.handleGetWallet.bind(this));
+    this.router.get('/api/wallet/balance', this.authenticateRequest.bind(this), this.handleGetBalance.bind(this));
+    this.router.post('/api/wallet/deposit', this.authenticateRequest.bind(this), this.handleDeposit.bind(this));
+    this.router.post('/api/wallet/withdraw', this.authenticateRequest.bind(this), this.handleWithdraw.bind(this));
+    this.router.post('/api/wallet/transfer', this.authenticateRequest.bind(this), this.handleTransfer.bind(this));
     this.router.post('/api/wallet/buyin', this.authenticateRequest.bind(this), this.handleBuyIn.bind(this));
     this.router.post('/api/wallet/cashout', this.authenticateRequest.bind(this), this.handleCashOut.bind(this));
     this.router.get('/api/wallet/transactions', this.authenticateRequest.bind(this), this.handleGetTransactions.bind(this));
@@ -813,6 +817,158 @@ export class PokerAPIRoutes {
     }
   }
 
+  private async handleGetBalance(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const wallet = await this.walletManager.getWallet(request.user.userId);
+      return this.successResponse({
+        balance: wallet.balance - wallet.frozen,
+        pending: wallet.frozen
+      });
+    } catch (error) {
+      logger.error('Get balance error', error);
+      return this.errorResponse('Failed to get balance information');
+    }
+  }
+
+  private async handleDeposit(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const body = await request.json() as { amount: number; method: string };
+      
+      // Validate request
+      if (!body.amount || !body.method) {
+        return this.errorResponse('Amount and method are required', 400);
+      }
+
+      if (typeof body.amount !== 'number') {
+        return this.errorResponse('Amount must be a number', 400);
+      }
+
+      if (body.amount <= 0) {
+        return this.errorResponse('Amount must be positive', 400);
+      }
+
+      if (!['credit_card', 'bank'].includes(body.method)) {
+        return this.errorResponse('Invalid payment method', 400);
+      }
+
+      const result = await this.walletManager.deposit(
+        request.user.userId, 
+        body.amount, 
+        body.method as 'credit_card' | 'bank'
+      );
+
+      if (!result.success) {
+        return this.errorResponse(result.error || 'Deposit failed', 400);
+      }
+
+      return this.successResponse({
+        success: true,
+        newBalance: result.newBalance,
+        transactionId: result.transactionId
+      });
+    } catch (error) {
+      logger.error('Deposit error', error);
+      return this.errorResponse('Failed to process deposit');
+    }
+  }
+
+  private async handleWithdraw(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const body = await request.json() as { amount: number; method: string };
+      
+      // Validate request
+      if (!body.amount || !body.method) {
+        return this.errorResponse('Amount and method are required', 400);
+      }
+
+      if (typeof body.amount !== 'number') {
+        return this.errorResponse('Amount must be a number', 400);
+      }
+
+      if (body.amount <= 0) {
+        return this.errorResponse('Amount must be positive', 400);
+      }
+
+      if (!['bank', 'check'].includes(body.method)) {
+        return this.errorResponse('Invalid withdrawal method', 400);
+      }
+
+      const result = await this.walletManager.withdraw(
+        request.user.userId,
+        body.amount,
+        body.method as 'bank' | 'check'
+      );
+
+      if (!result.success) {
+        return this.errorResponse(result.error || 'Withdrawal failed', 400);
+      }
+
+      return this.successResponse({
+        success: true,
+        newBalance: result.newBalance,
+        transactionId: result.transactionId
+      });
+    } catch (error) {
+      logger.error('Withdraw error', error);
+      return this.errorResponse('Failed to process withdrawal');
+    }
+  }
+
+  private async handleTransfer(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      const body = await request.json() as { to_table_id: string; amount: number };
+      
+      // Validate request
+      if (!body.to_table_id || !body.amount) {
+        return this.errorResponse('Table ID and amount are required', 400);
+      }
+
+      if (typeof body.amount !== 'number') {
+        return this.errorResponse('Amount must be a number', 400);
+      }
+
+      if (body.amount <= 0) {
+        return this.errorResponse('Amount must be positive', 400);
+      }
+
+      const result = await this.walletManager.transfer(
+        request.user.userId,
+        body.to_table_id,
+        body.amount
+      );
+
+      if (!result.success) {
+        return this.errorResponse(result.error || 'Transfer failed', 400);
+      }
+
+      return this.successResponse({
+        success: true,
+        newBalance: result.newBalance,
+        transferredAmount: result.transferredAmount,
+        transactionId: result.transactionId
+      });
+    } catch (error) {
+      logger.error('Transfer error', error);
+      return this.errorResponse('Failed to process transfer');
+    }
+  }
+
   private async handleBuyIn(request: AuthenticatedRequest): Promise<Response> {
     try {
       if (!request.user?.userId) {
@@ -869,10 +1025,14 @@ export class PokerAPIRoutes {
       }
 
       const url = new URL(request.url);
-      const limit = parseInt(url.searchParams.get('limit') || '50');
+      const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit') || '20')));
+      const cursor = url.searchParams.get('cursor') || undefined;
       
-      const transactions = await this.walletManager.getTransactionHistory(request.user.userId, limit);
-      return this.successResponse(transactions);
+      const result = await this.walletManager.getTransactionHistory(request.user.userId, limit, cursor);
+      return this.successResponse({
+        transactions: result.transactions,
+        next_cursor: result.nextCursor
+      });
     } catch (error) {
       logger.error('Get transactions error', error);
       return this.errorResponse('Failed to get transaction history');

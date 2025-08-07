@@ -100,3 +100,11 @@ export {
 
 // Validation exports
 export * from './validation';
+
+// Real-time update exports
+export { TableStateChangeDetector } from './table-state-detector';
+export type { TableChange, TableChangeType } from './table-state-detector';
+export { DeltaUpdateGenerator } from './delta-update-generator';
+export type { JsonPatchOperation } from './delta-update-generator';
+export { LobbyBroadcastManager } from './lobby-broadcast-manager';
+export type { BroadcastConfig, LobbyUpdateMessage } from './lobby-broadcast-manager';

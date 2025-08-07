@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { testSafeInvoke } from '../utils/test-utils';
 import PokerTable from './PokerTable';
-import ChatPanel from './ChatPanel';
+import { ChatPanel } from './Chat';
+import type { ChatMessage, ChatCommand } from './Chat';
 import { useAuthStore } from '../stores/auth-store';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { IncomingMessage } from '../lib/websocket-client';
@@ -60,7 +61,7 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<Array<{ username: string; message: string; isSystem: boolean }>>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const apiUrl = 'https://primo-poker-server.alabamamike.workers.dev';
 
@@ -203,8 +204,11 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
       case 'chat':
         // Add chat message
         setChatMessages(prev => [...prev.slice(-49), {
+          id: `msg-${Date.now()}-${Math.random()}`,
           username: message.payload.username,
+          userId: message.payload.userId || 'unknown',
           message: message.payload.message,
+          timestamp: new Date(),
           isSystem: message.payload.isSystem
         }]);
         break;
@@ -271,6 +275,45 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
     if (wsState.isConnected && user) {
       wsActions.sendChatMessage(message, user.id, user.username || user.email);
     }
+  };
+
+  // Handle chat commands
+  const handleChatCommand = (command: ChatCommand) => {
+    if (!wsState.isConnected || !user) return;
+    
+    switch (command.command) {
+      case 'fold':
+      case 'check':
+      case 'call':
+      case 'allin':
+        handlePlayerAction(command.command);
+        break;
+        
+      case 'bet':
+      case 'raise':
+        const amount = command.args?.[0];
+        if (amount) {
+          const numAmount = parseFloat(amount);
+          if (!isNaN(numAmount) && numAmount > 0) {
+            handlePlayerAction(command.command, numAmount);
+          }
+        }
+        break;
+        
+      default:
+        console.log('Unhandled command:', command);
+    }
+  };
+
+  // Handle player moderation
+  const handleMutePlayer = (playerId: string) => {
+    console.log('Mute player:', playerId);
+    // TODO: Implement mute functionality
+  };
+
+  const handleBlockPlayer = (playerId: string) => {
+    console.log('Block player:', playerId);
+    // TODO: Implement block functionality
   };
 
   // Leave table
@@ -401,6 +444,10 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
           <ChatPanel
             messages={chatMessages}
             onSendMessage={handleSendChatMessage}
+            onCommand={handleChatCommand}
+            onMutePlayer={handleMutePlayer}
+            onBlockPlayer={handleBlockPlayer}
+            currentUserId={user?.id}
             isConnected={wsState.isConnected}
             className="h-full"
           />

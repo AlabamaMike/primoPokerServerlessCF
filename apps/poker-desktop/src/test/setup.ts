@@ -36,6 +36,9 @@ vi.mock('@tauri-apps/api/tauri', () => ({
   invoke: vi.fn(),
 }));
 
+// Mock scrollIntoView
+Element.prototype.scrollIntoView = vi.fn();
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {};

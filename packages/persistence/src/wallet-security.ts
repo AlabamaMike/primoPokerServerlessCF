@@ -63,7 +63,7 @@ export interface AuditLogEntry {
   ipAddress?: string
   country?: string
   userAgent?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, string | number | boolean | null>
 }
 
 export interface PendingApproval {
@@ -116,7 +116,8 @@ export class WalletSecurityManager {
       return { valid: false, error: 'Request signature has expired' }
     }
 
-    if (requestTime > currentTime + 60000) { // 1 minute future tolerance
+    const FUTURE_TIMESTAMP_TOLERANCE_MS = 60000 // 1 minute future tolerance
+    if (requestTime > currentTime + FUTURE_TIMESTAMP_TOLERANCE_MS) {
       return { valid: false, error: 'Request timestamp is in the future' }
     }
 
@@ -233,7 +234,8 @@ export class WalletSecurityManager {
       const lastLocation = this.lastLocationStore.get(playerId)
       if (lastLocation && lastLocation.country !== context.country) {
         const timeDiff = context.timestamp - lastLocation.timestamp
-        if (timeDiff < 3600000) { // 1 hour - too fast to travel
+        const MINIMUM_TRAVEL_TIME_MS = 3600000 // 1 hour - too fast to travel
+        if (timeDiff < MINIMUM_TRAVEL_TIME_MS) {
           reasons.push('geographic anomaly')
         }
       }
@@ -321,9 +323,10 @@ export class WalletSecurityManager {
 
     this.auditLogs.push(logEntry)
 
-    // Keep only recent logs in memory (e.g., last 10000)
-    if (this.auditLogs.length > 10000) {
-      this.auditLogs = this.auditLogs.slice(-10000)
+    // Keep only recent logs in memory
+    const MAX_AUDIT_LOGS = 10000
+    if (this.auditLogs.length > MAX_AUDIT_LOGS) {
+      this.auditLogs = this.auditLogs.slice(-MAX_AUDIT_LOGS)
     }
   }
 
@@ -334,7 +337,7 @@ export class WalletSecurityManager {
     event: string,
     severity: 'low' | 'medium' | 'high',
     context: SecurityContext,
-    details?: any
+    details?: Record<string, unknown>
   ): void {
     const logEntry: SecurityLogEntry = {
       id: crypto.randomUUID(),
@@ -351,8 +354,9 @@ export class WalletSecurityManager {
     this.securityLogs.push(logEntry)
 
     // Keep only recent logs
-    if (this.securityLogs.length > 5000) {
-      this.securityLogs = this.securityLogs.slice(-5000)
+    const MAX_SECURITY_LOGS = 5000
+    if (this.securityLogs.length > MAX_SECURITY_LOGS) {
+      this.securityLogs = this.securityLogs.slice(-MAX_SECURITY_LOGS)
     }
   }
 
@@ -499,11 +503,18 @@ export class WalletSecurityManager {
    */
   private cleanupOldNonces(): void {
     const cutoff = Date.now() - this.config.signatureExpiryMs
+    const noncesToDelete: string[] = []
     
+    // Collect nonces to delete first to avoid iterator invalidation
     for (const [nonce, timestamp] of this.nonceStore) {
       if (timestamp < cutoff) {
-        this.nonceStore.delete(nonce)
+        noncesToDelete.push(nonce)
       }
+    }
+    
+    // Delete in batch
+    for (const nonce of noncesToDelete) {
+      this.nonceStore.delete(nonce)
     }
   }
 
@@ -542,7 +553,7 @@ interface SecurityLogEntry {
   ipAddress?: string
   country?: string
   userAgent?: string
-  details?: any
+  details?: Record<string, unknown>
 }
 
 interface TransactionHistoryEntry {

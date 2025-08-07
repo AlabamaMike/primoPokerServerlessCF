@@ -141,7 +141,7 @@ export class WalletManagerDurableObject {
   private metrics?: MetricsCollector
   private transactionLocks: Map<string, Promise<void>> = new Map()
   private lockTimeouts: Map<string, any> = new Map()
-  private config: WalletManagerConfig
+  private config: WalletManagerConfig & { largeAmountThreshold?: number }
   private securityManager: WalletSecurityManager
 
   constructor(state: DurableObjectState, env: any) {
@@ -151,12 +151,15 @@ export class WalletManagerDurableObject {
     // Initialize configuration (can be overridden via env)
     this.config = {
       ...DEFAULT_CONFIG,
-      ...(env.WALLET_CONFIG || {})
+      ...(env.WALLET_CONFIG || {}),
+      largeAmountThreshold: env.TRANSACTION_APPROVAL_CONFIG?.largeAmountThreshold || 5000
     }
     
     // Initialize security manager
     const securityConfig: SecurityConfig = {
-      hmacSecret: env.WALLET_HMAC_SECRET || 'default-hmac-secret',
+      hmacSecret: env.WALLET_HMAC_SECRET || (() => {
+        throw new Error('WALLET_HMAC_SECRET environment variable is required for security')
+      })(),
       signatureExpiryMs: 5 * 60 * 1000, // 5 minutes
       rateLimitConfig: env.RATE_LIMIT_CONFIG || {
         windowMs: 60000,
@@ -1152,7 +1155,7 @@ export class WalletManagerDurableObject {
       }
 
       // Check if approval is required for large amounts
-      if (amount > this.securityManager['config'].transactionApprovalConfig.largeAmountThreshold) {
+      if (amount > this.config.largeAmountThreshold) {
         const approval = this.securityManager.createPendingApproval(
           playerId,
           'withdrawal',
@@ -1984,7 +1987,22 @@ export class WalletManagerDurableObject {
    */
   private verifyAdminToken(request: Request): boolean {
     const adminToken = request.headers.get('X-Admin-Token')
-    return adminToken === 'admin-secret-token' // In production, use proper auth
+    const configuredToken = this.env.WALLET_ADMIN_TOKEN
+    
+    if (!configuredToken) {
+      logger.error('WALLET_ADMIN_TOKEN not configured')
+      return false
+    }
+    
+    // Use timing-safe comparison to prevent timing attacks
+    if (!adminToken || adminToken.length !== configuredToken.length) {
+      return false
+    }
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(adminToken),
+      Buffer.from(configuredToken)
+    )
   }
 
   /**

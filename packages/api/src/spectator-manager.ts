@@ -8,7 +8,7 @@
  * - Player statistics and analysis
  */
 
-import { GameState, Player, GamePlayer, Card, HandRanking } from '@primo-poker/shared'
+import { GameState, Player, GamePlayer, Card, HandRanking, GamePhase } from '@primo-poker/shared'
 
 export interface SpectatorInfo {
   spectatorId: string
@@ -107,11 +107,23 @@ export interface HandReplay {
   }
 }
 
+export interface SpectatorUpdate {
+  gameState: GameState
+  players: GamePlayer[]
+  timestamp: number
+}
 export class SpectatorManager {
   private spectators: Map<string, SpectatorInfo> = new Map()
   private tableViewers: Map<string, Set<string>> = new Map() // tableId -> spectatorIds
   private handHistories: Map<string, HandReplay[]> = new Map() // tableId -> hands
   private playerStats: Map<string, PlayerStats> = new Map() // playerId -> stats
+  private updateQueues: Map<string, SpectatorUpdate[]> = new Map() // tableId -> pending updates
+  private updateTimers: Map<string, number> = new Map() // tableId -> timer
+  private readonly SPECTATOR_DELAY_MS = 500
+  private readonly MAX_SPECTATORS_PER_TABLE = 50
+  
+  // Callback for broadcasting updates (to be set by WebSocket handler)
+  public onBroadcast?: (tableId: string, update: SpectatorUpdate) => void
 
   /**
    * Add a spectator to a table
@@ -121,6 +133,12 @@ export class SpectatorManager {
     spectatorInfo: SpectatorInfo
   ): boolean {
     try {
+      // Check if table already has max spectators
+      const viewers = this.tableViewers.get(tableId)
+      if (viewers && viewers.size >= this.MAX_SPECTATORS_PER_TABLE) {
+        console.log(`Table ${tableId} has reached max spectator limit`)
+        return false
+      }
       this.spectators.set(spectatorInfo.spectatorId, spectatorInfo)
       
       if (!this.tableViewers.has(tableId)) {
@@ -205,7 +223,7 @@ export class SpectatorManager {
 
     // Show player hands only if they're revealed (showdown) or player folded
     players.forEach((player: GamePlayer) => {
-      if (player.isFolded || gameState.phase === 'showdown') {
+      if (player.isFolded || gameState.phase === GamePhase.SHOWDOWN) {
         // In a real implementation, you'd check if cards should be visible
         result.playerHands[player.id] = player.cards || null
       } else {
@@ -434,6 +452,68 @@ export class SpectatorManager {
       activeSpectators,
       tablesWithSpectators: this.tableViewers.size,
       averageViewingTime: 12 * 60 * 1000 // Mock: 12 minutes average
+    }
+  }
+
+  /**
+   * Queue a game state update for delayed broadcast to spectators
+   */
+  queueSpectatorUpdate(tableId: string, update: SpectatorUpdate): boolean {
+    const viewers = this.tableViewers.get(tableId)
+    if (!viewers || viewers.size === 0) {
+      return false
+    }
+
+    // Initialize queue if needed
+    if (!this.updateQueues.has(tableId)) {
+      this.updateQueues.set(tableId, [])
+    }
+
+    // Add update to queue
+    this.updateQueues.get(tableId)!.push(update)
+
+    // Clear existing timer
+    const existingTimer = this.updateTimers.get(tableId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    // Set new timer for delayed broadcast
+    const timer = setTimeout(() => {
+      this.broadcastPendingUpdates(tableId)
+    }, this.SPECTATOR_DELAY_MS)
+
+    this.updateTimers.set(tableId, timer)
+    return true
+  }
+
+  /**
+   * Get the number of pending updates for a table
+   */
+  getPendingUpdatesCount(tableId: string): number {
+    const queue = this.updateQueues.get(tableId)
+    return queue ? queue.length : 0
+  }
+
+  /**
+   * Broadcast pending updates to spectators
+   */
+  private broadcastPendingUpdates(tableId: string): void {
+    const queue = this.updateQueues.get(tableId)
+    if (!queue || queue.length === 0) {
+      return
+    }
+
+    // Get the latest update (last in queue)
+    const latestUpdate = queue[queue.length - 1]
+
+    // Clear the queue
+    this.updateQueues.set(tableId, [])
+    this.updateTimers.delete(tableId)
+
+    // Broadcast to callback if set
+    if (this.onBroadcast) {
+      this.onBroadcast(tableId, latestUpdate)
     }
   }
 }

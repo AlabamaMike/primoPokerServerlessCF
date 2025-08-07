@@ -186,6 +186,7 @@ export class WalletManagerDurableObject {
     }
     
     this.securityManager = new WalletSecurityManager(securityConfig)
+    
     // Initialize state
     this.state = {
       wallets: new Map(),
@@ -410,9 +411,7 @@ export class WalletManagerDurableObject {
     const existingLock = this.transactionLocks.get(playerId)
     
     // Create a new lock that waits for the existing one to complete
-<<<<<<< HEAD
     // eslint-disable-next-line prefer-const
-=======
     let lockPromise: Promise<T>
     
     const lockExecutor = async () => {
@@ -522,11 +521,6 @@ export class WalletManagerDurableObject {
       return this.createErrorResponse('Player ID required')
     }
 
-<<<<<<< HEAD
-    const wallet = await this.getOrCreateWallet(playerId)
-    const frozenAmount = this.calculateFrozenAmount(playerId)
-    const availableBalance = wallet.balance - frozenAmount
-=======
     // Check rate limit
     const rateLimitResult = this.securityManager.checkRateLimit(playerId, url.pathname)
     if (!rateLimitResult.allowed) {
@@ -944,8 +938,6 @@ export class WalletManagerDurableObject {
     try {
       const { playerId, amount, description = 'Deposit' } = await validateRequestBody(request, walletDepositSchema)
 
-<<<<<<< HEAD
-=======
       // Check rate limit
       const rateLimitResult = this.securityManager.checkRateLimit(playerId, '/wallet/deposit')
       if (!rateLimitResult.allowed) {
@@ -990,8 +982,6 @@ export class WalletManagerDurableObject {
       await this.updateDailyLimit(playerId, 'deposits', amount)
       await this.saveState()
 
-<<<<<<< HEAD
-=======
       // Record successful transaction
       this.securityManager.recordTransaction(playerId, amount, 'deposit')
       this.securityManager.recordAuditLog({
@@ -1034,10 +1024,17 @@ export class WalletManagerDurableObject {
     try {
       const { playerId, amount, description = 'Withdrawal' } = await validateRequestBody(request, walletWithdrawSchema)
 
-<<<<<<< HEAD
       const wallet = this.state.wallets.get(playerId)
       if (!wallet) {
-=======
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Wallet not found'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
       // Check if player is blocked
       if (this.securityManager.isPlayerBlocked(playerId)) {
         this.securityManager.recordAuditLog({
@@ -1060,7 +1057,6 @@ export class WalletManagerDurableObject {
         })
       }
 
-      const wallet = this.state.wallets.get(playerId)
       if (!wallet) {
         this.securityManager.recordFailedAttempt(playerId)
         this.securityManager.recordAuditLog({
@@ -1084,8 +1080,6 @@ export class WalletManagerDurableObject {
 
       const availableBalance = wallet.balance - this.calculateFrozenAmount(playerId)
       if (availableBalance < amount) {
-<<<<<<< HEAD
-=======
         this.securityManager.recordFailedAttempt(playerId)
         this.securityManager.recordAuditLog({
           playerId,
@@ -1108,8 +1102,6 @@ export class WalletManagerDurableObject {
 
       // Check daily limits
       if (!await this.checkDailyLimit(playerId, 'withdrawals', amount)) {
-<<<<<<< HEAD
-=======
         this.securityManager.recordAuditLog({
           playerId,
           action: 'withdraw_failed',
@@ -1129,8 +1121,6 @@ export class WalletManagerDurableObject {
         })
       }
 
-<<<<<<< HEAD
-=======
       // Check rate limit
       const rateLimitResult = this.securityManager.checkRateLimit(playerId, '/wallet/withdraw')
       if (!rateLimitResult.allowed) {
@@ -1225,8 +1215,6 @@ export class WalletManagerDurableObject {
       await this.updateDailyLimit(playerId, 'withdrawals', amount)
       await this.saveState()
 
-<<<<<<< HEAD
-=======
       // Record successful transaction
       this.securityManager.recordTransaction(playerId, amount, 'withdrawal')
       this.securityManager.recordAuditLog({
@@ -2004,8 +1992,6 @@ export class WalletManagerDurableObject {
       }
     }
   }
-<<<<<<< HEAD
-=======
 
   /**
    * Verify admin token

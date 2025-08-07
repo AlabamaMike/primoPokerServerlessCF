@@ -1,16 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
 <coverage generated="1754604936006" clover="3.2.0">
   <project timestamp="1754604936006" name="All files">
     <metrics statements="4072" coveredstatements="143" conditionals="1554" coveredconditionals="44" methods="619" coveredmethods="31" elements="6245" coveredelements="218" complexity="0" loc="4072" ncloc="4072" packages="4" files="24" classes="24"/>
     <package name="src">
       <metrics statements="3810" coveredstatements="125" conditionals="1458" coveredconditionals="37" methods="585" coveredmethods="28"/>
 =======
+>>>>>>> origin/main
 <coverage generated="1754604824677" clover="3.2.0">
   <project timestamp="1754604824677" name="All files">
     <metrics statements="4387" coveredstatements="138" conditionals="1747" coveredconditionals="42" methods="669" coveredmethods="31" elements="6803" coveredelements="211" complexity="0" loc="4387" ncloc="4387" packages="4" files="26" classes="26"/>
     <package name="src">
       <metrics statements="4125" coveredstatements="120" conditionals="1651" coveredconditionals="35" methods="635" coveredmethods="28"/>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
 >>>>>>> origin/main
       <file name="chat-moderator-do.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/chat-moderator-do.ts">
         <metrics statements="392" coveredstatements="0" conditionals="164" coveredconditionals="0" methods="49" coveredmethods="0"/>
@@ -1707,9 +1713,13 @@
       </file>
       <file name="lobby-coordinator-do.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/lobby-coordinator-do.ts">
 <<<<<<< HEAD
+        <metrics statements="371" coveredstatements="0" conditionals="165" coveredconditionals="0" methods="58" coveredmethods="0"/>
+=======
+<<<<<<< HEAD
         <metrics statements="373" coveredstatements="0" conditionals="166" coveredconditionals="0" methods="58" coveredmethods="0"/>
 =======
         <metrics statements="371" coveredstatements="0" conditionals="165" coveredconditionals="0" methods="58" coveredmethods="0"/>
+>>>>>>> origin/main
 >>>>>>> origin/main
         <line num="8" count="0" type="stmt"/>
         <line num="17" count="0" type="stmt"/>
@@ -1831,6 +1841,8 @@
         <line num="352" count="0" type="stmt"/>
         <line num="356" count="0" type="stmt"/>
         <line num="359" count="0" type="stmt"/>
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
         <line num="382" count="0" type="stmt"/>
         <line num="392" count="0" type="stmt"/>
@@ -2028,6 +2040,7 @@
         <line num="1001" count="0" type="cond" truecount="0" falsecount="3"/>
         <line num="1002" count="0" type="stmt"/>
 =======
+>>>>>>> origin/main
         <line num="383" count="0" type="stmt"/>
         <line num="393" count="0" type="stmt"/>
         <line num="399" count="0" type="cond" truecount="0" falsecount="1"/>
@@ -2222,12 +2235,17 @@
         <line num="998" count="0" type="stmt"/>
         <line num="1001" count="0" type="stmt"/>
         <line num="1002" count="0" type="cond" truecount="0" falsecount="3"/>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
 >>>>>>> origin/main
         <line num="1003" count="0" type="stmt"/>
         <line num="1004" count="0" type="stmt"/>
         <line num="1005" count="0" type="stmt"/>
         <line num="1006" count="0" type="stmt"/>
         <line num="1007" count="0" type="stmt"/>
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
         <line num="1009" count="0" type="stmt"/>
         <line num="1014" count="0" type="stmt"/>
@@ -2283,6 +2301,7 @@
         <line num="1154" count="0" type="cond" truecount="0" falsecount="1"/>
         <line num="1155" count="0" type="stmt"/>
 =======
+>>>>>>> origin/main
         <line num="1008" count="0" type="stmt"/>
         <line num="1010" count="0" type="stmt"/>
         <line num="1015" count="0" type="stmt"/>
@@ -2335,6 +2354,9 @@
         <line num="1150" count="0" type="stmt"/>
         <line num="1152" count="0" type="cond" truecount="0" falsecount="1"/>
         <line num="1153" count="0" type="stmt"/>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
 >>>>>>> origin/main
       </file>
       <file name="lobby-manager.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/lobby-manager.ts">
@@ -3568,6 +3590,8 @@
         <line num="114" count="0" type="stmt"/>
       </file>
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
       <file name="wallet-manager-do.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/wallet-manager-do.ts">
         <metrics statements="452" coveredstatements="0" conditionals="187" coveredconditionals="0" methods="61" coveredmethods="0"/>
         <line num="15" count="0" type="stmt"/>
@@ -4026,6 +4050,7 @@
       <file name="wallet-manager.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/wallet-manager.ts">
         <metrics statements="110" coveredstatements="68" conditionals="34" coveredconditionals="19" methods="25" coveredmethods="20"/>
 =======
+>>>>>>> origin/main
       <file name="wallet-errors.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/wallet-errors.ts">
         <metrics statements="30" coveredstatements="0" conditionals="1" coveredconditionals="0" methods="9" coveredmethods="0"/>
         <line num="5" count="0" type="stmt"/>
@@ -4692,6 +4717,9 @@
       </file>
       <file name="wallet-manager.ts" path="/home/runner/work/primoPokerServerlessCF/primoPokerServerlessCF/packages/persistence/src/wallet-manager.ts">
         <metrics statements="64" coveredstatements="63" conditionals="17" coveredconditionals="17" methods="21" coveredmethods="20"/>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
 >>>>>>> origin/main
         <line num="24" count="1" type="stmt"/>
         <line num="25" count="35" type="stmt"/>
@@ -4737,6 +4765,8 @@
         <line num="190" count="14" type="cond" truecount="1" falsecount="0"/>
         <line num="191" count="3" type="stmt"/>
         <line num="194" count="14" type="stmt"/>
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
         <line num="204" count="14" type="stmt"/>
         <line num="205" count="1088" type="stmt"/>
@@ -4805,6 +4835,7 @@
         <line num="433" count="3" type="stmt"/>
         <line num="434" count="3" type="stmt"/>
 =======
+>>>>>>> origin/main
         <line num="201" count="14" type="stmt"/>
         <line num="202" count="1088" type="stmt"/>
         <line num="203" count="4086" type="stmt"/>
@@ -4985,6 +5016,9 @@
         <line num="525" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="526" count="0" type="stmt"/>
         <line num="533" count="0" type="stmt"/>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
 >>>>>>> origin/main
       </file>
     </package>

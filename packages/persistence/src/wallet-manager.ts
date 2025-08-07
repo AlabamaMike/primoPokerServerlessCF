@@ -204,21 +204,21 @@ export class WalletManager {
     const allTransactions = this.transactions
       .filter(t => t.playerId === playerId)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
+    
     let startIndex = 0;
     if (cursor) {
-      startIndex = allTransactions.findIndex(t => t.id === cursor);
-      if (startIndex === -1) startIndex = 0;
-      else startIndex += 1; // Start after the cursor
+      const cursorIndex = allTransactions.findIndex(t => t.id === cursor);
+      if (cursorIndex !== -1) {
+        startIndex = cursorIndex + 1;
+      }
     }
-
-    const transactions = allTransactions.slice(startIndex, startIndex + limit);
-    const hasMore = startIndex + limit < allTransactions.length;
     
-    return {
-      transactions,
-      nextCursor: hasMore ? transactions[transactions.length - 1]?.id : undefined
-    };
+    const transactions = allTransactions.slice(startIndex, startIndex + limit);
+    const nextCursor = startIndex + limit < allTransactions.length 
+      ? allTransactions[startIndex + limit]?.id 
+      : undefined;
+    
+    return { transactions, nextCursor };
   }
 
   /**
@@ -399,6 +399,7 @@ export class WalletManager {
   }
 
   /**
+>>>>>>> origin/main
    * Record a wallet transaction
    */
   private async recordTransaction(transaction: WalletTransaction): Promise<void> {

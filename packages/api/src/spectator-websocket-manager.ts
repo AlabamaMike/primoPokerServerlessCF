@@ -18,6 +18,8 @@ export class SpectatorWebSocketManager extends WebSocketManager {
   private spectatorConnections = new Map<string, SpectatorConnection>()
   private tableSpectatorConnections = new Map<string, Set<string>>()
   
+  private static readonly MAX_SPECTATORS_PER_TABLE = 50
+  
   constructor(jwtSecret: string, authManager?: AuthenticationManager, spectatorManager?: SpectatorManager) {
     super(jwtSecret, authManager)
     this.spectatorManager = spectatorManager || new SpectatorManager()
@@ -39,6 +41,13 @@ export class SpectatorWebSocketManager extends WebSocketManager {
       const authResult = await this.authManager.verifyAccessToken(token)
       if (!authResult || !authResult.valid || !authResult.payload) {
         ws.close(1008, 'Invalid authentication token')
+        return
+      }
+
+      // Check spectator limit
+      const currentSpectatorCount = this.getSpectatorCount(tableId)
+      if (currentSpectatorCount >= SpectatorWebSocketManager.MAX_SPECTATORS_PER_TABLE) {
+        ws.close(1008, 'Table spectator limit reached')
         return
       }
 
@@ -102,6 +111,11 @@ export class SpectatorWebSocketManager extends WebSocketManager {
 
     // Broadcast spectator count update
     this.broadcastSpectatorCount(tableId)
+    
+    // Check if we've reached the limit and notify
+    if (this.getSpectatorCount(tableId) >= SpectatorWebSocketManager.MAX_SPECTATORS_PER_TABLE) {
+      this.broadcastSpectatorLimitReached(tableId)
+    }
     } catch (error) {
       console.error('Error in handleSpectatorConnection:', error)
       ws.close(1008, 'Internal error')
@@ -203,7 +217,25 @@ export class SpectatorWebSocketManager extends WebSocketManager {
     this.broadcastToTable(tableId, message)
   }
 
-  broadcastToSpectators(tableId: string, message: any, delay: number = 500): void {
+  private broadcastSpectatorLimitReached(tableId: string): void {
+    const message = createWebSocketMessage('spectator_limit_reached', { 
+      tableId,
+      limit: SpectatorWebSocketManager.MAX_SPECTATORS_PER_TABLE
+    })
+
+    // Send to all spectators at this table
+    const connectionIds = this.tableSpectatorConnections.get(tableId)
+    if (connectionIds) {
+      for (const connectionId of connectionIds) {
+        this.sendToSpectator(connectionId, message)
+      }
+    }
+
+    // Also send to all players at this table
+    this.broadcastToTable(tableId, message)
+  }
+
+  broadcastToSpectators(tableId: string, message: WebSocketMessage, delay: number = 500): void {
     // Schedule delayed broadcast
     setTimeout(() => {
       const connectionIds = this.tableSpectatorConnections.get(tableId)

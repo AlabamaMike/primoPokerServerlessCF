@@ -34,7 +34,7 @@ export class EnhancedWebSocketManager {
   private playerConnectionMap = new Map<string, string>(); // playerId -> connectionId
   private authManager: AuthenticationManager;
   private errorRecovery: ErrorRecoveryManager;
-  private gracePeriodConnections = new Map<string, NodeJS.Timeout>();
+  private gracePeriodConnections = new Map<string, number>();
 
   constructor(jwtSecret: string) {
     this.authManager = new AuthenticationManager(jwtSecret);
@@ -459,7 +459,7 @@ export class EnhancedWebSocketManager {
     await Promise.allSettled(promises);
   }
 
-  private connectionHealthIntervals = new Map<string, { ping: NodeJS.Timeout; stale: NodeJS.Timeout }>();
+  private connectionHealthIntervals = new Map<string, { ping: number; stale: number }>();
 
   private setupHealthMonitoring(connectionId: string): void {
     const connection = this.connections.get(connectionId);

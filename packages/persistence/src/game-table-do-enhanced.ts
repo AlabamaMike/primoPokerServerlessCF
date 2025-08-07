@@ -19,15 +19,15 @@ import {
 } from '@primo-poker/shared'
 import { 
   PokerGame, 
-  BettingEngine, 
+  BettingEngine,
+  BettingAction, 
   DeckManager, 
   StateSynchronizer,
   StateSnapshot,
   ConflictResolutionStrategy,
+  GameError,
   ErrorRecoveryManager,
-  OperationContext,
-  StateConflict as RecoveryStateConflict,
-  GameError
+  OperationContext
 } from '@primo-poker/core'
 
 export interface PlayerConnection {
@@ -60,6 +60,7 @@ export interface GameTablePlayer extends Player {
   hasActed: boolean
   chips: number
   holeCards: Card[]
+  isAllIn?: boolean
   disconnectedAt?: number
   autoFoldScheduled?: boolean
 }
@@ -93,7 +94,7 @@ export class EnhancedGameTableDurableObject {
   private stateSynchronizer: StateSynchronizer
   private currentStateVersion: number = 0
   private errorRecovery: ErrorRecoveryManager
-  private gracePeriodTimers: Map<string, NodeJS.Timeout> = new Map()
+  private gracePeriodTimers: Map<string, number> = new Map()
 
   // Constants
   private static readonly MIN_PLAYERS_FOR_GAME = 2
@@ -130,8 +131,6 @@ export class EnhancedGameTableDurableObject {
     this.deckManager = new DeckManager()
     this.stateSynchronizer = new StateSynchronizer({
       maxHistorySize: 100,
-      snapshotInterval: 50,
-      conflictResolution: ConflictResolutionStrategy.TIMESTAMP_FIRST,
     })
 
     // Set up auto-save
@@ -213,14 +212,15 @@ export class EnhancedGameTableDurableObject {
 
   private async handleWebSocketUpgrade(request: Request): Promise<Response> {
     const pair = new WebSocketPair()
-    const [client, server] = Object.values(pair)
+    const client = pair[0]
+    const server = pair[1]
     
     await this.handleWebSocketConnection(server, request)
     
     return new Response(null, {
       status: 101,
       webSocket: client,
-    })
+    } as any)
   }
 
   private async handleWebSocketConnection(ws: WebSocket, request: Request): Promise<void> {
@@ -309,7 +309,7 @@ export class EnhancedGameTableDurableObject {
     // Clear auto-fold if scheduled
     if (player && player.autoFoldScheduled) {
       player.autoFoldScheduled = false
-      player.disconnectedAt = undefined
+      delete player.disconnectedAt
     }
     
     // Send reconnection data
@@ -398,9 +398,9 @@ export class EnhancedGameTableDurableObject {
     player.autoFoldScheduled = true
     
     // Create fold action
-    const foldAction: PlayerAction = {
+    const foldAction: BettingAction = {
       playerId,
-      action: 'fold',
+      type: 'fold',
       amount: 0,
       timestamp: Date.now(),
     }
@@ -420,7 +420,7 @@ export class EnhancedGameTableDurableObject {
     
     switch (message.type) {
       case 'player_action':
-        await this.handlePlayerActionWithRecovery(playerId, message.payload as PlayerAction)
+        await this.handlePlayerActionWithRecovery(playerId, message.payload as BettingAction)
         break
       case 'heartbeat':
         this.handleHeartbeat(playerId)
@@ -433,7 +433,7 @@ export class EnhancedGameTableDurableObject {
     }
   }
 
-  private async handlePlayerActionWithRecovery(playerId: string, action: PlayerAction): Promise<void> {
+  private async handlePlayerActionWithRecovery(playerId: string, action: BettingAction): Promise<void> {
     const context: OperationContext = {
       operationName: 'player-action',
       resourceType: 'game-action',
@@ -453,15 +453,39 @@ export class EnhancedGameTableDurableObject {
           throw new GameRuleError('Player not at table')
         }
 
-        // Process action through betting engine
-        const result = await this.bettingEngine.processAction(
+        // Process action through betting engine - convert to GamePlayer format
+        const gamePlayers = new Map<string, any>()
+        this.state.players.forEach((player, id) => {
+          gamePlayers.set(id, {
+            ...player,
+            isAllIn: player.isAllIn || false
+          })
+        })
+        
+        const result = this.bettingEngine.processAction(
           action,
-          this.state.gameState,
-          Array.from(this.state.players.values())
+          gamePlayers,
+          this.state.gameState.pot || 0
         )
 
-        // Update game state
-        this.state.gameState = result.gameState
+        // Update game state - convert GamePlayer to GameTablePlayer
+        const updatedTablePlayers = new Map<string, GameTablePlayer>()
+        result.updatedPlayers.forEach((player, id) => {
+          const existingPlayer = this.state.players.get(id)
+          if (existingPlayer) {
+            // Update existing player with new data from GamePlayer
+            updatedTablePlayers.set(id, {
+              ...existingPlayer,
+              ...player,
+              holeCards: existingPlayer.holeCards // Preserve hole cards
+            })
+          }
+        })
+        this.state.players = updatedTablePlayers
+        
+        if (this.state.gameState) {
+          this.state.gameState.pot = result.newPot
+        }
         this.currentStateVersion++
 
         // Save state checkpoint
@@ -484,19 +508,32 @@ export class EnhancedGameTableDurableObject {
     await this.errorRecovery.executeWithRecovery(
       async () => {
         // Create state snapshot
+        const playerStates = new Map<string, any>()
+        this.state.players.forEach((player, id) => {
+          playerStates.set(id, {
+            id,
+            username: player.username,
+            chips: player.chips,
+            currentBet: player.currentBet,
+            hasActed: player.hasActed,
+            isFolded: player.isFolded,
+            position: player.position,
+          })
+        })
+        
         const snapshot: StateSnapshot = {
           version: this.currentStateVersion,
           timestamp: Date.now(),
           gameState: this.state.gameState!,
-          players: Array.from(this.state.players.values()),
-          checksum: '', // Would calculate actual checksum
+          playerStates,
+          hash: '', // Would calculate actual hash
         }
 
         this.state.stateCheckpoint = snapshot
 
         // Persist to durable storage
-        await this.durableObjectState.put('state', this.state)
-        await this.durableObjectState.put('snapshot', snapshot)
+        await this.durableObjectState.storage.put('state', JSON.stringify(this.state))
+        await this.durableObjectState.storage.put('snapshot', JSON.stringify(snapshot))
       },
       context
     )
@@ -614,11 +651,11 @@ export class EnhancedGameTableDurableObject {
   }
 
   // Handle state conflicts during recovery
-  async handleStateConflict(conflict: RecoveryStateConflict): Promise<void> {
+  async handleStateConflict(conflict: any): Promise<void> {
     const resolution = this.errorRecovery.handleStateConflict({
       conflictType: 'state-mismatch',
       localState: this.state.gameState,
-      remoteState: conflict.remoteState,
+      remoteState: conflict.remoteState || conflict,
       field: 'gameState',
     })
 

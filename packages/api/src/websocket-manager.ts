@@ -285,7 +285,7 @@ export class WebSocketManager {
       } catch (error) {
         logger.error('Error parsing WebSocket message', error, {
           playerId,
-          rawData: data
+          rawData: event.data
         })
       }
     }
@@ -398,7 +398,9 @@ export class WebSocketManager {
       msg.type !== 'pong'
     )
 
-    for (const message of missedMessages) {
+    for (let i = 0; i < missedMessages.length; i++) {
+      const message = missedMessages[i];
+      if (!message) continue;
       try {
         await this.sendToClient(client, message)
       } catch (error) {

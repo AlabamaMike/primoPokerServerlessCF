@@ -160,12 +160,15 @@ export class MetricsCollector {
       for (const key of list.keys) {
         const parts = key.name.split(':');
         const path = parts[1];
-        const timestamp = parseInt(parts[2]) * 60000;
-
-        if (timestamp >= oneMinuteAgo) {
-          const count = await this.kv.get(key.name);
-          if (count) {
-            aggregated[path] = (aggregated[path] || 0) + parseInt(count);
+        const timestampStr = parts[2];
+        
+        if (timestampStr) {
+          const timestamp = parseInt(timestampStr) * 60000;
+          if (timestamp >= oneMinuteAgo) {
+            const count = await this.kv.get(key.name);
+            if (count && path) {
+              aggregated[path] = (aggregated[path] || 0) + parseInt(count);
+            }
           }
         }
       }
@@ -188,7 +191,9 @@ export class MetricsCollector {
       });
 
       for (const key of list.keys) {
-        const timestamp = parseInt(key.name.split(':')[2]) * 60000;
+        const timestampStr = key.name.split(':')[2];
+        if (!timestampStr) continue;
+        const timestamp = parseInt(timestampStr) * 60000;
         if (timestamp >= startTime) {
           const count = await this.kv.get(key.name);
           if (count) {
@@ -374,18 +379,24 @@ export class MetricsCollector {
             };
           }
 
-          if (data.healthy) {
-            summary[data.objectName].healthyCount++;
-          } else {
-            summary[data.objectName].unhealthyCount++;
+          const objectData = summary[data.objectName];
+          if (objectData) {
+            if (data.healthy) {
+              objectData.healthyCount++;
+            } else {
+              objectData.unhealthyCount++;
+            }
           }
         }
       }
 
       // Calculate health rates
       for (const objectName in summary) {
-        const total = summary[objectName].healthyCount + summary[objectName].unhealthyCount;
-        summary[objectName].healthRate = total > 0 ? summary[objectName].healthyCount / total : 0;
+        const objectData = summary[objectName];
+        if (objectData) {
+          const total = objectData.healthyCount + objectData.unhealthyCount;
+          objectData.healthRate = total > 0 ? objectData.healthyCount / total : 0;
+        }
       }
     } catch (error) {
       logger.error('Failed to get Durable Object health summary', error as Error);

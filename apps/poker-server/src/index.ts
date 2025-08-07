@@ -1,7 +1,7 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
-import { logger, LogLevel, errorReporter } from '@primo-poker/core';
+import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
 
 // Export Durable Objects for Cloudflare Workers
 export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject };
@@ -44,9 +44,9 @@ export default {
     logger.setLogLevel(logLevel);
     
     // Configure error reporting (getInstance will handle options properly)
-    errorReporter.getInstance({
+    ErrorReporter.getInstance({
       analyticsEndpoint: env.ANALYTICS,
-      kvNamespace: env.SESSION_STORE, // Using SESSION_STORE for error storage
+      kvNamespace: env.SESSION_STORE as any, // Using SESSION_STORE for error storage
       environment: env.ENVIRONMENT,
       samplingRate: env.ENVIRONMENT === 'production' ? 0.1 : 1.0, // 10% sampling in production
     });
@@ -105,10 +105,15 @@ export default {
       return new Response('Not Found', { status: 404 });
 
     } catch (error) {
+      const headers: Record<string, string> = {};
+      request.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      
       const context = { 
         url: request.url,
         method: request.method,
-        headers: Object.fromEntries(request.headers.entries())
+        headers
       };
       
       logger.critical('Worker error', error, context);
@@ -173,16 +178,16 @@ export default {
 // WebSocket upgrade handler
 async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const token = url.searchParams.get('token');
-  const tableId = url.searchParams.get('tableId');
+  const token = url.searchParams.get('token') || undefined;
+  const tableId = url.searchParams.get('tableId') || undefined;
 
   logger.info('[WS] Upgrade request received', {
     url: url.toString(),
     hasToken: !!token,
-    tokenLength: token?.length,
-    tableId,
-    origin: request.headers.get('origin'),
-    upgrade: request.headers.get('upgrade')
+    tokenLength: token?.length || 0,
+    tableId: tableId || '',
+    origin: request.headers.get('origin') || '',
+    upgrade: request.headers.get('upgrade') || ''
   });
 
   // Validate required parameters

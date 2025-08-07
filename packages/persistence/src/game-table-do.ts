@@ -2169,8 +2169,8 @@ export class GameTableDurableObject {
     };
 
     // Memory usage information
-    if ((global as any).performance?.memory) {
-      const memory = (global as any).performance.memory;
+    if ((globalThis as any).performance?.memory) {
+      const memory = (globalThis as any).performance.memory;
       healthInfo.memoryUsage = {
         used: memory.usedJSHeapSize,
         total: memory.totalJSHeapSize,

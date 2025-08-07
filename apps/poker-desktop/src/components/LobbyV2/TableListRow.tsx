@@ -7,17 +7,20 @@ interface TableListRowProps {
   isSelected: boolean;
   onSelect: () => void;
   apiUrl?: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 const TableListRow: React.FC<TableListRowProps> = ({ 
   table, 
   isSelected, 
   onSelect,
-  apiUrl = ''
+  apiUrl = '',
+  isFavorite = false,
+  onToggleFavorite
 }) => {
-  const { favoriteTables, toggleFavorite, joinTable, joinWaitlist } = useLobbyStore();
+  const { joinTable, joinWaitlist } = useLobbyStore();
   const [isJoining, setIsJoining] = useState(false);
-  const isFavorite = favoriteTables.includes(table.id);
   const isFull = table.players >= table.maxPlayers;
   const hasWaitlist = table.waitlist > 0;
   
@@ -47,12 +50,12 @@ const TableListRow: React.FC<TableListRowProps> = ({
   const rowClassName = `
     grid grid-cols-12 gap-2 px-4 py-3 text-sm border-b border-slate-700/50 
     cursor-pointer transition-all
-    ${isSelected ? 'bg-purple-900/20 border-purple-500/30' : 'hover:bg-slate-800/30'}
+    ${isSelected ? 'bg-slate-800/50 border-purple-500/30' : 'hover:bg-slate-800/30'}
     ${table.features.includes('featured') ? 'bg-gradient-to-r from-purple-900/10 to-amber-900/10' : ''}
   `;
 
   return (
-    <div className={rowClassName} onClick={onSelect}>
+    <div className={rowClassName} onClick={onSelect} data-testid={`table-row-${table.id}`}>
       {/* Table Name */}
       <div className="col-span-3 font-medium flex items-center space-x-2">
         <span className={table.features.includes('featured') ? 'text-amber-400' : 'text-purple-400'}>
@@ -161,13 +164,14 @@ const TableListRow: React.FC<TableListRowProps> = ({
         <button 
           onClick={(e) => {
             e.stopPropagation();
-            toggleFavorite(table.id);
+            onToggleFavorite?.();
           }}
           className={`p-1.5 transition-colors ${
             isFavorite ? 'text-amber-400' : 'text-slate-400 hover:text-amber-400'
           }`}
+          data-testid={`favorite-button-${table.id}`}
         >
-          {isFavorite ? '⭐' : '☆'}
+          {isFavorite ? <span data-testid="favorite-star">⭐</span> : '☆'}
         </button>
       </div>
     </div>

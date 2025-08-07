@@ -34,16 +34,23 @@ export interface ModerationRepository {
   updateActionStatus(actionId: string, status: string): Promise<void>
 }
 
+export interface ModerationConfig {
+  warningThreshold: number
+  defaultMuteDuration: number
+  repeatMuteDuration: number
+}
+
 export class ModerationActionsManager {
   private repository: ModerationRepository
+  private config: ModerationConfig
   
-  // Escalation thresholds
-  private static readonly WARNING_THRESHOLD = 3
-  private static readonly DEFAULT_MUTE_DURATION = 5 * 60 * 1000 // 5 minutes
-  private static readonly REPEAT_MUTE_DURATION = 30 * 60 * 1000 // 30 minutes
-  
-  constructor(repository: ModerationRepository) {
+  constructor(repository: ModerationRepository, config?: ModerationConfig) {
     this.repository = repository
+    this.config = config || {
+      warningThreshold: 3,
+      defaultMuteDuration: 5 * 60 * 1000, // 5 minutes
+      repeatMuteDuration: 30 * 60 * 1000, // 30 minutes
+    }
   }
 
   async applyAction(request: ModerationActionRequest): Promise<ModerationAction> {
@@ -86,7 +93,7 @@ export class ModerationActionsManager {
 
     // Escalate after threshold warnings
     const warningCount = actions.filter(a => a.type === 'WARNING').length
-    return warningCount >= ModerationActionsManager.WARNING_THRESHOLD
+    return warningCount >= this.config.warningThreshold
   }
 
   async getNextAction(playerId: string): Promise<ModerationActionType> {
@@ -173,8 +180,8 @@ export class ModerationActionsManager {
     const previousMutes = actions.filter(a => a.type === 'MUTE').length
     
     return previousMutes > 0 
-      ? ModerationActionsManager.REPEAT_MUTE_DURATION 
-      : ModerationActionsManager.DEFAULT_MUTE_DURATION
+      ? this.config.repeatMuteDuration 
+      : this.config.defaultMuteDuration
   }
 
   async clearExpiredActions(playerId: string): Promise<void> {
@@ -189,6 +196,6 @@ export class ModerationActionsManager {
   }
 
   private generateActionId(): string {
-    return `mod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    return `mod_${crypto.randomUUID()}`
   }
 }

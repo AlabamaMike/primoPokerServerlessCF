@@ -1,10 +1,10 @@
 -- Moderation Actions Table
 CREATE TABLE IF NOT EXISTS moderation_actions (
   id TEXT PRIMARY KEY,
-  player_id TEXT NOT NULL,
+  player_id TEXT NOT NULL REFERENCES players(id),
   type TEXT NOT NULL CHECK (type IN ('WARNING', 'MUTE', 'SHADOW_BAN', 'BAN')),
   reason TEXT NOT NULL,
-  applied_by TEXT NOT NULL,
+  applied_by TEXT NOT NULL REFERENCES players(id),
   applied_at INTEGER NOT NULL,
   expires_at INTEGER,
   metadata TEXT, -- JSON stored as text
@@ -21,12 +21,12 @@ CREATE INDEX idx_moderation_actions_type ON moderation_actions(type);
 CREATE TABLE IF NOT EXISTS message_reports (
   id TEXT PRIMARY KEY,
   message_id TEXT NOT NULL,
-  player_id TEXT NOT NULL, -- The player who sent the reported message
-  reported_by TEXT NOT NULL,
+  player_id TEXT NOT NULL REFERENCES players(id), -- The player who sent the reported message
+  reported_by TEXT NOT NULL REFERENCES players(id),
   reason TEXT NOT NULL,
   reported_at INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'AUTO_ACTIONED')),
-  reviewed_by TEXT,
+  reviewed_by TEXT REFERENCES players(id),
   reviewed_at INTEGER,
   action_taken TEXT CHECK (action_taken IN ('WARNING', 'MUTE', 'SHADOW_BAN', 'BAN')),
   notes TEXT,

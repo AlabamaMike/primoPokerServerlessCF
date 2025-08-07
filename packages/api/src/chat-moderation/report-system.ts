@@ -237,6 +237,6 @@ export class ReportSystem {
   }
 
   private generateReportId(): string {
-    return `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    return `report_${crypto.randomUUID()}`
   }
 }

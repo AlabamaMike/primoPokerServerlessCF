@@ -1,10 +1,10 @@
-import { Hono } from 'hono'
+import { Hono, Context, Next } from 'hono'
 import { z } from 'zod'
-import { authenticateUser } from '../middleware/auth'
+import { authenticateUser, AuthUser } from '../middleware/auth'
 import { D1Database } from '@cloudflare/workers-types'
-import { ModerationActionsManager, ModerationRepository } from '../chat-moderation/moderation-actions'
+import { ModerationActionsManager, ModerationRepository, ModerationConfig } from '../chat-moderation/moderation-actions'
 import { ReportSystem, ReportRepository } from '../chat-moderation/report-system'
-import { ProfanityFilter } from '@primo-poker/shared'
+import { ProfanityFilter, ProfanityConfig } from '@primo-poker/shared'
 import { ContentValidator } from '../chat-moderation/content-validator'
 
 interface ModerationEnv {
@@ -38,12 +38,34 @@ const validateMessageSchema = z.object({
   message: z.string(),
 })
 
+// Helper function to load profanity configuration
+async function loadProfanityConfig(): Promise<ProfanityConfig | undefined> {
+  try {
+    // In production, this could be loaded from a database or configuration service
+    // For now, return undefined to use default configuration
+    return undefined
+  } catch (error) {
+    console.error('Failed to load profanity config:', error)
+    return undefined
+  }
+}
+
+// Helper function to get moderation configuration
+function getModerationConfig(): ModerationConfig {
+  // In production, these values could come from environment variables or database
+  return {
+    warningThreshold: 3,
+    defaultMuteDuration: 5 * 60 * 1000, // 5 minutes
+    repeatMuteDuration: 30 * 60 * 1000, // 30 minutes
+  }
+}
+
 export const createModerationRoutes = () => {
   const app = new Hono<{ Bindings: ModerationEnv }>()
 
   // Middleware to check moderator permissions
-  const requireModerator = async (c: any, next: any) => {
-    const user = c.get('user')
+  const requireModerator = async (c: Context<{ Bindings: ModerationEnv }>, next: Next) => {
+    const user = c.get('user') as AuthUser
     if (!user.roles?.includes('moderator') && !user.roles?.includes('admin')) {
       return c.json({ error: 'Insufficient permissions' }, 403)
     }
@@ -53,13 +75,13 @@ export const createModerationRoutes = () => {
   // Report a message
   app.post('/report', authenticateUser, async (c) => {
     try {
-      const user = c.get('user')
+      const user = c.get('user') as AuthUser
       const body = await c.req.json()
       const validated = reportMessageSchema.parse(body)
 
       const reportRepo = createReportRepository(c.env.DB)
       const actionsRepo = createModerationRepository(c.env.DB)
-      const actionsManager = new ModerationActionsManager(actionsRepo)
+      const actionsManager = new ModerationActionsManager(actionsRepo, getModerationConfig())
       
       const reportSystem = new ReportSystem(reportRepo, actionsManager, {
         autoActionThreshold: 3,
@@ -118,14 +140,14 @@ export const createModerationRoutes = () => {
   // Process a report (moderator only)
   app.post('/reports/:reportId/process', authenticateUser, requireModerator, async (c) => {
     try {
-      const user = c.get('user')
+      const user = c.get('user') as AuthUser
       const reportId = c.req.param('reportId')
       const body = await c.req.json()
       const validated = processReportSchema.parse(body)
 
       const reportRepo = createReportRepository(c.env.DB)
       const actionsRepo = createModerationRepository(c.env.DB)
-      const actionsManager = new ModerationActionsManager(actionsRepo)
+      const actionsManager = new ModerationActionsManager(actionsRepo, getModerationConfig())
       
       const reportSystem = new ReportSystem(reportRepo, actionsManager, {
         autoActionThreshold: 3,
@@ -152,12 +174,12 @@ export const createModerationRoutes = () => {
   // Apply moderation action directly (moderator only)
   app.post('/actions', authenticateUser, requireModerator, async (c) => {
     try {
-      const user = c.get('user')
+      const user = c.get('user') as AuthUser
       const body = await c.req.json()
       const validated = applyActionSchema.parse(body)
 
       const actionsRepo = createModerationRepository(c.env.DB)
-      const actionsManager = new ModerationActionsManager(actionsRepo)
+      const actionsManager = new ModerationActionsManager(actionsRepo, getModerationConfig())
 
       const action = await actionsManager.applyAction({
         ...validated,
@@ -174,7 +196,7 @@ export const createModerationRoutes = () => {
   app.get('/players/:playerId/restrictions', authenticateUser, async (c) => {
     try {
       const playerId = c.req.param('playerId')
-      const user = c.get('user')
+      const user = c.get('user') as AuthUser
 
       // Players can only view their own restrictions unless they're moderators
       if (playerId !== user.playerId && !user.roles?.includes('moderator') && !user.roles?.includes('admin')) {
@@ -182,7 +204,7 @@ export const createModerationRoutes = () => {
       }
 
       const actionsRepo = createModerationRepository(c.env.DB)
-      const actionsManager = new ModerationActionsManager(actionsRepo)
+      const actionsManager = new ModerationActionsManager(actionsRepo, getModerationConfig())
 
       const restrictions = await actionsManager.getPlayerRestrictions(playerId)
 
@@ -235,7 +257,8 @@ export const createModerationRoutes = () => {
       const body = await c.req.json()
       const validated = validateMessageSchema.parse(body)
 
-      const profanityFilter = new ProfanityFilter()
+      const profanityConfig = await loadProfanityConfig()
+      const profanityFilter = new ProfanityFilter(profanityConfig)
       const validator = new ContentValidator({
         profanityFilter,
         maxMessageLength: 500,

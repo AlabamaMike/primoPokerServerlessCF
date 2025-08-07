@@ -1,4 +1,4 @@
-import { ModerationAction, ModerationActionType, ModerationActionsManager } from '../chat-moderation/moderation-actions'
+import { ModerationAction, ModerationActionType, ModerationActionsManager, ModerationConfig } from '../chat-moderation/moderation-actions'
 
 describe('ModerationActionsManager', () => {
   let manager: ModerationActionsManager
@@ -12,7 +12,13 @@ describe('ModerationActionsManager', () => {
       updateActionStatus: jest.fn(),
     }
     
-    manager = new ModerationActionsManager(mockRepository)
+    const config: ModerationConfig = {
+      warningThreshold: 3,
+      defaultMuteDuration: 5 * 60 * 1000,
+      repeatMuteDuration: 30 * 60 * 1000,
+    }
+    
+    manager = new ModerationActionsManager(mockRepository, config)
   })
 
   describe('applyAction', () => {

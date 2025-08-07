@@ -1,5 +1,6 @@
 import { ErrorSanitizer } from './error-sanitizer';
 import { Logger, LoggerFactory } from '@primo-poker/logging';
+import { parseCircuitBreakerConfig, type CircuitBreakerConfig as ValidatedCircuitBreakerConfig } from './config-validation';
 
 export type CircuitBreakerState = 'closed' | 'open' | 'half-open';
 
@@ -25,16 +26,21 @@ export class CircuitBreaker {
   private halfOpenRequests = 0;
   private metricsResetTime: number;
   private readonly logger: Logger;
+  private readonly config: CircuitBreakerConfig;
 
   constructor(
     private readonly name: string,
-    private readonly config: CircuitBreakerConfig
+    config: CircuitBreakerConfig
   ) {
-    this.metricsResetTime = Date.now() + config.monitoringPeriod;
+    // Validate configuration
+    const validatedConfig = parseCircuitBreakerConfig(config);
+    this.config = validatedConfig;
+    
+    this.metricsResetTime = Date.now() + validatedConfig.monitoringPeriod;
     this.logger = LoggerFactory.getInstance().getLogger('circuit-breaker').withContext({
       circuitBreaker: name,
     });
-    this.logger.info('Circuit breaker initialized', { config });
+    this.logger.info('Circuit breaker initialized', { config: validatedConfig });
   }
 
   async execute<T>(operation: () => Promise<T>): Promise<T> {

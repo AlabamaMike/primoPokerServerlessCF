@@ -1,4 +1,5 @@
 import { Logger, LoggerFactory } from '@primo-poker/logging';
+import { parseRetryPolicy, type RetryPolicy as ValidatedRetryPolicy } from './config-validation';
 
 export interface RetryPolicy {
   maxAttempts: number;
@@ -16,8 +17,11 @@ export interface RetryContext {
 
 export class RetryPolicyExecutor {
   private readonly logger: Logger;
+  private readonly policy: RetryPolicy;
 
-  constructor(private readonly policy: RetryPolicy) {
+  constructor(policy: RetryPolicy) {
+    // Validate configuration
+    this.policy = parseRetryPolicy(policy);
     this.logger = LoggerFactory.getInstance().getLogger('retry-policy');
   }
 

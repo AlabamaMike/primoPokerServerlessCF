@@ -3,9 +3,11 @@ import { testSafeInvoke } from '../utils/test-utils';
 
 interface User {
   id: string;
+  playerId?: string; // For compatibility with backend
   username: string;
   email: string;
   name?: string;
+  roles?: string[];
 }
 
 interface AuthToken {
@@ -27,6 +29,7 @@ interface AuthState {
   isLoading: boolean;
   error: AuthError | null;
   tokenExpiry: Date | null;
+  token?: string; // Current access token
   
   // Actions
   login: (apiUrl: string, email: string, password: string) => Promise<void>;
@@ -34,6 +37,7 @@ interface AuthState {
   checkAuth: () => Promise<void>;
   clearError: () => void;
   refreshToken: () => Promise<void>;
+  setUser: (user: User) => void; // For testing
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -42,6 +46,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   error: null,
   tokenExpiry: null,
+  token: undefined,
 
   login: async (apiUrl: string, email: string, password: string) => {
     set({ isLoading: true, error: null });
@@ -62,11 +67,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         : new Date(Date.now() + 3600000); // Default 1 hour
       
       set({
-        user: response.user,
+        user: {
+          ...response.user,
+          playerId: response.user.playerId || response.user.id,
+        },
         isAuthenticated: true,
         isLoading: false,
         error: null,
         tokenExpiry,
+        token: response.tokens.accessToken,
       });
     } catch (error) {
       const authError: AuthError = {
@@ -199,5 +208,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       throw authError;
     }
+  },
+
+  setUser: (user: User) => {
+    set({ 
+      user: {
+        ...user,
+        playerId: user.playerId || user.id,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+    });
   },
 }));

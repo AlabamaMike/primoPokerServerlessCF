@@ -410,9 +410,6 @@ export class WalletManagerDurableObject {
     const existingLock = this.transactionLocks.get(playerId)
     
     // Create a new lock that waits for the existing one to complete
-<<<<<<< HEAD
-    // eslint-disable-next-line prefer-const
-=======
     let lockPromise: Promise<T>
     
     const lockExecutor = async () => {
@@ -522,11 +519,6 @@ export class WalletManagerDurableObject {
       return this.createErrorResponse('Player ID required')
     }
 
-<<<<<<< HEAD
-    const wallet = await this.getOrCreateWallet(playerId)
-    const frozenAmount = this.calculateFrozenAmount(playerId)
-    const availableBalance = wallet.balance - frozenAmount
-=======
     // Check rate limit
     const rateLimitResult = this.securityManager.checkRateLimit(playerId, url.pathname)
     if (!rateLimitResult.allowed) {

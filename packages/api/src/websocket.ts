@@ -23,7 +23,7 @@ export interface WebSocketConnection {
 export class WebSocketManager {
   private connections = new Map<string, WebSocketConnection>();
   private tableConnections = new Map<string, Set<string>>();
-  private authManager: AuthenticationManager;
+  protected authManager: AuthenticationManager;
 
   constructor(jwtSecret: string) {
     this.authManager = new AuthenticationManager(jwtSecret);
@@ -273,7 +273,7 @@ export class WebSocketManager {
     }
   }
 
-  private sendError(connectionId: string, message: string): void {
+  protected sendError(connectionId: string, message: string): void {
     this.sendMessage(connectionId, createWebSocketMessage('error', { message }));
   }
 
@@ -358,6 +358,7 @@ export class WebSocketManager {
   public getActiveConnections(): number {
     return this.connections.size;
   }
+
 
   public closeTableConnections(tableId: string): void {
     const connectionIds = this.tableConnections.get(tableId);

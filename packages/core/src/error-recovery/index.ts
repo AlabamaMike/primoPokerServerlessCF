@@ -33,6 +33,41 @@ export type {
 } from './metrics/types';
 export { DEFAULT_RESOURCE_CONFIGS } from './metrics/types';
 
+// Configuration validation exports
+export {
+  CircuitBreakerConfigSchema,
+  RetryPolicySchema,
+  ErrorRecoveryConfigSchema,
+  parseCircuitBreakerConfig,
+  parseRetryPolicy,
+  parseErrorRecoveryConfig,
+  formatValidationError
+} from './config-validation';
+export type {
+  CircuitBreakerConfig as ValidatedCircuitBreakerConfig,
+  RetryPolicy as ValidatedRetryPolicy,
+  ErrorRecoveryConfig
+} from './config-validation';
+
+// Configuration management exports
+export { ErrorRecoveryConfigManager } from './config-manager';
+
+// Configuration migration exports
+export { ConfigMigrator, configMigrator } from './config-migration';
+export type { ConfigMigration } from './config-migration';
+
+// Configuration testing utilities exports
+export {
+  generateValidCircuitBreakerConfig,
+  generateValidRetryPolicy,
+  generateValidErrorRecoveryConfig,
+  invalidConfigs,
+  validateConfigWithDetails,
+  createConfigValidator,
+  generateEdgeCaseConfigs,
+  MockConfigStore
+} from './config-test-utils';
+
 // Re-export the default instance for convenience
 import ErrorRecoveryManager from './error-recovery-manager';
 export default ErrorRecoveryManager;

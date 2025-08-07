@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">4.97% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>9/181</span>
+                <span class='fraction'>0/181</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">4.16% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/24</span>
+                <span class='fraction'>0/24</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">5.35% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>9/168</span>
+                <span class='fraction'>0/168</span>
             </div>
         
             
@@ -682,20 +682,14 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -723,16 +717,22 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1294,14 +1294,14 @@
  * for real-time chat functionality with persistence and moderation.
  */
 &nbsp;
-import {
+<span class="cstat-no" title="statement not covered" >import {</span>
   WebSocketMessage,
   ChatMessage,
   createWebSocketMessage,
   ValidationUtils,
 } from '@primo-poker/shared'
-import { WebSocketManager, WebSocketConnection } from './websocket'
-import { ChatPersistenceRepository, ChatHistoryParams } from './repositories/chat-repository'
+<span class="cstat-no" title="statement not covered" >import { WebSocketManager, WebSocketConnection } from './websocket'</span>
+<span class="cstat-no" title="statement not covered" >import { ChatPersistenceRepository, ChatHistoryParams } from './repositories/chat-repository'</span>
 import { DurableObjectNamespace, D1Database } from '@cloudflare/workers-types'
 &nbsp;
 export interface ChatWebSocketEnv {
@@ -1335,16 +1335,16 @@ export interface ChatCommand {
   args: string[]
 }
 &nbsp;
-export class ChatEnhancedWebSocketManager extends WebSocketManager {
+<span class="cstat-no" title="statement not covered" >export class C</span>hatEnhancedWebSocketManager extends WebSocketManager {
   private chatModerator: DurableObjectNamespace
   private chatRepository: ChatPersistenceRepository
-  private messageQueue = new Map&lt;string, QueuedMessage[]&gt;()
-  private deliveryConfirmations = new Map&lt;string, DeliveryConfirmation&gt;()
+  private messageQueue = <span class="cstat-no" title="statement not covered" >new Map&lt;string, QueuedMessage[]&gt;()</span>
+  private deliveryConfirmations = <span class="cstat-no" title="statement not covered" >new Map&lt;string, DeliveryConfirmation&gt;()</span>
 &nbsp;
-  constructor(env: ChatWebSocketEnv) {
-    super(env.JWT_SECRET)
-    this.chatModerator = env.CHAT_MODERATOR
-    this.chatRepository = new ChatPersistenceRepository(env.DB)
+<span class="fstat-no" title="function not covered" >  constructor(e</span>nv: ChatWebSocketEnv) {
+<span class="cstat-no" title="statement not covered" >    super(env.JWT_SECRET)</span>
+<span class="cstat-no" title="statement not covered" >    this.chatModerator = env.CHAT_MODERATOR</span>
+<span class="cstat-no" title="statement not covered" >    this.chatRepository = new ChatPersistenceRepository(env.DB)</span>
   }
 &nbsp;
   /**
@@ -1906,7 +1906,7 @@ interface DeliveryConfirmation {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-08-07T22:13:19.260Z
+                at 2025-08-07T22:52:43.162Z
             </div>
         <script src="../prettify.js"></script>
         <script>

@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">6.04% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>9/149</span>
+                <span class='fraction'>0/149</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">5.12% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/39</span>
+                <span class='fraction'>0/39</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">8.69% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>2/23</span>
+                <span class='fraction'>0/23</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">5.79% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>8/138</span>
+                <span class='fraction'>0/138</span>
             </div>
         
             
@@ -456,7 +456,7 @@
 <a name='L391'></a><a href='#L391'>391</a>
 <a name='L392'></a><a href='#L392'>392</a>
 <a name='L393'></a><a href='#L393'>393</a>
-<a name='L394'></a><a href='#L394'>394</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">7x</span>
+<a name='L394'></a><a href='#L394'>394</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -467,7 +467,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -478,13 +478,13 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
-<span class="cline-any cline-yes">102x</span>
-<span class="cline-any cline-yes">102x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">102x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -720,8 +720,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">111x</span>
-<span class="cline-any cline-yes">111x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -849,7 +849,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import {
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import {</span>
   WebSocketMessage,
   GameUpdateMessage,
   PlayerActionMessage,
@@ -860,7 +860,7 @@
   RandomUtils,
   createWebSocketMessage,
 } from '@primo-poker/shared';
-import { AuthenticationManager, TokenPayload } from '@primo-poker/security';
+<span class="cstat-no" title="statement not covered" >import { AuthenticationManager, TokenPayload } from '@primo-poker/security';</span>
 &nbsp;
 export interface WebSocketConnection {
   ws: WebSocket;
@@ -871,13 +871,13 @@ export interface WebSocketConnection {
   lastActivity: Date;
 }
 &nbsp;
-export class WebSocketManager {
-  private connections = new Map&lt;string, WebSocketConnection&gt;();
-  private tableConnections = new Map&lt;string, Set&lt;string&gt;&gt;();
+<span class="cstat-no" title="statement not covered" >export class W</span>ebSocketManager {
+  private connections = <span class="cstat-no" title="statement not covered" >new Map&lt;string, WebSocketConnection&gt;();</span>
+  private tableConnections = <span class="cstat-no" title="statement not covered" >new Map&lt;string, Set&lt;string&gt;&gt;();</span>
   protected authManager: AuthenticationManager;
 &nbsp;
-  constructor(jwtSecret: string) {
-    this.authManager = new AuthenticationManager(jwtSecret);
+<span class="fstat-no" title="function not covered" >  constructor(j</span>wtSecret: string) {
+<span class="cstat-no" title="statement not covered" >    this.authManager = new AuthenticationManager(jwtSecret);</span>
   }
 &nbsp;
 <span class="fstat-no" title="function not covered" >  async </span>handleConnection(ws: WebSocket, request: Request): Promise&lt;void&gt; {
@@ -1112,9 +1112,9 @@ export class WebSocketManager {
 <span class="cstat-no" title="statement not covered" >    this.broadcastToTable(connection.tableId, disconnectNotification);</span>
   }
 &nbsp;
-  private sendMessage(connectionId: string, message: WebSocketMessage): void {
-    const connection = this.connections.get(connectionId);
-    if (!connection || <span class="branch-1 cbranch-no" title="branch not covered" >connection.ws.readyState !== WebSocket.OPEN)</span> return;
+  private <span class="fstat-no" title="function not covered" >sendMessage(</span>connectionId: string, message: WebSocketMessage): void {
+    const connection = <span class="cstat-no" title="statement not covered" >this.connections.get(connectionId);</span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!connection || connection.ws.readyState !== WebSocket.OPEN) <span class="cstat-no" title="statement not covered" >return;</span></span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      connection.ws.send(JSON.stringify(message));</span>
@@ -1249,7 +1249,7 @@ export class WebSocketManager {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-08-07T22:13:19.260Z
+                at 2025-08-07T22:52:43.162Z
             </div>
         <script src="../prettify.js"></script>
         <script>

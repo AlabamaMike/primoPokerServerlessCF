@@ -386,7 +386,7 @@ export class WalletManager {
 
       return {
         success: true,
-        newBalance: wallet.balance - wallet.frozen,
+        newBalance: wallet.balance,
         transferredAmount: amount,
         transactionId
       };

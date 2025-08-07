@@ -36,42 +36,10 @@ export class IdempotencyManager {
         logger.info('Returning cached idempotent response', { idempotencyKey });
         
         // Clone the response to avoid issues with body being already read
-        return new Response(cached.response.body, {
-          status: cached.response.status,
-          statusText: cached.response.statusText,
-          headers: new Headers(cached.response.headers)
-        });
+        return cached.response.clone();
       }
 
-      // Store the original handle method
-      const originalHandle = (request as any).handle;
-      
-      // Override the handle method to capture the response
-      (request as any).handle = async (...args: any[]) => {
-        const response = await originalHandle.apply(request, args);
-        
-        // Only cache successful responses
-        if (response && response.status >= 200 && response.status < 300) {
-          // Clone the response before caching
-          const clonedResponse = new Response(response.body, {
-            status: response.status,
-            statusText: response.statusText,
-            headers: new Headers(response.headers)
-          });
-          
-          this.cache.set(idempotencyKey, {
-            response: clonedResponse,
-            expiresAt: Date.now() + this.TTL
-          });
-          
-          logger.debug('Cached idempotent response', { 
-            idempotencyKey,
-            status: response.status 
-          });
-        }
-        
-        return response;
-      };
+      // No cached response found, proceed to handler. Caching must be handled in the handler or via a wrapper.
     };
   }
 

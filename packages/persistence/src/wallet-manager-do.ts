@@ -318,6 +318,7 @@ export class WalletManagerDurableObject {
     const existingLock = this.transactionLocks.get(playerId)
     
     // Create a new lock that waits for the existing one to complete
+    // eslint-disable-next-line prefer-const
     let lockPromise: Promise<T>
     
     const lockExecutor = async () => {

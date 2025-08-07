@@ -16,8 +16,8 @@ export class RateLimiter {
   private limits: Map<string, RateLimitEntry> = new Map();
   
   constructor(private config: RateLimitConfig) {
-    // Clean up expired entries periodically
-    setInterval(() => this.cleanup(), config.windowMs);
+    // Note: In Cloudflare Workers, we cannot use setInterval
+    // Cleanup happens on each request instead
   }
 
   /**
@@ -25,6 +25,9 @@ export class RateLimiter {
    */
   middleware() {
     return async (request: IRequest): Promise<Response | void> => {
+      // Cleanup expired entries on each request (Cloudflare Workers doesn't support setInterval)
+      this.cleanup();
+      
       const key = this.getKey(request);
       const now = Date.now();
       
@@ -71,13 +74,10 @@ export class RateLimiter {
       // Increment counter
       entry.count++;
       
-      // Add rate limit headers to help clients
-      if (request.headers) {
-        const remaining = this.config.maxRequests - entry.count;
-        request.headers.set('X-RateLimit-Limit', this.config.maxRequests.toString());
-        request.headers.set('X-RateLimit-Remaining', remaining.toString());
-        request.headers.set('X-RateLimit-Reset', new Date(entry.resetTime).toISOString());
-      }
+      // To help clients, downstream handlers should set the following rate limit headers on the response:
+      // 'X-RateLimit-Limit': this.config.maxRequests.toString()
+      // 'X-RateLimit-Remaining': (this.config.maxRequests - entry.count).toString()
+      // 'X-RateLimit-Reset': new Date(entry.resetTime).toISOString()
     };
   }
 

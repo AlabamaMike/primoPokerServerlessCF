@@ -564,7 +564,7 @@ describe('Wallet API Endpoints', () => {
       // Should implement rate limiting - check all requests complete
       // All requests should succeed since we're not enforcing rate limits in tests
       responses.forEach(response => {
-        expect(response.status).toBe(500); // Currently returns 500 due to mock not setup properly
+        expect(response.status).toBe(200); // Should succeed in tests
       });
     });
   });

@@ -1,0 +1,144 @@
+import { IRequest } from 'itty-router';
+import { logger } from '@primo-poker/core';
+
+interface RateLimitConfig {
+  windowMs: number;     // Time window in milliseconds
+  maxRequests: number;  // Max requests per window
+  keyGenerator?: (request: IRequest) => string; // Function to generate rate limit key
+}
+
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
+export class RateLimiter {
+  private limits: Map<string, RateLimitEntry> = new Map();
+  
+  constructor(private config: RateLimitConfig) {
+    // Clean up expired entries periodically
+    setInterval(() => this.cleanup(), config.windowMs);
+  }
+
+  /**
+   * Middleware to check rate limits
+   */
+  middleware() {
+    return async (request: IRequest): Promise<Response | void> => {
+      const key = this.getKey(request);
+      const now = Date.now();
+      
+      const entry = this.limits.get(key);
+      
+      if (!entry || entry.resetTime <= now) {
+        // Create new entry or reset existing one
+        this.limits.set(key, {
+          count: 1,
+          resetTime: now + this.config.windowMs
+        });
+        return; // Allow request
+      }
+      
+      if (entry.count >= this.config.maxRequests) {
+        const retryAfter = Math.ceil((entry.resetTime - now) / 1000);
+        
+        logger.warn('Rate limit exceeded', {
+          key,
+          count: entry.count,
+          maxRequests: this.config.maxRequests,
+          retryAfter
+        });
+        
+        return new Response(JSON.stringify({
+          success: false,
+          error: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: 'Too many requests. Please try again later.',
+            retryAfter
+          }
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': retryAfter.toString(),
+            'X-RateLimit-Limit': this.config.maxRequests.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': new Date(entry.resetTime).toISOString()
+          }
+        });
+      }
+      
+      // Increment counter
+      entry.count++;
+      
+      // Add rate limit headers to help clients
+      if (request.headers) {
+        const remaining = this.config.maxRequests - entry.count;
+        request.headers.set('X-RateLimit-Limit', this.config.maxRequests.toString());
+        request.headers.set('X-RateLimit-Remaining', remaining.toString());
+        request.headers.set('X-RateLimit-Reset', new Date(entry.resetTime).toISOString());
+      }
+    };
+  }
+
+  /**
+   * Generate rate limit key for request
+   */
+  private getKey(request: IRequest): string {
+    if (this.config.keyGenerator) {
+      return this.config.keyGenerator(request);
+    }
+    
+    // Default: Use IP address or fallback to a generic key
+    const ip = request.headers?.get('CF-Connecting-IP') || 
+               request.headers?.get('X-Forwarded-For') || 
+               'unknown';
+    
+    return `rate-limit:${ip}`;
+  }
+
+  /**
+   * Clean up expired entries
+   */
+  private cleanup(): void {
+    const now = Date.now();
+    const expiredKeys: string[] = [];
+    
+    for (const [key, entry] of this.limits.entries()) {
+      if (entry.resetTime <= now) {
+        expiredKeys.push(key);
+      }
+    }
+    
+    for (const key of expiredKeys) {
+      this.limits.delete(key);
+    }
+    
+    if (expiredKeys.length > 0) {
+      logger.debug('Cleaned up rate limit entries', { count: expiredKeys.length });
+    }
+  }
+}
+
+// Pre-configured rate limiters for different endpoints
+export const walletRateLimiter = new RateLimiter({
+  windowMs: 60 * 1000,     // 1 minute
+  maxRequests: 10,         // 10 requests per minute
+  keyGenerator: (request) => {
+    // Rate limit by authenticated user ID
+    const userId = (request as any).user?.userId || 'anonymous';
+    return `wallet:${userId}`;
+  }
+});
+
+export const authRateLimiter = new RateLimiter({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  maxRequests: 5,            // 5 attempts per 15 minutes
+  keyGenerator: (request) => {
+    // Rate limit by IP for auth endpoints
+    const ip = request.headers?.get('CF-Connecting-IP') || 
+               request.headers?.get('X-Forwarded-For') || 
+               'unknown';
+    return `auth:${ip}`;
+  }
+});

@@ -362,8 +362,7 @@ export class LobbyCoordinatorDurableObject {
         gameType: table.gameType,
         stakes: {
           smallBlind: table.stakes.smallBlind,
-          bigBlind: table.stakes.bigBlind,
-          currency: table.stakes.currency || 'USD'
+          bigBlind: table.stakes.bigBlind
         },
         seats: {
           total: table.maxPlayers,
@@ -376,7 +375,7 @@ export class LobbyCoordinatorDurableObject {
           playersPerFlop: this.calculatePlayersPerFlop(table)
         },
         waitingList: table.waitingList || 0,
-        isActive: table.status === 'playing',
+        isActive: table.status === 'active',
         createdAt: new Date(table.createdAt).toISOString()
       }))
 
@@ -1053,10 +1052,13 @@ export class LobbyCoordinatorDurableObject {
 
       // Filter by available seats
       if (filters.seatsAvailable) {
-        const [min, max] = filters.seatsAvailable.split('-').map(Number)
-        const availableSeats = table.maxPlayers - table.currentPlayers
-        if (availableSeats < min || availableSeats > max) {
-          return false
+        const parts = filters.seatsAvailable.split('-').map(Number)
+        if (parts.length === 2) {
+          const [min, max] = parts
+          const availableSeats = table.maxPlayers - table.currentPlayers
+          if (availableSeats < min || availableSeats > max) {
+            return false
+          }
         }
       }
 
@@ -1128,7 +1130,7 @@ export class LobbyCoordinatorDurableObject {
 
     return {
       tables: paginatedTables,
-      nextCursor,
+      nextCursor: nextCursor || undefined,
       hasMore
     }
   }

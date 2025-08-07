@@ -15,6 +15,14 @@ import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-pok
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
+import { 
+  DepositRequestSchema, 
+  WithdrawRequestSchema, 
+  TransferRequestSchema,
+  TransactionQuerySchema,
+  validateRequestBody,
+  validateQueryParams
+} from './validation/wallet-schemas';
 
 // Extended request interface with authentication
 interface AuthenticatedRequest extends IRequest {
@@ -840,29 +848,17 @@ export class PokerAPIRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json() as { amount: number; method: string };
+      const body = await request.json();
+      const validation = validateRequestBody(DepositRequestSchema, body);
       
-      // Validate request
-      if (!body.amount || !body.method) {
-        return this.errorResponse('Amount and method are required', 400);
-      }
-
-      if (typeof body.amount !== 'number') {
-        return this.errorResponse('Amount must be a number', 400);
-      }
-
-      if (body.amount <= 0) {
-        return this.errorResponse('Amount must be positive', 400);
-      }
-
-      if (!['credit_card', 'bank'].includes(body.method)) {
-        return this.errorResponse('Invalid payment method', 400);
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
       }
 
       const result = await this.walletManager.deposit(
         request.user.userId, 
-        body.amount, 
-        body.method as 'credit_card' | 'bank'
+        validation.data.amount, 
+        validation.data.method
       );
 
       if (!result.success) {
@@ -886,29 +882,17 @@ export class PokerAPIRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json() as { amount: number; method: string };
+      const body = await request.json();
+      const validation = validateRequestBody(WithdrawRequestSchema, body);
       
-      // Validate request
-      if (!body.amount || !body.method) {
-        return this.errorResponse('Amount and method are required', 400);
-      }
-
-      if (typeof body.amount !== 'number') {
-        return this.errorResponse('Amount must be a number', 400);
-      }
-
-      if (body.amount <= 0) {
-        return this.errorResponse('Amount must be positive', 400);
-      }
-
-      if (!['bank', 'check'].includes(body.method)) {
-        return this.errorResponse('Invalid withdrawal method', 400);
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
       }
 
       const result = await this.walletManager.withdraw(
         request.user.userId,
-        body.amount,
-        body.method as 'bank' | 'check'
+        validation.data.amount,
+        validation.data.method
       );
 
       if (!result.success) {
@@ -932,25 +916,17 @@ export class PokerAPIRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json() as { to_table_id: string; amount: number };
+      const body = await request.json();
+      const validation = validateRequestBody(TransferRequestSchema, body);
       
-      // Validate request
-      if (!body.to_table_id || !body.amount) {
-        return this.errorResponse('Table ID and amount are required', 400);
-      }
-
-      if (typeof body.amount !== 'number') {
-        return this.errorResponse('Amount must be a number', 400);
-      }
-
-      if (body.amount <= 0) {
-        return this.errorResponse('Amount must be positive', 400);
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
       }
 
       const result = await this.walletManager.transfer(
         request.user.userId,
-        body.to_table_id,
-        body.amount
+        validation.data.to_table_id,
+        validation.data.amount
       );
 
       if (!result.success) {
@@ -1025,8 +1001,13 @@ export class PokerAPIRoutes {
       }
 
       const url = new URL(request.url);
-      const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit') || '20')));
-      const cursor = url.searchParams.get('cursor') || undefined;
+      const validation = validateQueryParams(TransactionQuerySchema, url.searchParams);
+      
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
+
+      const { limit = 20, cursor } = validation.data;
       
       const result = await this.walletManager.getTransactionHistory(request.user.userId, limit, cursor);
       return this.successResponse({

@@ -331,7 +331,7 @@ export class BatchingWebSocketManager extends CompressedWebSocketManager {
   } {
     let totalMessages = 0;
     let totalBatches = 0;
-    let allBatchSizes: number[] = [];
+    const allBatchSizes: number[] = [];
 
     for (const state of this.connectionStates.values()) {
       totalMessages += state.stats.totalMessages;

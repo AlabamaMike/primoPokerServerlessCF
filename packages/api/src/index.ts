@@ -33,3 +33,12 @@ export { ChatEnhancedWebSocketManager } from './websocket-chat-enhanced';
 export { ChatPersistenceRepository } from './repositories/chat-repository';
 export type { ChatMessageRecord, ChatMessageInput, ChatHistoryParams, ChatStats } from './repositories/chat-repository';
 export type { ChatWebSocketEnv, ChatHistoryRequest, ChatCommand } from './websocket-chat-enhanced';
+
+// Chat Moderation exports
+export { ContentValidator } from './chat-moderation/content-validator';
+export { ModerationActionsManager } from './chat-moderation/moderation-actions';
+export { ReportSystem } from './chat-moderation/report-system';
+export { createModerationRoutes } from './routes/moderation';
+export type { ValidationResult, ViolationType } from './chat-moderation/content-validator';
+export type { ModerationAction, ModerationActionType, PlayerRestrictions } from './chat-moderation/moderation-actions';
+export type { MessageReport, ReportStatus, ReportStats } from './chat-moderation/report-system';

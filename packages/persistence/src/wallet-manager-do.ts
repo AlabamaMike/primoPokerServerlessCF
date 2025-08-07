@@ -1056,7 +1056,6 @@ export class WalletManagerDurableObject {
           headers: { 'Content-Type': 'application/json' }
         })
       }
-
       if (!wallet) {
         this.securityManager.recordFailedAttempt(playerId)
         this.securityManager.recordAuditLog({

@@ -825,6 +825,10 @@ export class PokerAPIRoutes {
       return this.successResponse(wallet);
     } catch (error) {
       logger.error('Get wallet error', error);
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
       return this.errorResponse('Failed to get wallet information', 500);
     }
   }
@@ -946,6 +950,12 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Transfer error', error);
       return this.errorResponse('Failed to process transfer', 500);
+<<<<<<< HEAD
+=======
+      return this.errorResponse('Failed to get wallet information');
+>>>>>>> origin/main
+=======
+>>>>>>> origin/main
     }
   }
 
@@ -968,7 +978,15 @@ export class PokerAPIRoutes {
       return this.successResponse(result);
     } catch (error) {
       logger.error('Buy-in error', error);
+<<<<<<< HEAD
+<<<<<<< HEAD
       return this.errorResponse('Failed to process buy-in', 500);
+=======
+      return this.errorResponse('Failed to process buy-in');
+>>>>>>> origin/main
+=======
+      return this.errorResponse('Failed to process buy-in', 500);
+>>>>>>> origin/main
     }
   }
 
@@ -994,7 +1012,15 @@ export class PokerAPIRoutes {
       });
     } catch (error) {
       logger.error('Cash-out error', error);
+<<<<<<< HEAD
+<<<<<<< HEAD
       return this.errorResponse('Failed to process cash-out', 500);
+=======
+      return this.errorResponse('Failed to process cash-out');
+>>>>>>> origin/main
+=======
+      return this.errorResponse('Failed to process cash-out', 500);
+>>>>>>> origin/main
     }
   }
 
@@ -1005,6 +1031,10 @@ export class PokerAPIRoutes {
       }
 
       const url = new URL(request.url);
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
       const validation = validateQueryParams(TransactionQuerySchema, url.searchParams);
       
       if (!validation.success) {
@@ -1021,6 +1051,18 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Get transactions error', error);
       return this.errorResponse('Failed to get transaction history', 500);
+<<<<<<< HEAD
+=======
+      const limit = parseInt(url.searchParams.get('limit') || '50');
+      
+      const transactions = await this.walletManager.getTransactionHistory(request.user.userId, limit);
+      return this.successResponse(transactions);
+    } catch (error) {
+      logger.error('Get transactions error', error);
+      return this.errorResponse('Failed to get transaction history');
+>>>>>>> origin/main
+=======
+>>>>>>> origin/main
     }
   }
 
@@ -1053,7 +1095,15 @@ export class PokerAPIRoutes {
       });
     } catch (error) {
       logger.error('Get table seats error', error);
+<<<<<<< HEAD
+<<<<<<< HEAD
       return this.errorResponse('Failed to get table seat information', 500);
+=======
+      return this.errorResponse('Failed to get table seat information');
+>>>>>>> origin/main
+=======
+      return this.errorResponse('Failed to get table seat information', 500);
+>>>>>>> origin/main
     }
   }
 

@@ -399,7 +399,6 @@ export class WalletManager {
   }
 
   /**
->>>>>>> origin/main
    * Record a wallet transaction
    */
   private async recordTransaction(transaction: WalletTransaction): Promise<void> {

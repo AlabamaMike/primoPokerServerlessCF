@@ -20,8 +20,11 @@ module.exports = {
   collectCoverageFrom: [
     'src/stores/lobby-store.ts',
     'src/components/LobbyV2/**/*.{ts,tsx}',
+    'src/components/Wallet/**/*.{ts,tsx}',
     'src/hooks/useLobbyWebSocket.ts',
+    'src/utils/currency.ts',
     '!src/components/LobbyV2/**/*.test.{ts,tsx}',
+    '!src/components/Wallet/**/*.test.{ts,tsx}',
     '!src/components/LobbyV2/PrimoLobbyMockup.tsx',
     '!src/components/LobbyV2/LobbyMockup.tsx',
   ],

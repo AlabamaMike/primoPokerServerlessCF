@@ -197,11 +197,28 @@ export class WalletManager {
   /**
    * Get player transaction history
    */
-  async getTransactionHistory(playerId: string, limit: number = 50): Promise<WalletTransaction[]> {
-    return this.transactions
+  async getTransactionHistory(playerId: string, limit: number = 50, cursor?: string): Promise<{
+    transactions: WalletTransaction[];
+    nextCursor?: string;
+  }> {
+    const allTransactions = this.transactions
       .filter(t => t.playerId === playerId)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-      .slice(0, limit);
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    let startIndex = 0;
+    if (cursor) {
+      startIndex = allTransactions.findIndex(t => t.id === cursor);
+      if (startIndex === -1) startIndex = 0;
+      else startIndex += 1; // Start after the cursor
+    }
+
+    const transactions = allTransactions.slice(startIndex, startIndex + limit);
+    const hasMore = startIndex + limit < allTransactions.length;
+    
+    return {
+      transactions,
+      nextCursor: hasMore ? transactions[transactions.length - 1]?.id : undefined
+    };
   }
 
   /**
@@ -229,6 +246,156 @@ export class WalletManager {
       timestamp: new Date(),
       description
     });
+  }
+
+  /**
+   * Process deposit request
+   */
+  async deposit(playerId: string, amount: number, method: 'credit_card' | 'bank'): Promise<{
+    success: boolean;
+    newBalance?: number;
+    transactionId?: string;
+    error?: string;
+  }> {
+    try {
+      if (amount <= 0) {
+        return { success: false, error: 'Amount must be positive' };
+      }
+
+      const wallet = await this.getWallet(playerId);
+      wallet.balance += amount;
+      wallet.lastUpdated = new Date();
+
+      const transactionId = crypto.randomUUID();
+      await this.recordTransaction({
+        id: transactionId,
+        playerId,
+        type: 'deposit',
+        amount,
+        timestamp: new Date(),
+        description: `Deposit via ${method}`
+      });
+
+      return {
+        success: true,
+        newBalance: wallet.balance,
+        transactionId
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Deposit failed' 
+      };
+    }
+  }
+
+  /**
+   * Process withdrawal request
+   */
+  async withdraw(playerId: string, amount: number, method: 'bank' | 'check'): Promise<{
+    success: boolean;
+    newBalance?: number;
+    transactionId?: string;
+    error?: string;
+  }> {
+    try {
+      if (amount <= 0) {
+        return { success: false, error: 'Amount must be positive' };
+      }
+
+      const wallet = await this.getWallet(playerId);
+      const availableBalance = wallet.balance - wallet.frozen;
+
+      if (availableBalance < amount) {
+        return { 
+          success: false, 
+          error: `Insufficient funds. Available: $${availableBalance}` 
+        };
+      }
+
+      wallet.balance -= amount;
+      wallet.lastUpdated = new Date();
+
+      const transactionId = crypto.randomUUID();
+      await this.recordTransaction({
+        id: transactionId,
+        playerId,
+        type: 'withdrawal',
+        amount: -amount,
+        timestamp: new Date(),
+        description: `Withdrawal via ${method}`
+      });
+
+      return {
+        success: true,
+        newBalance: wallet.balance,
+        transactionId
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Withdrawal failed' 
+      };
+    }
+  }
+
+  /**
+   * Process transfer to table
+   */
+  async transfer(playerId: string, toTableId: string, amount: number): Promise<{
+    success: boolean;
+    newBalance?: number;
+    transferredAmount?: number;
+    transactionId?: string;
+    error?: string;
+  }> {
+    try {
+      if (!toTableId) {
+        return { success: false, error: 'Table ID is required' };
+      }
+
+      if (amount <= 0) {
+        return { success: false, error: 'Amount must be positive' };
+      }
+
+      const wallet = await this.getWallet(playerId);
+      const availableBalance = wallet.balance - wallet.frozen;
+
+      if (availableBalance < amount) {
+        return { 
+          success: false, 
+          error: `Insufficient funds. Available: $${availableBalance}` 
+        };
+      }
+
+      // This would normally interact with the table to add chips
+      // For now, we just freeze the amount
+      wallet.frozen += amount;
+      wallet.lastUpdated = new Date();
+
+      const transactionId = crypto.randomUUID();
+      await this.recordTransaction({
+        id: transactionId,
+        playerId,
+        type: 'buy_in',
+        amount: -amount,
+        tableId: toTableId,
+        timestamp: new Date(),
+        description: `Transfer to table ${toTableId}`
+      });
+
+      return {
+        success: true,
+        newBalance: wallet.balance,
+        transferredAmount: amount,
+        transactionId
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Transfer failed' 
+      };
+    }
   }
 
   /**

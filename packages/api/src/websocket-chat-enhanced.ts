@@ -9,15 +9,28 @@ import {
   WebSocketMessage,
   ChatMessage,
   createWebSocketMessage,
+  ValidationUtils,
 } from '@primo-poker/shared'
 import { WebSocketManager, WebSocketConnection } from './websocket'
-import { ChatPersistenceRepository } from './repositories/chat-repository'
+import { ChatPersistenceRepository, ChatHistoryParams } from './repositories/chat-repository'
 import { DurableObjectNamespace, D1Database } from '@cloudflare/workers-types'
 
 export interface ChatWebSocketEnv {
   CHAT_MODERATOR: DurableObjectNamespace
   DB: D1Database
   JWT_SECRET: string
+}
+
+interface ExtendedWebSocketConnection extends WebSocketConnection {
+  roles?: string[]
+}
+
+interface ExtendedChatMessage extends ChatMessage {
+  payload: ChatMessage['payload'] & {
+    requestConfirmation?: boolean
+    messageId?: string
+    timestamp?: number
+  }
 }
 
 export interface ChatHistoryRequest {
@@ -46,6 +59,44 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
   }
 
   /**
+   * Get connection information by connection ID
+   */
+  private getConnectionInfo(connectionId: string): ExtendedWebSocketConnection | undefined {
+    // This method would need to be added to the parent class or connections made protected
+    // For now, we'll use a workaround by accessing via reflection
+    const connection = (this as any).connections.get(connectionId) as ExtendedWebSocketConnection
+    return connection
+  }
+
+  /**
+   * Check if connection has admin privileges
+   */
+  private isAdmin(connection: ExtendedWebSocketConnection): boolean {
+    return connection.roles?.includes('admin') || false
+  }
+
+  /**
+   * Wrapper for parent's private sendMessage method
+   */
+  protected sendMessage(connectionId: string, message: WebSocketMessage): void {
+    (this as any).sendMessage(connectionId, message)
+  }
+
+  /**
+   * Wrapper for parent's private broadcastToTable method
+   */
+  protected broadcastToTable(tableId: string, message: WebSocketMessage, excludeConnectionId?: string): void {
+    (this as any).broadcastToTable(tableId, message, excludeConnectionId)
+  }
+
+  /**
+   * Wrapper for parent's private handlePlayerAction method
+   */
+  private async handlePlayerAction(connectionId: string, message: any): Promise<void> {
+    await (this as any).handlePlayerAction(connectionId, message)
+  }
+
+  /**
    * Handle chat-specific messages
    */
   async handleChatSpecificMessage(connectionId: string, messageData: string): Promise<void> {
@@ -54,23 +105,25 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
 
     try {
       const message: WebSocketMessage = JSON.parse(messageData)
-      connection.lastActivity = new Date()
+      if (connection) {
+        connection.lastActivity = new Date()
+      }
 
       switch (message.type) {
         case 'chat':
-          await this.handleChatMessage(connectionId, message as ChatMessage)
+          await this.handleEnhancedChatMessage(connectionId, message as ExtendedChatMessage)
           break
         case 'get_chat_history':
           await this.handleGetChatHistory(connectionId, message.payload as ChatHistoryRequest)
           break
         case 'delete_chat_message':
-          await this.handleDeleteChatMessage(connectionId, message.payload)
+          await this.handleDeleteChatMessage(connectionId, message.payload as { messageId: string; channelId: string })
           break
         case 'mute_player':
-          await this.handleMutePlayer(connectionId, message.payload)
+          await this.handleMutePlayer(connectionId, message.payload as { playerId: string; reason: string; duration?: number })
           break
         case 'report_message':
-          await this.handleReportMessage(connectionId, message.payload)
+          await this.handleReportMessage(connectionId, message.payload as { messageId: string; reason: string })
           break
         default:
           // Unknown message type
@@ -82,9 +135,9 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
   }
 
   /**
-   * Handle incoming chat messages
+   * Handle incoming chat messages with enhancements
    */
-  private async handleChatMessage(connectionId: string, message: ChatMessage): Promise<void> {
+  private async handleEnhancedChatMessage(connectionId: string, message: ExtendedChatMessage): Promise<void> {
     // Get connection info via a method we'll add
     const connectionInfo = this.getConnectionInfo(connectionId)
     if (!connectionInfo) return
@@ -96,13 +149,20 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
         return
       }
 
+      // Sanitize the message content
+      const sanitizedMessage = ValidationUtils.sanitizeChatMessage(message.payload.message)
+      if (!sanitizedMessage.trim()) {
+        this.sendError(connectionId, 'Empty message')
+        return
+      }
+
       // Get or create ChatModerator instance for the table
       const chatModeratorId = this.chatModerator.idFromName(`table-${connectionInfo.tableId}`)
       const chatModeratorStub = this.chatModerator.get(chatModeratorId)
 
       // Forward message to ChatModerator
       const response = await chatModeratorStub.fetch(
-        new Request('https://chat-moderator/chat/send', {
+        'https://chat-moderator/chat/send', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -113,9 +173,9 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
             channelId: `table-${connectionInfo.tableId}`,
             playerId: connectionInfo.playerId,
             username: connectionInfo.username,
-            message: message.payload.message,
+            message: sanitizedMessage,
           }),
-        })
+        }
       )
 
       if (!response.ok) {
@@ -141,7 +201,7 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
         id: messageId,
         playerId: connectionInfo.playerId,
         tableId: connectionInfo.tableId,
-        message: message.payload.message,
+        message: sanitizedMessage,
         messageType: 'chat',
       })
 
@@ -175,14 +235,14 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
   /**
    * Handle chat commands (e.g., /fold, /mute, etc.)
    */
-  private async handleChatCommand(connectionId: string, message: ChatMessage): Promise<void> {
+  private async handleChatCommand(connectionId: string, message: ExtendedChatMessage): Promise<void> {
     const connectionInfo = this.getConnectionInfo(connectionId)
     if (!connectionInfo) return
 
     const commandText = message.payload.message.substring(1).trim()
     const [command, ...args] = commandText.split(' ')
 
-    switch (command.toLowerCase()) {
+    switch (command?.toLowerCase()) {
       case 'fold':
       case 'check':
       case 'call':
@@ -192,8 +252,8 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
         await this.handlePlayerAction(connectionId, {
           type: 'player_action',
           payload: {
-            playerId: connection.playerId,
-            action: command.toLowerCase() as any,
+            playerId: connectionInfo.playerId,
+            action: command?.toLowerCase() as any,
             amount: args[0] ? parseFloat(args[0]) : undefined,
           },
         } as any)
@@ -207,7 +267,7 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
 
       case 'history':
         await this.handleGetChatHistory(connectionId, {
-          channelId: `table-${connection.tableId}`,
+          channelId: `table-${connectionInfo.tableId}`,
           limit: 20,
         })
         break
@@ -218,7 +278,7 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
           return
         }
         await this.handleMutePlayer(connectionId, { 
-          playerId: args[0],
+          playerId: args[0] || '',
           reason: args.slice(1).join(' ') || 'No reason provided',
         })
         break
@@ -229,13 +289,13 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
           return
         }
         await this.handleReportMessage(connectionId, {
-          messageId: args[0],
+          messageId: args[0] || '',
           reason: args.slice(1).join(' ') || 'No reason provided',
         })
         break
 
       default:
-        this.sendSystemMessage(connectionId, `Unknown command: /${command}`)
+        this.sendSystemMessage(connectionId, `Unknown command: /${command || ''}`)
     }
   }
 
@@ -246,18 +306,20 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
     connectionId: string,
     request: ChatHistoryRequest
   ): Promise<void> {
-    const connection = this.connections.get(connectionId)
-    if (!connection) return
+    const connectionInfo = this.getConnectionInfo(connectionId)
+    if (!connectionInfo) return
 
     try {
       // Get history from D1
-      const messages = await this.chatRepository.getMessageHistory({
-        tableId: connection.tableId,
-        limit: request.limit || 50,
-        offset: request.offset,
-        startTime: request.startTime,
-        endTime: request.endTime,
-      })
+      const params: ChatHistoryParams = {
+        tableId: connectionInfo.tableId,
+        limit: request.limit || 50
+      }
+      if (request.offset !== undefined) params.offset = request.offset
+      if (request.startTime !== undefined) params.startTime = request.startTime
+      if (request.endTime !== undefined) params.endTime = request.endTime
+      
+      const messages = await this.chatRepository.getMessageHistory(params)
 
       // Send history to requester
       this.sendMessage(connectionId, createWebSocketMessage('chat_history', {
@@ -265,7 +327,7 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
         messages: messages.map(m => ({
           id: m.id,
           playerId: m.player_id,
-          username: m.username || 'Unknown',
+          username: (m as any).username || 'Unknown',
           message: m.message,
           timestamp: m.created_at,
           isSystem: m.message_type === 'system',
@@ -285,27 +347,27 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
     connectionId: string,
     payload: { messageId: string; channelId: string }
   ): Promise<void> {
-    const connection = this.connections.get(connectionId)
-    if (!connection) return
+    const connectionInfo = this.getConnectionInfo(connectionId)
+    if (!connectionInfo) return
 
     try {
       const chatModeratorId = this.chatModerator.idFromName(payload.channelId)
       const chatModeratorStub = this.chatModerator.get(chatModeratorId)
 
       const response = await chatModeratorStub.fetch(
-        new Request('https://chat-moderator/chat/delete', {
+        'https://chat-moderator/chat/delete', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Player-ID': connection.playerId,
+            'X-Player-ID': connectionInfo.playerId,
           },
           body: JSON.stringify({
             messageId: payload.messageId,
             channelId: payload.channelId,
-            deletedBy: connection.playerId,
-            isAdmin: false, // Would check actual admin status
+            deletedBy: connectionInfo.playerId,
+            isAdmin: this.isAdmin(connectionInfo),
           }),
-        })
+        }
       )
 
       if (!response.ok) {
@@ -315,9 +377,9 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
       }
 
       // Broadcast deletion to all table members
-      this.broadcastToTable(connection.tableId, createWebSocketMessage('chat_message_deleted', {
+      this.broadcastToTable(connectionInfo.tableId, createWebSocketMessage('chat_message_deleted', {
         messageId: payload.messageId,
-        deletedBy: connection.playerId,
+        deletedBy: connectionInfo.playerId,
         timestamp: Date.now(),
       }))
 
@@ -338,29 +400,42 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
     connectionId: string,
     payload: { playerId: string; reason: string; duration?: number }
   ): Promise<void> {
-    const connection = this.connections.get(connectionId)
-    if (!connection) return
+    const connectionInfo = this.getConnectionInfo(connectionId)
+    if (!connectionInfo) return
+
+    // Check if user has permission to mute (admin only)
+    if (!this.isAdmin(connectionInfo)) {
+      this.sendError(connectionId, 'Insufficient permissions to mute players')
+      return
+    }
 
     try {
-      const chatModeratorId = this.chatModerator.idFromName(`table-${connection.tableId}`)
+      const chatModeratorId = this.chatModerator.idFromName(`table-${connectionInfo.tableId}`)
       const chatModeratorStub = this.chatModerator.get(chatModeratorId)
 
       const response = await chatModeratorStub.fetch(
-        new Request('https://chat-moderator/chat/mute', {
+        'https://chat-moderator/chat/mute', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Player-ID': connection.playerId,
+            'X-Player-ID': connectionInfo.playerId,
           },
           body: JSON.stringify({
             playerId: payload.playerId,
-            username: 'Unknown', // Would fetch actual username
-            mutedBy: connection.playerId,
+            username: (() => {
+              // Attempt to find the username from active connections
+              const connections = Array.from((this as any).connections.values()) as WebSocketConnection[]
+              const targetConnection = connections.find(
+                (conn) => conn.playerId === payload.playerId
+              )
+              return targetConnection?.username || 'Unknown'
+            })(),
+            mutedBy: connectionInfo.playerId,
             duration: payload.duration,
             reason: payload.reason,
-            channelId: `table-${connection.tableId}`,
+            channelId: `table-${connectionInfo.tableId}`,
           }),
-        })
+        }
       )
 
       if (!response.ok) {
@@ -372,9 +447,9 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
       const result = await response.json() as any
 
       // Notify all table members
-      this.broadcastToTable(connection.tableId, createWebSocketMessage('player_muted', {
+      this.broadcastToTable(connectionInfo.tableId, createWebSocketMessage('player_muted', {
         playerId: payload.playerId,
-        mutedBy: connection.playerId,
+        mutedBy: connectionInfo.playerId,
         duration: result.data.duration,
         reason: payload.reason,
         mutedUntil: result.data.mutedUntil,
@@ -391,25 +466,25 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
     connectionId: string,
     payload: { messageId: string; reason: string }
   ): Promise<void> {
-    const connection = this.connections.get(connectionId)
-    if (!connection) return
+    const connectionInfo = this.getConnectionInfo(connectionId)
+    if (!connectionInfo) return
 
     try {
-      const chatModeratorId = this.chatModerator.idFromName(`table-${connection.tableId}`)
+      const chatModeratorId = this.chatModerator.idFromName(`table-${connectionInfo.tableId}`)
       const chatModeratorStub = this.chatModerator.get(chatModeratorId)
 
       const response = await chatModeratorStub.fetch(
-        new Request('https://chat-moderator/chat/report', {
+        'https://chat-moderator/chat/report', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             messageId: payload.messageId,
-            reportedBy: connection.playerId,
+            reportedBy: connectionInfo.playerId,
             reason: payload.reason,
           }),
-        })
+        }
       )
 
       if (!response.ok) {
@@ -504,13 +579,16 @@ export class ChatEnhancedWebSocketManager extends WebSocketManager {
   /**
    * Clean up on disconnection
    */
-  protected handleDisconnection(connectionId: string): void {
+  private handleEnhancedDisconnection(connectionId: string): void {
     // Clean up message queue
     this.messageQueue.delete(connectionId)
     this.deliveryConfirmations.delete(connectionId)
     
     // Call parent cleanup
-    super.handleDisconnection(connectionId)
+    const parentHandleDisconnection = (this as any).handleDisconnection
+    if (typeof parentHandleDisconnection === 'function') {
+      parentHandleDisconnection.call(this, connectionId)
+    }
   }
 
   /**

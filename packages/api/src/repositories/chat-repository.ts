@@ -148,7 +148,7 @@ export class ChatPersistenceRepository {
     }
     
     if (!params.includeModerated) {
-      query += ' AND is_moderated = 0'
+      query += ' AND is_moderated = false'
     }
     
     query += ' ORDER BY created_at DESC'
@@ -165,7 +165,7 @@ export class ChatPersistenceRepository {
     
     try {
       const result = await this.db.prepare(query).bind(...bindings).all()
-      return result.results as ChatMessageRecord[]
+      return (result.results || []) as unknown as ChatMessageRecord[]
     } catch (error) {
       console.error('Failed to get message history:', error)
       throw new Error('Failed to get message history')
@@ -195,7 +195,7 @@ export class ChatPersistenceRepository {
     try {
       await this.db.prepare(`
         UPDATE chat_messages 
-        SET is_moderated = 1, moderation_reason = ?, updated_at = ?
+        SET is_moderated = true, moderation_reason = ?, updated_at = ?
         WHERE id = ?
       `).bind(reason, Date.now(), messageId).run()
     } catch (error) {
@@ -239,7 +239,7 @@ export class ChatPersistenceRepository {
         ).bind(...bindings).first(),
         
         this.db.prepare(
-          `SELECT COUNT(*) as count FROM chat_messages${whereClause}${tableId ? ' AND' : ' WHERE'} is_moderated = 1`
+          `SELECT COUNT(*) as count FROM chat_messages${whereClause}${tableId ? ' AND' : ' WHERE'} is_moderated = true`
         ).bind(...bindings).first(),
         
         this.db.prepare(
@@ -310,7 +310,7 @@ export class ChatPersistenceRepository {
     }
     
     if (!params.includeModerated) {
-      query += ' AND is_moderated = 0'
+      query += ' AND is_moderated = false'
     }
     
     query += ' ORDER BY created_at DESC LIMIT ?'
@@ -318,7 +318,7 @@ export class ChatPersistenceRepository {
     
     try {
       const result = await this.db.prepare(query).bind(...bindings).all()
-      return result.results as ChatMessageRecord[]
+      return (result.results || []) as unknown as ChatMessageRecord[]
     } catch (error) {
       console.error('Failed to search messages:', error)
       throw new Error('Failed to search messages')
@@ -341,7 +341,7 @@ export class ChatPersistenceRepository {
         this.db.prepare(`
           SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN is_moderated = 1 THEN 1 ELSE 0 END) as moderated,
+            SUM(CASE WHEN is_moderated = true THEN 1 ELSE 0 END) as moderated,
             MAX(created_at) as last_message
           FROM chat_messages 
           WHERE player_id = ? AND created_at >= ?

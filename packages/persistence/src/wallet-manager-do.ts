@@ -22,6 +22,7 @@ import {
   walletCashOutSchema,
   validateRequestBody 
 } from './validation'
+import { WalletSecurityManager, SecurityConfig, SecurityContext } from './wallet-security'
 
 export interface WalletTransaction {
   id: string
@@ -140,7 +141,8 @@ export class WalletManagerDurableObject {
   private metrics?: MetricsCollector
   private transactionLocks: Map<string, Promise<void>> = new Map()
   private lockTimeouts: Map<string, any> = new Map()
-  private config: WalletManagerConfig
+  private config: WalletManagerConfig & { largeAmountThreshold?: number }
+  private securityManager: WalletSecurityManager
 
   constructor(state: DurableObjectState, env: any) {
     this.durableObjectState = state
@@ -149,8 +151,41 @@ export class WalletManagerDurableObject {
     // Initialize configuration (can be overridden via env)
     this.config = {
       ...DEFAULT_CONFIG,
-      ...(env.WALLET_CONFIG || {})
+      ...(env.WALLET_CONFIG || {}),
+      largeAmountThreshold: env.TRANSACTION_APPROVAL_CONFIG?.largeAmountThreshold || 5000
     }
+    
+    // Initialize security manager
+    const securityConfig: SecurityConfig = {
+      hmacSecret: env.WALLET_HMAC_SECRET || (() => {
+        throw new Error('WALLET_HMAC_SECRET environment variable is required for security')
+      })(),
+      signatureExpiryMs: 5 * 60 * 1000, // 5 minutes
+      rateLimitConfig: env.RATE_LIMIT_CONFIG || {
+        windowMs: 60000,
+        maxRequests: 10,
+        maxDepositsPerWindow: 3,
+        maxWithdrawalsPerWindow: 2,
+        maxTransfersPerWindow: 5
+      },
+      fraudDetectionConfig: env.FRAUD_DETECTION_CONFIG || {
+        unusualAmountThreshold: 10000,
+        rapidTransactionCount: 5,
+        rapidTransactionWindowMs: 300000,
+        suspiciousPatterns: {
+          multipleFailedAttempts: 3,
+          unusualGeoLocationChange: true,
+          nightTimeThreshold: { start: 2, end: 6 }
+        }
+      },
+      transactionApprovalConfig: env.TRANSACTION_APPROVAL_CONFIG || {
+        largeAmountThreshold: 5000,
+        requiresApproval: true,
+        approvalTimeoutMs: 3600000
+      }
+    }
+    
+    this.securityManager = new WalletSecurityManager(securityConfig)
     
     // Initialize state
     this.state = {
@@ -208,6 +243,37 @@ export class WalletManagerDurableObject {
       
       const url = new URL(request.url)
       const path = url.pathname
+      
+      // Extract security context
+      const securityContext: SecurityContext = {
+        playerId: '', // Will be set from request body/params
+        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+        country: request.headers.get('CF-IPCountry') || undefined,
+        userAgent: request.headers.get('User-Agent') || undefined,
+        timestamp: Date.now()
+      }
+      
+      // Check if this endpoint requires signature
+      if (this.securityManager.requiresSignature(path, request.method)) {
+        const verifyResult = await this.securityManager.verifySignature(request)
+        if (!verifyResult.valid) {
+          // Record security event
+          this.securityManager.recordSecurityEvent(
+            'invalid_signature',
+            'high',
+            securityContext,
+            { error: verifyResult.error }
+          )
+          
+          return new Response(JSON.stringify({
+            success: false,
+            error: verifyResult.error
+          }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+      }
 
       let response: Response
       switch (path) {
@@ -255,6 +321,33 @@ export class WalletManagerDurableObject {
           break
         case '/health':
           response = await this.handleHealthCheck(request)
+          break
+        case '/wallet/approve-transaction':
+          response = await this.handleApproveTransaction(request)
+          break
+        case '/wallet/approval-status':
+          response = await this.handleApprovalStatus(request)
+          break
+        case '/wallet/audit-logs':
+          response = await this.handleGetAuditLogs(request)
+          break
+        case '/wallet/security-logs':
+          response = await this.handleGetSecurityLogs(request)
+          break
+        case '/wallet/admin/pending-transactions':
+          response = await this.handleGetPendingTransactions(request)
+          break
+        case '/wallet/admin/risk-score':
+          response = await this.handleGetRiskScore(request)
+          break
+        case '/wallet/admin/bulk-approve':
+          response = await this.handleBulkApprove(request)
+          break
+        case '/wallet/admin/analytics':
+          response = await this.handleGetAnalytics(request)
+          break
+        case '/wallet/admin/search-transactions':
+          response = await this.handleSearchTransactions(request)
           break
         default:
           response = new Response('Not Found', { status: 404 })
@@ -427,9 +520,34 @@ export class WalletManagerDurableObject {
       return this.createErrorResponse('Player ID required')
     }
 
+    // Check rate limit
+    const rateLimitResult = this.securityManager.checkRateLimit(playerId, url.pathname)
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Rate limit exceeded. Please try again later.',
+        retryAfter: rateLimitResult.retryAfter
+      }), {
+        status: 429,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Retry-After': String(rateLimitResult.retryAfter || 60)
+        }
+      })
+    }
+
     const wallet = await this.getOrCreateWallet(playerId)
     const frozenAmount = this.calculateFrozenAmount(playerId)
     const availableBalance = wallet.balance - frozenAmount
+    
+    // Record audit log
+    this.securityManager.recordAuditLog({
+      playerId,
+      action: 'get_wallet',
+      success: true,
+      ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+      userAgent: request.headers.get('User-Agent') || undefined
+    })
 
     return this.createSuccessResponse({
       wallet,
@@ -819,6 +937,22 @@ export class WalletManagerDurableObject {
     try {
       const { playerId, amount, description = 'Deposit' } = await validateRequestBody(request, walletDepositSchema)
 
+      // Check rate limit
+      const rateLimitResult = this.securityManager.checkRateLimit(playerId, '/wallet/deposit')
+      if (!rateLimitResult.allowed) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Rate limit exceeded. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter
+        }), {
+          status: 429,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateLimitResult.retryAfter || 60)
+          }
+        })
+      }
+
       // Check daily limits
       if (!await this.checkDailyLimit(playerId, 'deposits', amount)) {
         return new Response(JSON.stringify({
@@ -846,6 +980,17 @@ export class WalletManagerDurableObject {
 
       await this.updateDailyLimit(playerId, 'deposits', amount)
       await this.saveState()
+
+      // Record successful transaction
+      this.securityManager.recordTransaction(playerId, amount, 'deposit')
+      this.securityManager.recordAuditLog({
+        playerId,
+        action: 'deposit',
+        amount,
+        success: true,
+        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+        userAgent: request.headers.get('User-Agent') || undefined
+      })
 
       return new Response(JSON.stringify({
         success: true,
@@ -878,8 +1023,41 @@ export class WalletManagerDurableObject {
     try {
       const { playerId, amount, description = 'Withdrawal' } = await validateRequestBody(request, walletWithdrawSchema)
 
+      // Check if player is blocked
+      if (this.securityManager.isPlayerBlocked(playerId)) {
+        this.securityManager.recordAuditLog({
+          playerId,
+          action: 'withdraw_failed',
+          amount,
+          success: false,
+          error: 'Player temporarily blocked due to multiple failed attempts',
+          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+          userAgent: request.headers.get('User-Agent') || undefined
+        })
+        
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Account temporarily blocked due to security concerns',
+          fraudReason: 'multiple failed attempts'
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
       const wallet = this.state.wallets.get(playerId)
       if (!wallet) {
+        this.securityManager.recordFailedAttempt(playerId)
+        this.securityManager.recordAuditLog({
+          playerId,
+          action: 'withdraw_failed',
+          amount,
+          success: false,
+          error: 'Wallet not found',
+          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+          userAgent: request.headers.get('User-Agent') || undefined
+        })
+        
         return new Response(JSON.stringify({
           success: false,
           error: 'Wallet not found'
@@ -891,6 +1069,17 @@ export class WalletManagerDurableObject {
 
       const availableBalance = wallet.balance - this.calculateFrozenAmount(playerId)
       if (availableBalance < amount) {
+        this.securityManager.recordFailedAttempt(playerId)
+        this.securityManager.recordAuditLog({
+          playerId,
+          action: 'withdraw_failed',
+          amount,
+          success: false,
+          error: 'Insufficient available balance',
+          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+          userAgent: request.headers.get('User-Agent') || undefined
+        })
+        
         return new Response(JSON.stringify({
           success: false,
           error: 'Insufficient available balance'
@@ -902,6 +1091,16 @@ export class WalletManagerDurableObject {
 
       // Check daily limits
       if (!await this.checkDailyLimit(playerId, 'withdrawals', amount)) {
+        this.securityManager.recordAuditLog({
+          playerId,
+          action: 'withdraw_failed',
+          amount,
+          success: false,
+          error: 'Daily withdrawal limit exceeded',
+          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+          userAgent: request.headers.get('User-Agent') || undefined
+        })
+        
         return new Response(JSON.stringify({
           success: false,
           error: 'Daily withdrawal limit exceeded'
@@ -910,6 +1109,84 @@ export class WalletManagerDurableObject {
           headers: { 'Content-Type': 'application/json' }
         })
       }
+
+      // Check rate limit
+      const rateLimitResult = this.securityManager.checkRateLimit(playerId, '/wallet/withdraw')
+      if (!rateLimitResult.allowed) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Rate limit exceeded. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter
+        }), {
+          status: 429,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateLimitResult.retryAfter || 60)
+          }
+        })
+      }
+
+      // Fraud detection
+      const securityContext: SecurityContext = {
+        playerId,
+        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+        country: request.headers.get('CF-IPCountry') || undefined,
+        userAgent: request.headers.get('User-Agent') || undefined,
+        timestamp: Date.now()
+      }
+      
+      const fraudCheck = await this.securityManager.detectFraud(playerId, 'withdrawal', amount, securityContext)
+      if (fraudCheck.suspicious) {
+        this.securityManager.recordSecurityEvent(
+          'suspicious_withdrawal',
+          'high',
+          securityContext,
+          { amount, reasons: fraudCheck.reasons }
+        )
+        
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Transaction requires review',
+          fraudReason: fraudCheck.reasons.join(', ')
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Check if approval is required for large amounts
+      if (amount > this.config.largeAmountThreshold) {
+        const approval = this.securityManager.createPendingApproval(
+          playerId,
+          'withdrawal',
+          amount,
+          description
+        )
+        
+        this.securityManager.recordAuditLog({
+          playerId,
+          action: 'withdraw_pending_approval',
+          amount,
+          success: true,
+          metadata: { approvalId: approval.approvalId },
+          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+          userAgent: request.headers.get('User-Agent') || undefined
+        })
+        
+        return new Response(JSON.stringify({
+          success: true,
+          status: 'pending_approval',
+          approvalId: approval.approvalId,
+          message: `Large withdrawal of $${amount} requires approval`,
+          expiresAt: approval.expiresAt
+        }), {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Clear failed attempts on successful validation
+      this.securityManager.clearFailedAttempts(playerId)
 
       wallet.balance -= amount
       wallet.lastUpdated = new Date()
@@ -926,6 +1203,17 @@ export class WalletManagerDurableObject {
 
       await this.updateDailyLimit(playerId, 'withdrawals', amount)
       await this.saveState()
+
+      // Record successful transaction
+      this.securityManager.recordTransaction(playerId, amount, 'withdrawal')
+      this.securityManager.recordAuditLog({
+        playerId,
+        action: 'withdraw',
+        amount,
+        success: true,
+        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
+        userAgent: request.headers.get('User-Agent') || undefined
+      })
 
       return new Response(JSON.stringify({
         success: true,
@@ -1692,5 +1980,341 @@ export class WalletManagerDurableObject {
         this.state.dailyLimits.delete(key)
       }
     }
+  }
+
+  /**
+   * Verify admin token
+   */
+  private verifyAdminToken(request: Request): boolean {
+    const adminToken = request.headers.get('X-Admin-Token')
+    const configuredToken = this.env.WALLET_ADMIN_TOKEN
+    
+    if (!configuredToken) {
+      logger.error('WALLET_ADMIN_TOKEN not configured')
+      return false
+    }
+    
+    // Use timing-safe comparison to prevent timing attacks
+    if (!adminToken || adminToken.length !== configuredToken.length) {
+      return false
+    }
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(adminToken),
+      Buffer.from(configuredToken)
+    )
+  }
+
+  /**
+   * Handle approve transaction request
+   */
+  private async handleApproveTransaction(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    if (request.method !== 'POST') {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    try {
+      const body = await request.json() as {
+        approvalId: string
+        approved: boolean
+        adminId: string
+        reason: string
+      }
+
+      const approval = this.securityManager.processApproval(
+        body.approvalId,
+        body.approved,
+        body.adminId,
+        body.reason
+      )
+
+      if (!approval) {
+        return this.createErrorResponse('Approval not found or already processed')
+      }
+
+      // If approved, process the transaction
+      if (approval.status === 'approved' && approval.type === 'withdrawal') {
+        const wallet = this.state.wallets.get(approval.playerId)
+        if (wallet && wallet.balance >= approval.amount) {
+          wallet.balance -= approval.amount
+          wallet.lastUpdated = new Date()
+
+          await this.recordTransaction({
+            id: crypto.randomUUID(),
+            playerId: approval.playerId,
+            type: 'withdrawal',
+            amount: -approval.amount,
+            balance: wallet.balance,
+            timestamp: Date.now(),
+            description: approval.description,
+            metadata: { approvalId: approval.approvalId, approvedBy: body.adminId }
+          })
+
+          await this.saveState()
+        }
+      }
+
+      return this.createSuccessResponse({
+        transaction: {
+          ...approval,
+          status: approval.status,
+          rejectionReason: body.approved ? undefined : body.reason
+        }
+      })
+    } catch (error) {
+      return this.createErrorResponse('Invalid request', 400)
+    }
+  }
+
+  /**
+   * Handle approval status check
+   */
+  private async handleApprovalStatus(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    const approvalId = url.searchParams.get('approvalId')
+
+    if (!approvalId) {
+      return this.createErrorResponse('Approval ID required')
+    }
+
+    const pendingApprovals = this.securityManager.getPendingApprovals()
+    const approval = pendingApprovals.find(a => a.approvalId === approvalId)
+
+    if (!approval) {
+      // Check if it's expired
+      const now = Date.now()
+      return this.createSuccessResponse({
+        status: 'expired',
+        message: 'Approval has expired or been processed'
+      })
+    }
+
+    return this.createSuccessResponse(approval)
+  }
+
+  /**
+   * Handle get audit logs
+   */
+  private async handleGetAuditLogs(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const url = new URL(request.url)
+    const filters = {
+      playerId: url.searchParams.get('playerId') || undefined,
+      action: url.searchParams.get('action') || undefined,
+      startDate: url.searchParams.get('startDate') ? parseInt(url.searchParams.get('startDate')!) : undefined,
+      endDate: url.searchParams.get('endDate') ? parseInt(url.searchParams.get('endDate')!) : undefined,
+      limit: url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : 50
+    }
+
+    const result = this.securityManager.getAuditLogs(filters)
+    
+    return this.createSuccessResponse(result)
+  }
+
+  /**
+   * Handle get security logs
+   */
+  private async handleGetSecurityLogs(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const logs = this.securityManager.getSecurityLogs()
+    
+    return this.createSuccessResponse({ logs })
+  }
+
+  /**
+   * Handle get pending transactions
+   */
+  private async handleGetPendingTransactions(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const pendingApprovals = this.securityManager.getPendingApprovals()
+    
+    return this.createSuccessResponse({
+      transactions: pendingApprovals
+    })
+  }
+
+  /**
+   * Handle get risk score
+   */
+  private async handleGetRiskScore(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const url = new URL(request.url)
+    const playerId = url.searchParams.get('playerId')
+
+    if (!playerId) {
+      return this.createErrorResponse('Player ID required')
+    }
+
+    const riskAssessment = this.securityManager.calculateRiskScore(playerId)
+    
+    return this.createSuccessResponse(riskAssessment)
+  }
+
+  /**
+   * Handle bulk approve
+   */
+  private async handleBulkApprove(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    if (request.method !== 'POST') {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    try {
+      const body = await request.json() as {
+        approvalIds: string[]
+        approved: boolean
+        adminId: string
+        reason: string
+      }
+
+      let processed = 0
+      let success = 0
+      let failed = 0
+
+      for (const approvalId of body.approvalIds) {
+        const approval = this.securityManager.processApproval(
+          approvalId,
+          body.approved,
+          body.adminId,
+          body.reason
+        )
+
+        processed++
+        if (approval) {
+          success++
+          
+          // Process approved withdrawals
+          if (approval.status === 'approved' && approval.type === 'withdrawal') {
+            const wallet = this.state.wallets.get(approval.playerId)
+            if (wallet && wallet.balance >= approval.amount) {
+              wallet.balance -= approval.amount
+              wallet.lastUpdated = new Date()
+
+              await this.recordTransaction({
+                id: crypto.randomUUID(),
+                playerId: approval.playerId,
+                type: 'withdrawal',
+                amount: -approval.amount,
+                balance: wallet.balance,
+                timestamp: Date.now(),
+                description: approval.description,
+                metadata: { approvalId: approval.approvalId, approvedBy: body.adminId }
+              })
+            }
+          }
+        } else {
+          failed++
+        }
+      }
+
+      await this.saveState()
+
+      return this.createSuccessResponse({
+        processed,
+        success,
+        failed
+      })
+    } catch (error) {
+      return this.createErrorResponse('Invalid request', 400)
+    }
+  }
+
+  /**
+   * Handle get analytics
+   */
+  private async handleGetAnalytics(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const allTransactions = Array.from(this.state.transactions.values()).flat()
+    const wallets = Array.from(this.state.wallets.values())
+
+    const transactionsByType: Record<string, number> = {}
+    const volumeByType: Record<string, number> = {}
+
+    for (const transaction of allTransactions) {
+      transactionsByType[transaction.type] = (transactionsByType[transaction.type] || 0) + 1
+      volumeByType[transaction.type] = (volumeByType[transaction.type] || 0) + Math.abs(transaction.amount)
+    }
+
+    const activeUsers = wallets.filter(w => {
+      const transactions = this.state.transactions.get(w.playerId) || []
+      return transactions.some(t => t.timestamp > Date.now() - 24 * 60 * 60 * 1000)
+    }).length
+
+    return this.createSuccessResponse({
+      totalTransactions: this.state.totalTransactions,
+      transactionsByType,
+      volumeByType,
+      activeUsers,
+      totalWallets: wallets.length,
+      totalBalance: wallets.reduce((sum, w) => sum + w.balance, 0)
+    })
+  }
+
+  /**
+   * Handle search transactions
+   */
+  private async handleSearchTransactions(request: Request): Promise<Response> {
+    if (!this.verifyAdminToken(request)) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    const url = new URL(request.url)
+    const query = url.searchParams.get('query') || ''
+    const minAmount = url.searchParams.get('minAmount') ? parseFloat(url.searchParams.get('minAmount')!) : undefined
+    const type = url.searchParams.get('type') || undefined
+
+    const transactions: WalletTransaction[] = []
+
+    // Search all transactions
+    for (const [playerId, playerTransactions] of this.state.transactions) {
+      for (const transaction of playerTransactions) {
+        let matches = true
+
+        if (query && !playerId.includes(query) && !transaction.description.toLowerCase().includes(query.toLowerCase())) {
+          matches = false
+        }
+
+        if (minAmount && Math.abs(transaction.amount) < minAmount) {
+          matches = false
+        }
+
+        if (type && transaction.type !== type) {
+          matches = false
+        }
+
+        if (matches) {
+          transactions.push(transaction)
+        }
+      }
+    }
+
+    // Sort by timestamp descending
+    transactions.sort((a, b) => b.timestamp - a.timestamp)
+
+    return this.createSuccessResponse({
+      transactions: transactions.slice(0, 100) // Limit results
+    })
   }
 }

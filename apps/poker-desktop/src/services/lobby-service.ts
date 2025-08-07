@@ -1,4 +1,5 @@
 import { testSafeInvoke } from '../utils/test-utils';
+import { Filters } from '../components/LobbyV2/types';
 
 export interface LobbyTable {
   id: string;
@@ -111,6 +112,54 @@ class LobbyService {
     } catch (error) {
       console.error('Failed to join waitlist:', error);
       return { success: false };
+    }
+  }
+
+  async quickSeat(filters: Filters): Promise<{ success: boolean; tableId?: string; message?: string }> {
+    try {
+      // Find tables that match the current filters
+      const tables = await this.getTables({
+        gameTypes: filters.gameTypes,
+        tableSizes: filters.tableSizes,
+        hideEmpty: true,
+        hideFull: true
+      });
+
+      // Filter by stakes
+      const stakeRanges: Record<string, [number, number]> = {
+        'micro': [0.01, 0.25],
+        'low': [0.50, 2.00],
+        'mid': [5.00, 10.00],
+        'high': [25.00, Infinity]
+      };
+
+      const filteredTables = tables.filter(table => {
+        const bigBlind = table.stakes.bigBlind;
+        return filters.stakes.some(stake => {
+          const [min, max] = stakeRanges[stake] || [0, Infinity];
+          return bigBlind >= min && bigBlind <= max;
+        });
+      });
+
+      // Find a table with available seats
+      const availableTable = filteredTables.find(table => 
+        table.currentPlayers < table.maxPlayers
+      );
+
+      if (availableTable) {
+        // Attempt to join the table
+        const buyIn = availableTable.stakes.bigBlind * 100; // Default 100BB buy-in
+        const joinResult = await this.joinTable(availableTable.id, buyIn);
+        
+        if (joinResult.success) {
+          return { success: true, tableId: availableTable.id };
+        }
+      }
+
+      return { success: false, message: 'No available seats found matching your filters' };
+    } catch (error) {
+      console.error('Failed to find quick seat:', error);
+      return { success: false, message: 'Failed to find seat' };
     }
   }
 }

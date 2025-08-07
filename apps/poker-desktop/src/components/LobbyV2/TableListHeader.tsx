@@ -12,8 +12,15 @@ const TableListHeader: React.FC<TableListHeaderProps> = ({
   onSort 
 }) => {
   const getSortIcon = (column: string) => {
-    if (sortColumn !== column) return '↕';
-    return sortDirection === 'asc' ? '↑' : '↓';
+    if (sortColumn !== column) return null;
+    return (
+      <span 
+        data-testid={`sort-indicator-${column}`}
+        className={`inline-block transition-transform ${sortDirection === 'desc' ? 'rotate-180' : ''}`}
+      >
+        ↑
+      </span>
+    );
   };
 
   return (
@@ -23,8 +30,8 @@ const TableListHeader: React.FC<TableListHeaderProps> = ({
           className="col-span-3 flex items-center space-x-1 cursor-pointer hover:text-purple-400 transition-colors"
           onClick={() => onSort('name')}
         >
-          <span>Table</span>
-          <span className="text-slate-600">{getSortIcon('name')}</span>
+          <span>Table Name</span>
+          {getSortIcon('name')}
         </div>
         <div className="col-span-2">Game</div>
         <div 
@@ -32,35 +39,35 @@ const TableListHeader: React.FC<TableListHeaderProps> = ({
           onClick={() => onSort('stakes')}
         >
           <span>Stakes</span>
-          <span className="text-slate-600 ml-1">{getSortIcon('stakes')}</span>
+          {getSortIcon('stakes')}
         </div>
         <div 
           className="col-span-1 cursor-pointer hover:text-purple-400 transition-colors"
           onClick={() => onSort('players')}
         >
           <span>Players</span>
-          <span className="text-slate-600 ml-1">{getSortIcon('players')}</span>
+          {getSortIcon('players')}
         </div>
         <div 
           className="col-span-1 text-right cursor-pointer hover:text-purple-400 transition-colors"
           onClick={() => onSort('avgPot')}
         >
           <span>Avg Pot</span>
-          <span className="text-slate-600 ml-1">{getSortIcon('avgPot')}</span>
+          {getSortIcon('avgPot')}
         </div>
         <div 
           className="col-span-1 text-right cursor-pointer hover:text-purple-400 transition-colors"
           onClick={() => onSort('speed')}
         >
           <span>Speed</span>
-          <span className="text-slate-600 ml-1">{getSortIcon('speed')}</span>
+          {getSortIcon('speed')}
         </div>
         <div 
           className="col-span-1 text-center cursor-pointer hover:text-purple-400 transition-colors"
           onClick={() => onSort('waitlist')}
         >
           <span>Wait</span>
-          <span className="text-slate-600 ml-1">{getSortIcon('waitlist')}</span>
+          {getSortIcon('waitlist')}
         </div>
         <div className="col-span-2"></div>
       </div>

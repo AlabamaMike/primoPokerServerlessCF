@@ -1,5 +1,5 @@
 import React from 'react';
-import FilterSidebar from './FilterSidebar';
+import FilterPanel from './FilterPanel';
 import TableList from './TableList';
 import TablePreview from './TablePreview';
 import { useLobbyStore } from '../../stores/lobby-store';
@@ -20,10 +20,7 @@ const LobbyContent: React.FC<LobbyContentProps> = ({ apiUrl, onJoinTable }) => {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      <FilterSidebar 
-        filters={filters}
-        onFiltersChange={setFilters}
-      />
+      <FilterPanel />
       
       <TableList 
         apiUrl={apiUrl}

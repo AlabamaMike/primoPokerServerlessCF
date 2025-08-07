@@ -20,6 +20,7 @@ interface LobbyState {
   
   // Favorites
   favoriteTables: string[];
+  favoriteTableIds: Set<string>;
   
   // Actions
   setFilters: (filters: Filters) => void;
@@ -97,6 +98,7 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
     totalPot: 0
   },
   favoriteTables: JSON.parse(localStorage.getItem('favoriteTables') || '[]'),
+  favoriteTableIds: new Set(JSON.parse(localStorage.getItem('favoriteTables') || '[]')),
 
   // Actions
   setFilters: (filters) => {
@@ -123,7 +125,10 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
       ? favorites.filter(id => id !== tableId)
       : [...favorites, tableId];
     
-    set({ favoriteTables: newFavorites });
+    set({ 
+      favoriteTables: newFavorites,
+      favoriteTableIds: new Set(newFavorites)
+    });
     localStorage.setItem('favoriteTables', JSON.stringify(newFavorites));
   },
 

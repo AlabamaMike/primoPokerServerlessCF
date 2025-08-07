@@ -4,7 +4,6 @@ import { MessageListProps, ChatMessage } from './types';
 interface MessageItemProps {
   message: ChatMessage;
   isCurrentUser: boolean;
-  isBlocked: boolean;
   isMuted: boolean;
   onPlayerClick?: (e: React.MouseEvent, playerId: string, username: string) => void;
 }
@@ -12,7 +11,6 @@ interface MessageItemProps {
 const MessageItem: React.FC<MessageItemProps> = ({
   message,
   isCurrentUser,
-  isBlocked,
   isMuted,
   onPlayerClick
 }) => {
@@ -22,10 +20,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
       minute: '2-digit' 
     });
   };
-
-  if (isBlocked) {
-    return null;
-  }
 
   const content = isMuted ? <span className="italic text-gray-500">[muted]</span> : message.message;
 
@@ -79,13 +73,18 @@ const MessageList: React.FC<MessageListProps> = ({
     y: number;
   } | null>(null);
 
+  // Filter out blocked messages
+  const filteredMessages = useMemo(() => {
+    return messages.filter(message => !moderationState.blockedPlayers.has(message.userId));
+  }, [messages, moderationState.blockedPlayers]);
+
   // Group messages by time intervals (5 minutes)
   const groupedMessages = useMemo(() => {
     const groups: { time: string; messages: ChatMessage[] }[] = [];
     let currentGroup: ChatMessage[] = [];
     let lastTime: Date | null = null;
 
-    messages.forEach(msg => {
+    filteredMessages.forEach(msg => {
       const msgTime = new Date(msg.timestamp);
       
       if (!lastTime || msgTime.getTime() - lastTime.getTime() > 5 * 60 * 1000) {
@@ -116,14 +115,14 @@ const MessageList: React.FC<MessageListProps> = ({
     }
 
     return groups;
-  }, [messages]);
+  }, [filteredMessages]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (autoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, autoScroll]);
+  }, [filteredMessages, autoScroll]);
 
   // Check if user has scrolled up
   const handleScroll = () => {
@@ -159,9 +158,8 @@ const MessageList: React.FC<MessageListProps> = ({
 
   // Close context menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setContextMenu(null);
-    
     if (contextMenu) {
+      const handleClickOutside = () => setContextMenu(null);
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
@@ -175,7 +173,7 @@ const MessageList: React.FC<MessageListProps> = ({
         className="overflow-y-auto h-full p-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
         data-testid="message-list"
       >
-        {messages.length === 0 ? (
+        {filteredMessages.length === 0 ? (
           <div className="text-gray-400 text-sm text-center py-8">
             No messages yet. Say hello to the table!
           </div>
@@ -183,12 +181,11 @@ const MessageList: React.FC<MessageListProps> = ({
           <>
             {groupedMessages.map((group, groupIndex) => (
               <div key={groupIndex}>
-                {messages.map((message) => (
+                {group.messages.map((message) => (
                   <MessageItem
                     key={message.id}
                     message={message}
                     isCurrentUser={message.userId === currentUserId}
-                    isBlocked={moderationState.blockedPlayers.has(message.userId)}
                     isMuted={moderationState.mutedPlayers.has(message.userId)}
                     onPlayerClick={handlePlayerClick}
                   />

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+// import { invoke } from '@tauri-apps/api/tauri';
 import { testSafeInvoke } from '../utils/test-utils';
 import PokerTable from './PokerTable';
 import { ChatPanel } from './Chat';
 import type { ChatMessage, ChatCommand } from './Chat';
+import { saveChatMessages, loadChatMessages } from './Chat/utils/persistence';
 import { useAuthStore } from '../stores/auth-store';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { IncomingMessage } from '../lib/websocket-client';
@@ -61,7 +62,10 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
   const [tableInfo, setTableInfo] = useState<TableInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    // Load persisted messages for this table
+    return loadChatMessages(tableId);
+  });
 
   const apiUrl = 'https://primo-poker-server.alabamamike.workers.dev';
 
@@ -188,7 +192,7 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
 
   // Handle WebSocket messages
   const handleWebSocketMessage = (message: IncomingMessage) => {
-    console.log('Received WebSocket message:', message);
+    // Process WebSocket message
     
     switch (message.type) {
       case 'game_update':
@@ -214,7 +218,7 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
         break;
         
       case 'connection_established':
-        console.log('WebSocket connection established for table:', message.payload.tableId);
+        // WebSocket connection established
         setError(null);
         break;
         
@@ -224,18 +228,18 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
         break;
         
       default:
-        console.log('Unknown WebSocket message type:', message.type);
+        // Unknown message type - could log to monitoring service
     }
   };
 
   // Handle player actions via WebSocket
   const handlePlayerAction = async (action: string, amount?: number) => {
     try {
-      console.log(`Player action: ${action}`, amount ? `Amount: ${amount}` : '');
+      // Execute player action
       
       if (wsState.isConnected && user) {
         // Send action via WebSocket
-        wsActions.sendPlayerAction(action as any, amount);
+        wsActions.sendPlayerAction(action as 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'allin', amount);
         setError(null);
       } else {
         // Fallback to HTTP API call
@@ -251,9 +255,9 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
   };
 
   // Handle sitting down at table
-  const handleSitDown = async (position: number) => {
+  const handleSitDown = async (_position: number) => {
     try {
-      console.log(`Attempting to sit at position ${position}`);
+      // Attempt to sit at table position
       
       // TODO: Implement actual API call
       // const result = await invoke('sit_down', { 
@@ -291,9 +295,12 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
         
       case 'bet':
       case 'raise':
-        const amount = command.args?.[0];
-        if (amount) {
-          const numAmount = parseFloat(amount);
+        if (
+          Array.isArray(command.args) &&
+          command.args.length > 0 &&
+          typeof command.args[0] === 'string'
+        ) {
+          const numAmount = parseFloat(command.args[0]);
           if (!isNaN(numAmount) && numAmount > 0) {
             handlePlayerAction(command.command, numAmount);
           }
@@ -301,18 +308,16 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
         break;
         
       default:
-        console.log('Unhandled command:', command);
+        // Unhandled command - could be logged for monitoring
     }
   };
 
   // Handle player moderation
-  const handleMutePlayer = (playerId: string) => {
-    console.log('Mute player:', playerId);
+  const handleMutePlayer = (_playerId: string) => {
     // TODO: Implement mute functionality
   };
 
-  const handleBlockPlayer = (playerId: string) => {
-    console.log('Block player:', playerId);
+  const handleBlockPlayer = (_playerId: string) => {
     // TODO: Implement block functionality
   };
 
@@ -353,6 +358,11 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
       return () => clearInterval(interval);
     }
   }, [wsState.isConnected, wsState.isConnecting]);
+
+  // Save chat messages to localStorage when they change
+  useEffect(() => {
+    saveChatMessages(tableId, chatMessages);
+  }, [tableId, chatMessages]);
 
   if (loading) {
     return (

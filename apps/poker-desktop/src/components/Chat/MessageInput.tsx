@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { MessageInputProps } from './types';
 import { getCommandSuggestions } from './utils/chatCommands';
+import { validateMessage } from './utils/sanitize';
+import { defaultRateLimiter } from './utils/rateLimiter';
 import EmojiPicker from './EmojiPicker';
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -13,6 +15,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
+  const [rateLimitWarning, setRateLimitWarning] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -22,14 +25,40 @@ const MessageInput: React.FC<MessageInputProps> = ({
     setCommandSuggestions(suggestions);
     setSelectedSuggestion(0);
   }, [message]);
+  
+  // Clear rate limit warning after timeout
+  useEffect(() => {
+    if (rateLimitWarning) {
+      const timer = setTimeout(() => {
+        setRateLimitWarning(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [rateLimitWarning]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const trimmedMessage = message.trim();
-    if (!trimmedMessage || !isConnected) return;
+    if (!isConnected) return;
     
-    onSendMessage(trimmedMessage);
+    // Check rate limiting
+    if (!defaultRateLimiter.canSendMessage()) {
+      const waitTime = Math.ceil(defaultRateLimiter.getTimeUntilNextMessage() / 1000);
+      setRateLimitWarning(`Please wait ${waitTime} seconds before sending another message`);
+      return;
+    }
+    
+    const validation = validateMessage(message, maxLength);
+    if (!validation.isValid) {
+      // Optionally show error to user
+      return;
+    }
+    
+    // Record message for rate limiting
+    defaultRateLimiter.recordMessage();
+    setRateLimitWarning(null);
+    
+    onSendMessage(validation.sanitized);
     setMessage('');
     inputRef.current?.focus();
   };
@@ -136,7 +165,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               `}
               data-testid="char-count"
             >
-              {remainingChars}
+              {Math.max(remainingChars, 0)}
             </span>
           )}
         </div>
@@ -165,7 +194,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         {/* Send button */}
         <button
           type="submit"
-          disabled={!isConnected || !message.trim()}
+          disabled={!isConnected || !message.trim() || message.length > maxLength}
           className="
             px-4 py-2
             bg-blue-600 text-white text-sm rounded
@@ -183,6 +212,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
       {!isConnected && (
         <div className="text-red-400 text-xs mt-1">
           Chat unavailable - Not connected
+        </div>
+      )}
+      
+      {/* Rate limit warning */}
+      {rateLimitWarning && (
+        <div className="text-yellow-400 text-xs mt-1">
+          {rateLimitWarning}
         </div>
       )}
 

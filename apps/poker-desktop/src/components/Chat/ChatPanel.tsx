@@ -46,29 +46,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (command) {
       if (command.command === 'help') {
         // Show help as a system message
-        const helpMessage: ChatMessage = {
-          id: `help-${Date.now()}`,
-          username: 'System',
-          userId: 'system',
-          message: formatCommandHelp(),
-          timestamp: new Date(),
-          isSystem: true
-        };
-        // This would need to be handled by the parent component
-        console.log('Help command - show help message');
+        // Help command is handled by sending /help to parent
+        // Send help message as a system message through parent component
+        // Help command is handled by sending /help to parent
+        // Notify parent to add this system message
+        onSendMessage(`/help`);
       } else if (command.command === 'mute' || command.command === 'unmute') {
         // Handle local mute commands
         const playerName = command.args?.[0];
         if (playerName) {
-          // Find player ID by name (would need player list from parent)
-          console.log(`${command.command} player: ${playerName}`);
+          // Handle mute/unmute through parent component
+          onCommand?.(command);
         }
       } else if (command.command === 'block' || command.command === 'unblock') {
         // Handle local block commands
         const playerName = command.args?.[0];
         if (playerName) {
-          // Find player ID by name (would need player list from parent)
-          console.log(`${command.command} player: ${playerName}`);
+          // Handle block/unblock through parent component
+          onCommand?.(command);
         }
       } else {
         // Pass other commands to parent
@@ -112,7 +107,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         
       case 'report':
         // Handle report action
-        console.log(`Report player: ${playerId}`);
+        // TODO: Implement report functionality
+        // For now, send as a system message
+        onSendMessage(`/report ${playerId}`);
         break;
     }
   };

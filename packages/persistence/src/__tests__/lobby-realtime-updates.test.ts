@@ -310,4 +310,169 @@ describe('Lobby Real-time Updates', () => {
       expect(patch[2].op).toBe('remove')
     })
   })
+
+  describe('LobbyCoordinator Real-time Updates Integration', () => {
+    let coordinator: LobbyCoordinatorDurableObject
+    let mockState: MockDurableObjectState
+    let mockEnv: unknown
+    let mockWebSocket1: MockWebSocket
+    let mockWebSocket2: MockWebSocket
+    
+    beforeEach(() => {
+      mockState = new MockDurableObjectState()
+      mockEnv = {}
+      coordinator = new LobbyCoordinatorDurableObject(mockState as any, mockEnv)
+      
+      // Create mock WebSocket connections
+      mockWebSocket1 = new MockWebSocket()
+      mockWebSocket2 = new MockWebSocket()
+    })
+
+    it('should detect changes and broadcast updates when table is created', async () => {
+      // Create a table
+      const createRequest = new Request('http://localhost/tables/create', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer test-token' },
+        body: JSON.stringify({
+          tableId: 'table-1',
+          config: {
+            name: 'Test Table',
+            gameType: 'texas_holdem',
+            stakes: { smallBlind: 10, bigBlind: 20 },
+            maxPlayers: 9,
+            isPrivate: false
+          },
+          creatorId: 'player-123'
+        })
+      })
+
+      const response = await coordinator.fetch(createRequest)
+      expect(response.status).toBe(200)
+
+      // Check if TABLE_CREATED broadcast was sent
+      // This test will fail initially until we implement the feature
+      const broadcasts = (coordinator as unknown as { getLastBroadcast?: () => unknown }).getLastBroadcast?.()
+      expect(broadcasts).toBeDefined()
+      expect(broadcasts?.type).toBe('table_created')
+      expect(broadcasts?.payload.table.tableId).toBe('table-1')
+    })
+
+    it('should broadcast delta updates when table is updated', async () => {
+      // First create a table
+      await coordinator.fetch(new Request('http://localhost/tables/create', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer test-token' },
+        body: JSON.stringify({
+          tableId: 'table-1',
+          config: {
+            name: 'Test Table',
+            gameType: 'texas_holdem',
+            stakes: { smallBlind: 10, bigBlind: 20 },
+            maxPlayers: 9,
+            isPrivate: false
+          },
+          creatorId: 'player-123'
+        })
+      }))
+
+      // Update the table
+      const updateRequest = new Request('http://localhost/tables/update', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer test-token' },
+        body: JSON.stringify({
+          tableId: 'table-1',
+          players: [
+            { playerId: 'player-1', username: 'Player1', isActive: true },
+            { playerId: 'player-2', username: 'Player2', isActive: true }
+          ]
+        })
+      })
+
+      const response = await coordinator.fetch(updateRequest)
+      expect(response.status).toBe(200)
+
+      // Check if delta update was broadcast
+      const broadcast = (coordinator as unknown as { getLastBroadcast?: () => unknown }).getLastBroadcast?.()
+      expect(broadcast).toBeDefined()
+      expect(broadcast?.type).toBe('table_delta_update')
+      expect(broadcast?.payload.changes).toHaveLength(1)
+      expect(broadcast?.payload.changes[0].type).toBe('TABLE_UPDATED')
+    })
+
+    it('should batch multiple updates within time window', async () => {
+      // Create table
+      await coordinator.fetch(new Request('http://localhost/tables/create', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer test-token' },
+        body: JSON.stringify({
+          tableId: 'table-1',
+          config: {
+            name: 'Test Table',
+            gameType: 'texas_holdem',
+            stakes: { smallBlind: 10, bigBlind: 20 },
+            maxPlayers: 9,
+            isPrivate: false
+          },
+          creatorId: 'player-123'
+        })
+      }))
+
+      // Make multiple updates rapidly
+      const updates = []
+      for (let i = 1; i <= 3; i++) {
+        updates.push(
+          coordinator.fetch(new Request('http://localhost/tables/update', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer test-token' },
+            body: JSON.stringify({
+              tableId: 'table-1',
+              pot: i * 100,
+              phase: 'FLOP'
+            })
+          }))
+        )
+      }
+
+      await Promise.all(updates)
+
+      // Wait for batching window
+      await new Promise(resolve => setTimeout(resolve, 150))
+
+      // Check that updates were batched
+      const batches = (coordinator as unknown as { getBroadcastBatches?: () => unknown }).getBroadcastBatches?.()
+      expect(batches).toBeDefined()
+      expect(batches?.length).toBe(1) // All updates should be in one batch
+      expect(batches?.[0].updates).toHaveLength(3)
+    })
+
+    it('should include sequence numbers in broadcasts', async () => {
+      // Create multiple tables
+      for (let i = 1; i <= 3; i++) {
+        await coordinator.fetch(new Request('http://localhost/tables/create', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer test-token' },
+          body: JSON.stringify({
+            tableId: `table-${i}`,
+            config: {
+              name: `Table ${i}`,
+              gameType: 'texas_holdem',
+              stakes: { smallBlind: 10, bigBlind: 20 },
+              maxPlayers: 9,
+              isPrivate: false
+            },
+            creatorId: 'player-123'
+          })
+        }))
+      }
+
+      // Get all broadcasts
+      const broadcasts = (coordinator as unknown as { getAllBroadcasts?: () => unknown }).getAllBroadcasts?.()
+      expect(broadcasts).toBeDefined()
+      
+      // Check sequence numbers
+      broadcasts?.forEach((broadcast: unknown, index: number) => {
+        expect(broadcast.sequenceId).toBe(index + 1)
+      })
+    })
+  })
 })

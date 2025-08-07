@@ -96,6 +96,7 @@ export class DeltaUpdateGenerator {
   
   private addValue(obj: Record<string, unknown>, path: string[], value: unknown): void {
     const key = path[path.length - 1]
+    if (!key) return
     const parent = this.resolvePath(obj, path.slice(0, -1))
     if (parent) {
       parent[key] = value
@@ -104,6 +105,7 @@ export class DeltaUpdateGenerator {
   
   private removeValue(obj: Record<string, unknown>, path: string[]): void {
     const key = path[path.length - 1]
+    if (!key) return
     const parent = this.resolvePath(obj, path.slice(0, -1))
     if (parent) {
       delete parent[key]
@@ -112,6 +114,7 @@ export class DeltaUpdateGenerator {
   
   private replaceValue(obj: Record<string, unknown>, path: string[], value: unknown): void {
     const key = path[path.length - 1]
+    if (!key) return
     const parent = this.resolvePath(obj, path.slice(0, -1))
     if (parent) {
       parent[key] = value

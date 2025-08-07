@@ -76,7 +76,7 @@ export class TableStateChangeDetector {
           } else {
             const updates: Partial<TableListing> = {}
             changedFields.forEach(field => {
-              updates[field as keyof TableListing] = newTable[field as keyof TableListing]
+              (updates as Record<string, unknown>)[field] = newTable[field as keyof TableListing]
             })
             
             changes.push({

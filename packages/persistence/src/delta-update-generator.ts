@@ -4,6 +4,9 @@
  */
 
 import { TableChange } from './table-state-detector'
+import { deepClone } from './utils/deep-clone'
+import { validatePath } from './utils/path-validator'
+import { TableListing } from '@primo-poker/shared'
 
 export interface JsonPatchOperation {
   op: 'add' | 'remove' | 'replace' | 'move' | 'copy' | 'test'
@@ -39,11 +42,20 @@ export class DeltaUpdateGenerator {
         case 'TABLE_UPDATED':
           if (change.fields && change.updates) {
             for (const field of change.fields) {
-              patch.push({
-                op: 'replace',
-                path: `/tables/${change.tableId}/${field}`,
-                value: change.updates[field as keyof typeof change.updates]
-              })
+              const path = `/tables/${change.tableId}/${field}`
+              validatePath(path) // Validate path before using
+              
+              // Type-safe field access
+              const updates = change.updates as Partial<TableListing>
+              const value = updates[field as keyof TableListing]
+              
+              if (value !== undefined) {
+                patch.push({
+                  op: 'replace',
+                  path,
+                  value
+                })
+              }
             }
           }
           break
@@ -73,9 +85,11 @@ export class DeltaUpdateGenerator {
    */
   applyPatch(state: Record<string, unknown>, patch: JsonPatchOperation[]): Record<string, unknown> {
     // Deep clone the state to avoid mutations
-    const newState = JSON.parse(JSON.stringify(state))
+    const newState = deepClone(state)
     
     for (const operation of patch) {
+      // Validate path before processing
+      validatePath(operation.path)
       const pathParts = operation.path.split('/').filter(p => p)
       
       switch (operation.op) {
@@ -124,11 +138,17 @@ export class DeltaUpdateGenerator {
   private resolvePath(obj: Record<string, unknown>, path: string[]): Record<string, unknown> | null {
     let current: unknown = obj
     for (const segment of path) {
-      if (!current || typeof current !== 'object' || current === null) {
+      if (!current || typeof current !== 'object' || current === null || Array.isArray(current)) {
         return null
       }
       current = (current as Record<string, unknown>)[segment]
     }
+    
+    // Ensure the final value is a record (not a primitive or array)
+    if (!current || typeof current !== 'object' || current === null || Array.isArray(current)) {
+      return null
+    }
+    
     return current as Record<string, unknown>
   }
 }

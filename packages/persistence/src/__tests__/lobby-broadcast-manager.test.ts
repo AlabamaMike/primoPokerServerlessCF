@@ -5,6 +5,7 @@
 
 import { LobbyBroadcastManager } from '../lobby-broadcast-manager'
 import { TableListing, WebSocketMessage } from '@primo-poker/shared'
+import { extractBroadcastTestData, resetBroadcastManager } from '../test-helpers/broadcast-test-helpers'
 
 describe('LobbyBroadcastManager', () => {
   let manager: LobbyBroadcastManager
@@ -19,7 +20,7 @@ describe('LobbyBroadcastManager', () => {
   })
   
   afterEach(() => {
-    manager.reset()
+    resetBroadcastManager(manager)
   })
 
   const createTable = (id: string, players: number = 0): TableListing => ({
@@ -85,8 +86,8 @@ describe('LobbyBroadcastManager', () => {
     const broadcast = mockBroadcastFn.mock.calls[0][0]
     expect(broadcast.payload.changes).toHaveLength(3) // table-1 created, table-2 created, table-1 updated, table-3 created
     
-    const batches = manager.getBroadcastBatches()
-    expect(batches).toHaveLength(1)
+    const testData = extractBroadcastTestData(manager)
+    expect(testData.broadcastBatches).toHaveLength(1)
   })
 
   it('should immediately broadcast when batch size limit is reached', async () => {

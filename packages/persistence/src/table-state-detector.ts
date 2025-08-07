@@ -5,6 +5,10 @@
 
 import { TableListing } from '@primo-poker/shared'
 
+export interface TableStateChangeDetectorConfig {
+  statsFields?: string[]
+}
+
 export type TableChangeType = 'TABLE_CREATED' | 'TABLE_UPDATED' | 'TABLE_REMOVED' | 'STATS_UPDATED'
 
 export interface TableChange {
@@ -20,7 +24,11 @@ export interface TableChange {
 }
 
 export class TableStateChangeDetector {
-  private readonly statsFields = ['avgPot', 'handsPerHour']
+  private readonly statsFields: string[]
+  
+  constructor(config?: TableStateChangeDetectorConfig) {
+    this.statsFields = config?.statsFields || ['avgPot', 'handsPerHour']
+  }
   
   /**
    * Detect changes between old and new table states
@@ -65,13 +73,15 @@ export class TableStateChangeDetector {
           )
           
           if (onlyStatsChanged) {
+            const stats: Record<string, unknown> = {}
+            changedFields.forEach(field => {
+              stats[field] = newTable[field as keyof TableListing]
+            })
+            
             changes.push({
               type: 'STATS_UPDATED',
               tableId,
-              stats: {
-                avgPot: newTable.avgPot,
-                handsPerHour: newTable.handsPerHour
-              }
+              stats: stats as any // Type will be validated by consumers
             })
           } else {
             const updates: Partial<TableListing> = {}
@@ -121,11 +131,46 @@ export class TableStateChangeDetector {
       changedFields.push('stakes')
     }
     
-    // Check player list (compare lengths for now)
-    if (oldTable.playerList.length !== newTable.playerList.length) {
+    // Check player list with deep comparison
+    if (this.hasPlayerListChanged(oldTable.playerList, newTable.playerList)) {
       changedFields.push('playerList')
     }
     
     return changedFields
+  }
+  
+  /**
+   * Check if player list has changed (order matters in poker)
+   */
+  private hasPlayerListChanged(
+    oldList: TableListing['playerList'],
+    newList: TableListing['playerList']
+  ): boolean {
+    // Different lengths means changed
+    if (oldList.length !== newList.length) {
+      return true
+    }
+    
+    // Check each player in order
+    for (let i = 0; i < oldList.length; i++) {
+      const oldPlayer = oldList[i]
+      const newPlayer = newList[i]
+      
+      // Different player ID at same position
+      if (oldPlayer?.playerId !== newPlayer?.playerId) {
+        return true
+      }
+      
+      // Check if player properties changed
+      if (oldPlayer && newPlayer) {
+        if (oldPlayer.chipCount !== newPlayer.chipCount ||
+            oldPlayer.isActive !== newPlayer.isActive ||
+            oldPlayer.username !== newPlayer.username) {
+          return true
+        }
+      }
+    }
+    
+    return false
   }
 }

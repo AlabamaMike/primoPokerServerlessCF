@@ -11,6 +11,9 @@ import { logger } from '@primo-poker/core'
 export interface BroadcastConfig {
   batchingWindowMs: number  // Time window for batching updates
   maxBatchSize: number      // Maximum updates in a single batch
+  maxRetries?: number       // Maximum retry attempts for failed broadcasts
+  retryDelayMs?: number     // Delay between retry attempts
+  maxHistorySize?: number   // Maximum broadcast history to keep
 }
 
 export interface LobbyUpdateMessage extends WebSocketMessage {
@@ -27,23 +30,33 @@ export class LobbyBroadcastManager {
   private stateDetector: TableStateChangeDetector
   private deltaGenerator: DeltaUpdateGenerator
   private pendingChanges: TableChange[] = []
-  private batchTimer: NodeJS.Timeout | null = null
+  private batchTimer: ReturnType<typeof setTimeout> | null = null
   private sequenceNumber: number = 0
   private lastState: Map<string, TableListing> = new Map()
   private config: BroadcastConfig
   
-  // For testing
-  private lastBroadcast?: WebSocketMessage
+  // Internal state
+  private lastBroadcast: WebSocketMessage | undefined
   private allBroadcasts: WebSocketMessage[] = []
   private broadcastBatches: { timestamp: number; updates: TableChange[] }[] = []
+  private maxHistorySize: number
   
   constructor(
     config: BroadcastConfig = {
       batchingWindowMs: 100,
-      maxBatchSize: 50
+      maxBatchSize: 50,
+      maxRetries: 3,
+      retryDelayMs: 1000,
+      maxHistorySize: 1000
     }
   ) {
-    this.config = config
+    this.config = {
+      ...config,
+      maxRetries: config.maxRetries ?? 3,
+      retryDelayMs: config.retryDelayMs ?? 1000,
+      maxHistorySize: config.maxHistorySize ?? 1000
+    }
+    this.maxHistorySize = this.config.maxHistorySize || 1000
     this.stateDetector = new TableStateChangeDetector()
     this.deltaGenerator = new DeltaUpdateGenerator()
   }
@@ -132,24 +145,20 @@ export class LobbyBroadcastManager {
       }
     )
     
-    // Store for testing
+    // Store message with memory management
     this.lastBroadcast = message
-    this.allBroadcasts.push(message)
-    this.broadcastBatches.push({
+    this.addToHistory(message)
+    this.addToBatchHistory({
       timestamp: Date.now(),
       updates: changes
     })
     
-    try {
-      await broadcastFn(message)
-      logger.info('Broadcast lobby update', {
-        sequenceId: this.sequenceNumber,
-        changeCount: changes.length,
-        patchCount: patch.length
-      })
-    } catch (error) {
-      logger.error('Failed to broadcast lobby update', error as Error)
-    }
+    // Broadcast with retry logic
+    await this.broadcastWithRetry(message, broadcastFn, {
+      sequenceId: this.sequenceNumber,
+      changeCount: changes.length,
+      patchCount: patch.length
+    })
   }
   
   /**
@@ -173,11 +182,16 @@ export class LobbyBroadcastManager {
       }
     )
     
-    // Store for testing
+    // Store message with memory management
     this.lastBroadcast = message
-    this.allBroadcasts.push(message)
+    this.addToHistory(message)
     
-    await broadcastFn(message)
+    // Broadcast with retry logic
+    await this.broadcastWithRetry(message, broadcastFn, {
+      type,
+      tableId: table.tableId,
+      sequenceId: this.sequenceNumber
+    })
   }
   
   /**
@@ -188,32 +202,77 @@ export class LobbyBroadcastManager {
   }
   
   /**
-   * Reset state (for testing)
+   * Clean up resources
    */
-  reset(): void {
-    this.pendingChanges = []
-    this.sequenceNumber = 0
-    this.lastState = new Map()
-    this.lastBroadcast = undefined
-    this.allBroadcasts = []
-    this.broadcastBatches = []
-    
+  cleanup(): void {
     if (this.batchTimer) {
       clearTimeout(this.batchTimer)
       this.batchTimer = null
     }
   }
   
-  // Testing helpers
-  getLastBroadcast(): WebSocketMessage | undefined {
-    return this.lastBroadcast
+  /**
+   * Broadcast with retry logic
+   */
+  private async broadcastWithRetry(
+    message: WebSocketMessage,
+    broadcastFn: (message: WebSocketMessage) => Promise<void>,
+    metadata: Record<string, unknown>
+  ): Promise<void> {
+    const maxRetries = this.config.maxRetries || 3
+    const retryDelayMs = this.config.retryDelayMs || 1000
+    
+    let lastError: Error | undefined
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await broadcastFn(message)
+        logger.info('Broadcast successful', { ...metadata, attempt })
+        return
+      } catch (error) {
+        lastError = error as Error
+        logger.error('Broadcast failed', {
+          ...metadata,
+          attempt,
+          error: lastError.message,
+          willRetry: attempt < maxRetries
+        })
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs * Math.pow(2, attempt)))
+        }
+      }
+    }
+    
+    // All retries failed
+    logger.error('All broadcast retries failed', {
+      ...metadata,
+      attempts: maxRetries + 1,
+      error: lastError?.message
+    })
   }
   
-  getAllBroadcasts(): WebSocketMessage[] {
-    return this.allBroadcasts
+  /**
+   * Add message to history with circular buffer behavior
+   */
+  private addToHistory(message: WebSocketMessage): void {
+    this.allBroadcasts.push(message)
+    
+    // Maintain circular buffer
+    if (this.allBroadcasts.length > this.maxHistorySize) {
+      this.allBroadcasts.shift()
+    }
   }
   
-  getBroadcastBatches(): { timestamp: number; updates: TableChange[] }[] {
-    return this.broadcastBatches
+  /**
+   * Add batch to history with circular buffer behavior
+   */
+  private addToBatchHistory(batch: { timestamp: number; updates: TableChange[] }): void {
+    this.broadcastBatches.push(batch)
+    
+    // Maintain circular buffer
+    if (this.broadcastBatches.length > this.maxHistorySize) {
+      this.broadcastBatches.shift()
+    }
   }
 }

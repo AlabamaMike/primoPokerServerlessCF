@@ -11,9 +11,9 @@
     "tauri": "tauri",
     "test": "vitest",
     "test:ci": "vitest run --passWithNoTests",
-    "test:lobby": "jest --config jest.config.lobby.js",
-    "test:lobby:watch": "jest --config jest.config.lobby.js --watch",
-    "test:lobby:coverage": "jest --config jest.config.lobby.js --coverage",
+    "test:lobby": "jest --config jest.config.lobby.cjs",
+    "test:lobby:watch": "jest --config jest.config.lobby.cjs --watch",
+    "test:lobby:coverage": "jest --config jest.config.lobby.cjs --coverage",
     "test:e2e": "playwright test",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

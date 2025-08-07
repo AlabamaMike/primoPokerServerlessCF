@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
+import { formatCurrency } from '../../utils/currency';
 
 interface DepositData {
   amount: number;
@@ -44,13 +45,6 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   }, [isOpen, paymentMethods]);
 
   if (!isOpen) return null;
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(value);
-  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^0-9.]/g, '');

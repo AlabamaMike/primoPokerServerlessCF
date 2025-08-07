@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
+import { formatCurrency } from '../../utils/currency';
 
 interface WithdrawData {
   amount: number;
@@ -65,13 +66,6 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
   }, [isOpen, withdrawalMethods]);
 
   if (!isOpen) return null;
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(value);
-  };
 
   const getWithdrawalMethodLabel = (method: string): string => {
     switch (method) {

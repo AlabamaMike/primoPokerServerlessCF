@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { clsx } from 'clsx';
+import { formatCurrency } from '../../utils/currency';
 
 interface Table {
   id: string;
@@ -62,13 +63,6 @@ export const BuyInFlow: React.FC<BuyInFlowProps> = ({
     { label: `100 BBs ($${100 * bigBlindValue})`, value: 100 * bigBlindValue },
     { label: `Max ($${table.maxBuyIn})`, value: table.maxBuyIn }
   ].filter(item => item.value >= table.minBuyIn && item.value <= table.maxBuyIn);
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(value);
-  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^0-9.]/g, '');

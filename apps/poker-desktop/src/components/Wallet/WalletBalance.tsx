@@ -1,5 +1,6 @@
 import React from 'react';
 import { clsx } from 'clsx';
+import { formatCurrency } from '../../utils/currency';
 
 interface WalletBalanceProps {
   balance: number;
@@ -18,16 +19,6 @@ export const WalletBalance: React.FC<WalletBalanceProps> = ({
   currency = 'USD',
   showLabel = false
 }) => {
-  const formatCurrency = (amount: number, currencyCode: string): string => {
-    const formatter = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-    return formatter.format(amount);
-  };
-
   if (isLoading) {
     return (
       <div className={clsx('wallet-balance', className)}>

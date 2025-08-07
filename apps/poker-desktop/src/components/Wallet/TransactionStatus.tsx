@@ -1,5 +1,6 @@
 import React from 'react';
 import { clsx } from 'clsx';
+import './TransactionStatus.css';
 
 type Status = 'pending' | 'processing' | 'completed' | 'failed' | 'canceled';
 type Variant = 'default' | 'inline' | 'badge';
@@ -177,18 +178,3 @@ export const TransactionStatus: React.FC<TransactionStatusProps> = ({
 };
 
 // Add CSS for spin animation if not already present
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  
-  .transaction-status {
-    transition: all 0.3s ease;
-  }
-`;
-if (typeof document !== 'undefined' && !document.getElementById('transaction-status-styles')) {
-  style.id = 'transaction-status-styles';
-  document.head.appendChild(style);
-}

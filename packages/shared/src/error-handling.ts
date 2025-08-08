@@ -302,6 +302,42 @@ export class ProfileAlreadyExistsError extends BaseError {
   }
 }
 
+export class InvalidFileTypeError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.VALIDATION_FAILED,
+      message,
+      details,
+      httpStatus: 400,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'Invalid file type. Please upload a valid image file.';
+  }
+}
+
+export class FileSizeTooLargeError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.VALIDATION_FAILED,
+      message,
+      details,
+      httpStatus: 413,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'File size too large. Please upload a smaller image.';
+  }
+}
+
 export interface ErrorRecoveryStrategy {
   shouldRecover(error: BaseError): boolean;
   recover(error: BaseError): Promise<void>;

@@ -15,6 +15,8 @@ import { AuthenticationManager, TokenPayload, PasswordManager } from '@primo-pok
 import { D1PlayerRepository, D1GameRepository, WalletManager } from '@primo-poker/persistence';
 import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
+import { friendRoutes } from './routes/friends';
+import { playerNotesRoutes } from './routes/player-notes';
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -95,6 +97,12 @@ export class PokerAPIRoutes {
 
     // Health check
     this.router.get('/api/health', this.handleHealthCheck.bind(this));
+
+    // Friend routes - mount the sub-router
+    this.router.all('/api/friends/*', friendRoutes.handle);
+
+    // Player notes routes - mount the sub-router
+    this.router.all('/api/notes/*', playerNotesRoutes.handle);
 
     // CORS preflight handler - more specific patterns first
     this.router.options('/api/*', this.handleOptionsRequest.bind(this));
@@ -825,10 +833,6 @@ export class PokerAPIRoutes {
       return this.successResponse(wallet);
     } catch (error) {
       logger.error('Get wallet error', error);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/main
       return this.errorResponse('Failed to get wallet information', 500);
     }
   }
@@ -950,12 +954,6 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Transfer error', error);
       return this.errorResponse('Failed to process transfer', 500);
-<<<<<<< HEAD
-=======
-      return this.errorResponse('Failed to get wallet information');
->>>>>>> origin/main
-=======
->>>>>>> origin/main
     }
   }
 
@@ -978,15 +976,7 @@ export class PokerAPIRoutes {
       return this.successResponse(result);
     } catch (error) {
       logger.error('Buy-in error', error);
-<<<<<<< HEAD
-<<<<<<< HEAD
       return this.errorResponse('Failed to process buy-in', 500);
-=======
-      return this.errorResponse('Failed to process buy-in');
->>>>>>> origin/main
-=======
-      return this.errorResponse('Failed to process buy-in', 500);
->>>>>>> origin/main
     }
   }
 
@@ -1012,15 +1002,7 @@ export class PokerAPIRoutes {
       });
     } catch (error) {
       logger.error('Cash-out error', error);
-<<<<<<< HEAD
-<<<<<<< HEAD
       return this.errorResponse('Failed to process cash-out', 500);
-=======
-      return this.errorResponse('Failed to process cash-out');
->>>>>>> origin/main
-=======
-      return this.errorResponse('Failed to process cash-out', 500);
->>>>>>> origin/main
     }
   }
 
@@ -1031,10 +1013,6 @@ export class PokerAPIRoutes {
       }
 
       const url = new URL(request.url);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/main
       const validation = validateQueryParams(TransactionQuerySchema, url.searchParams);
       
       if (!validation.success) {
@@ -1051,18 +1029,6 @@ export class PokerAPIRoutes {
     } catch (error) {
       logger.error('Get transactions error', error);
       return this.errorResponse('Failed to get transaction history', 500);
-<<<<<<< HEAD
-=======
-      const limit = parseInt(url.searchParams.get('limit') || '50');
-      
-      const transactions = await this.walletManager.getTransactionHistory(request.user.userId, limit);
-      return this.successResponse(transactions);
-    } catch (error) {
-      logger.error('Get transactions error', error);
-      return this.errorResponse('Failed to get transaction history');
->>>>>>> origin/main
-=======
->>>>>>> origin/main
     }
   }
 
@@ -1095,15 +1061,7 @@ export class PokerAPIRoutes {
       });
     } catch (error) {
       logger.error('Get table seats error', error);
-<<<<<<< HEAD
-<<<<<<< HEAD
       return this.errorResponse('Failed to get table seat information', 500);
-=======
-      return this.errorResponse('Failed to get table seat information');
->>>>>>> origin/main
-=======
-      return this.errorResponse('Failed to get table seat information', 500);
->>>>>>> origin/main
     }
   }
 

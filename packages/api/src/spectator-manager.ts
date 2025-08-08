@@ -107,21 +107,17 @@ export interface HandReplay {
   }
 }
 
-<<<<<<< HEAD
-=======
 export interface SpectatorUpdate {
   gameState: GameState
   players: GamePlayer[]
   timestamp: number
 }
->>>>>>> origin/main
+
 export class SpectatorManager {
   private spectators: Map<string, SpectatorInfo> = new Map()
   private tableViewers: Map<string, Set<string>> = new Map() // tableId -> spectatorIds
   private handHistories: Map<string, HandReplay[]> = new Map() // tableId -> hands
   private playerStats: Map<string, PlayerStats> = new Map() // playerId -> stats
-<<<<<<< HEAD
-=======
   private updateQueues: Map<string, SpectatorUpdate[]> = new Map() // tableId -> pending updates
   private updateTimers: Map<string, number> = new Map() // tableId -> timer
   private readonly SPECTATOR_DELAY_MS = 500
@@ -129,7 +125,6 @@ export class SpectatorManager {
   
   // Callback for broadcasting updates (to be set by WebSocket handler)
   public onBroadcast?: (tableId: string, update: SpectatorUpdate) => void
->>>>>>> origin/main
 
   /**
    * Add a spectator to a table
@@ -139,15 +134,13 @@ export class SpectatorManager {
     spectatorInfo: SpectatorInfo
   ): boolean {
     try {
-<<<<<<< HEAD
-=======
       // Check if table already has max spectators
       const viewers = this.tableViewers.get(tableId)
       if (viewers && viewers.size >= this.MAX_SPECTATORS_PER_TABLE) {
         console.log(`Table ${tableId} has reached max spectator limit`)
         return false
       }
->>>>>>> origin/main
+      
       this.spectators.set(spectatorInfo.spectatorId, spectatorInfo)
       
       if (!this.tableViewers.has(tableId)) {
@@ -232,11 +225,7 @@ export class SpectatorManager {
 
     // Show player hands only if they're revealed (showdown) or player folded
     players.forEach((player: GamePlayer) => {
-<<<<<<< HEAD
-      if (player.isFolded || gameState.phase === 'showdown') {
-=======
       if (player.isFolded || gameState.phase === GamePhase.SHOWDOWN) {
->>>>>>> origin/main
         // In a real implementation, you'd check if cards should be visible
         result.playerHands[player.id] = player.cards || null
       } else {
@@ -467,8 +456,6 @@ export class SpectatorManager {
       averageViewingTime: 12 * 60 * 1000 // Mock: 12 minutes average
     }
   }
-<<<<<<< HEAD
-=======
 
   /**
    * Queue a game state update for delayed broadcast to spectators
@@ -531,5 +518,4 @@ export class SpectatorManager {
       this.onBroadcast(tableId, latestUpdate)
     }
   }
->>>>>>> origin/main
 }

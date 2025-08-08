@@ -572,3 +572,5 @@ export function createWebSocketMessage<T>(
 
 // Re-export environment types
 export * from './types/environment';
+// Re-export social types
+export * from './types/social';

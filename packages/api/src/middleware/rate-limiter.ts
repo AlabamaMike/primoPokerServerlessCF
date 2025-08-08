@@ -142,3 +142,13 @@ export const authRateLimiter = new RateLimiter({
     return `auth:${ip}`;
   }
 });
+
+export const socialRateLimiter = new RateLimiter({
+  windowMs: 60 * 1000,       // 1 minute
+  maxRequests: 20,           // 20 requests per minute
+  keyGenerator: (request) => {
+    // Rate limit by authenticated user ID
+    const userId = (request as any).user?.id || 'anonymous';
+    return `social:${userId}`;
+  }
+});

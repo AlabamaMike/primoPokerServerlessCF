@@ -6,7 +6,7 @@ import {
 } from '@primo-poker/shared';
 
 // Mock PlayerNotesRepository
-jest.mock('@primo-poker/persistence/src/player-notes-repository', () => ({
+jest.mock('@primo-poker/persistence', () => ({
   PlayerNotesRepository: jest.fn().mockImplementation(() => ({
     createOrUpdateNote: jest.fn(),
     getNote: jest.fn(),

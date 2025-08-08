@@ -8,6 +8,7 @@ import {
   CannotBeFriendsWithSelfError,
   PlayerBlockedError
 } from '@primo-poker/shared';
+import { FriendRelationshipRow, FriendWithUserInfoRow, BlockCheckRow } from './types/database-rows';
 
 export interface IFriendRepository {
   sendFriendRequest(senderId: string, receiverId: string): Promise<FriendRelationship>;
@@ -61,7 +62,7 @@ export class FriendRepository implements IFriendRepository {
       INSERT INTO friend_relationships (sender_id, receiver_id, status)
       VALUES (?, ?, 'pending')
       RETURNING *
-    `).bind(senderId, receiverId).first<FriendRelationship>();
+    `).bind(senderId, receiverId).first<FriendRelationshipRow>();
 
     if (!result) {
       throw new Error('Failed to create friend request');
@@ -150,7 +151,7 @@ export class FriendRepository implements IFriendRepository {
       ORDER BY u.username
     `).bind(userId, userId, userId, userId).all();
 
-    return results.results.map(row => this.mapToFriendWithUserInfo(row));
+    return results.results.map(row => this.mapToFriendWithUserInfo(row as FriendWithUserInfoRow));
   }
 
   async getPendingRequests(userId: string): Promise<FriendWithUserInfo[]> {
@@ -170,7 +171,7 @@ export class FriendRepository implements IFriendRepository {
       ORDER BY fr.created_at DESC
     `).bind(userId).all();
 
-    return results.results.map(row => this.mapToFriendWithUserInfo(row));
+    return results.results.map(row => this.mapToFriendWithUserInfo(row as FriendWithUserInfoRow));
   }
 
   async isFriend(userId1: string, userId2: string): Promise<boolean> {
@@ -187,12 +188,12 @@ export class FriendRepository implements IFriendRepository {
     const result = await this.db.prepare(`
       SELECT COUNT(*) as count FROM block_list 
       WHERE blocker_id = ? AND blocked_id = ?
-    `).bind(blockerId, blockedId).first<{ count: number }>();
+    `).bind(blockerId, blockedId).first<BlockCheckRow>();
 
     return result?.count ? result.count > 0 : false;
   }
 
-  private mapToFriendRelationship(row: any): FriendRelationship {
+  private mapToFriendRelationship(row: FriendRelationshipRow): FriendRelationship {
     return {
       id: row.id,
       senderId: row.sender_id,
@@ -203,14 +204,14 @@ export class FriendRepository implements IFriendRepository {
     };
   }
 
-  private mapToFriendWithUserInfo(row: any): FriendWithUserInfo {
+  private mapToFriendWithUserInfo(row: FriendWithUserInfoRow): FriendWithUserInfo {
     return {
       friendshipId: row.friendship_id,
       userId: row.user_id,
       username: row.username,
       displayName: row.display_name,
       status: row.status as FriendshipStatus,
-      isOnline: row.is_online === 1,
+      isOnline: Boolean(row.is_online),
       createdAt: row.created_at
     };
   }

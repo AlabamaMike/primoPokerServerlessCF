@@ -1,12 +1,15 @@
 import { Router, IRequest } from 'itty-router';
 import { 
   CreatePlayerNoteSchema,
-  PlayerNoteError
+  PlayerNoteError,
+  SOCIAL_CONSTANTS
 } from '@primo-poker/shared';
-import { PlayerNotesRepository } from '@primo-poker/persistence/src/player-notes-repository';
+import { PlayerNotesRepository } from '@primo-poker/persistence';
 import { AuthMiddleware } from '../middleware/auth';
 import { withErrorHandling } from '../middleware/error-handler';
 import { validateRequest } from '../middleware/validation';
+import { socialRateLimiter } from '../middleware/rate-limiter';
+import { createSuccessResponse, createErrorResponse } from '../utils/response-helpers';
 
 const router = Router({ base: '/api/notes' });
 
@@ -14,6 +17,7 @@ const router = Router({ base: '/api/notes' });
 router.post(
   '/',
   AuthMiddleware.requireAuth,
+  socialRateLimiter.middleware(),
   validateRequest(CreatePlayerNoteSchema),
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
@@ -22,10 +26,7 @@ router.post(
     const repository = new PlayerNotesRepository(env.DB);
     const note = await repository.createOrUpdateNote(userId, noteData);
 
-    return new Response(JSON.stringify(note), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse(note, 201);
   })
 );
 
@@ -37,24 +38,20 @@ router.get(
     const userId = request.user!.id;
     const url = new URL(request.url);
     const query = url.searchParams.get('q');
-    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || String(SOCIAL_CONSTANTS.DEFAULT_PAGINATION_LIMIT)), SOCIAL_CONSTANTS.MAX_PAGINATION_LIMIT);
 
-    if (!query || query.length < 2) {
-      return new Response(JSON.stringify({ 
-        error: 'Search query must be at least 2 characters' 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (!query || query.length < SOCIAL_CONSTANTS.MIN_SEARCH_QUERY_LENGTH) {
+      return createErrorResponse(
+        `Search query must be at least ${SOCIAL_CONSTANTS.MIN_SEARCH_QUERY_LENGTH} characters`,
+        400,
+        'INVALID_SEARCH_QUERY'
+      );
     }
 
     const repository = new PlayerNotesRepository(env.DB);
     const notes = await repository.searchNotes(userId, query, limit);
 
-    return new Response(JSON.stringify({ notes, query }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ notes, query });
   })
 );
 
@@ -70,16 +67,10 @@ router.get(
     const note = await repository.getNote(userId, subjectId);
 
     if (!note) {
-      return new Response(JSON.stringify({ error: 'Note not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return createErrorResponse('Note not found', 404, 'NOTE_NOT_FOUND');
     }
 
-    return new Response(JSON.stringify(note), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse(note);
   })
 );
 
@@ -90,16 +81,13 @@ router.get(
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const url = new URL(request.url);
-    const limit = parseInt(url.searchParams.get('limit') || '50');
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || String(SOCIAL_CONSTANTS.DEFAULT_NOTE_PAGINATION_LIMIT)), SOCIAL_CONSTANTS.MAX_PAGINATION_LIMIT);
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
     const repository = new PlayerNotesRepository(env.DB);
     const notes = await repository.getNotesByAuthor(userId, limit, offset);
 
-    return new Response(JSON.stringify({ notes }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ notes });
   })
 );
 
@@ -114,10 +102,7 @@ router.delete(
     const repository = new PlayerNotesRepository(env.DB);
     await repository.deleteNote(userId, subjectId);
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ message: 'Note deleted' });
   })
 );
 

@@ -1,13 +1,14 @@
 import { Router, IRequest } from 'itty-router';
 import { z } from 'zod';
 import { 
-  SendFriendRequestSchema,
-  FriendRequestNotFoundError
+  SendFriendRequestSchema
 } from '@primo-poker/shared';
-import { FriendRepository } from '@primo-poker/persistence/src/friend-repository';
+import { FriendRepository } from '@primo-poker/persistence';
 import { AuthMiddleware } from '../middleware/auth';
 import { withErrorHandling } from '../middleware/error-handler';
 import { validateRequest } from '../middleware/validation';
+import { socialRateLimiter } from '../middleware/rate-limiter';
+import { createSuccessResponse } from '../utils/response-helpers';
 
 const router = Router({ base: '/api/friends' });
 
@@ -15,6 +16,7 @@ const router = Router({ base: '/api/friends' });
 router.post(
   '/request',
   AuthMiddleware.requireAuth,
+  socialRateLimiter.middleware(),
   validateRequest(SendFriendRequestSchema),
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
@@ -23,10 +25,7 @@ router.post(
     const repository = new FriendRepository(env.DB);
     const friendRequest = await repository.sendFriendRequest(userId, receiverId);
 
-    return new Response(JSON.stringify(friendRequest), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse(friendRequest, 201);
   })
 );
 
@@ -45,10 +44,7 @@ router.post(
     const repository = new FriendRepository(env.DB);
     await repository.acceptFriendRequest(requestId, userId);
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ message: 'Friend request accepted' });
   })
 );
 
@@ -67,10 +63,7 @@ router.post(
     const repository = new FriendRepository(env.DB);
     await repository.rejectFriendRequest(requestId, userId);
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ message: 'Friend request rejected' });
   })
 );
 
@@ -84,10 +77,7 @@ router.get(
     const repository = new FriendRepository(env.DB);
     const friends = await repository.getFriends(userId);
 
-    return new Response(JSON.stringify({ friends }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ friends });
   })
 );
 
@@ -101,10 +91,7 @@ router.get(
     const repository = new FriendRepository(env.DB);
     const requests = await repository.getPendingRequests(userId);
 
-    return new Response(JSON.stringify({ requests }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ requests });
   })
 );
 
@@ -119,10 +106,7 @@ router.delete(
     const repository = new FriendRepository(env.DB);
     await repository.removeFriend(userId, friendId);
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return createSuccessResponse({ message: 'Friend removed' });
   })
 );
 

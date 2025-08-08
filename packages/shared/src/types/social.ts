@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { BaseError } from '../error-handling';
 
+// Constants
+export const SOCIAL_CONSTANTS = {
+  MAX_NOTE_LENGTH: 1000,
+  MIN_SEARCH_QUERY_LENGTH: 2,
+  DEFAULT_PAGINATION_LIMIT: 20,
+  MAX_PAGINATION_LIMIT: 100,
+  DEFAULT_NOTE_PAGINATION_LIMIT: 50
+} as const;
+
 // Friend relationship status
 export const FriendshipStatus = z.enum(['pending', 'accepted', 'rejected']);
 export type FriendshipStatus = z.infer<typeof FriendshipStatus>;
@@ -27,7 +36,7 @@ export const PlayerNoteSchema = z.object({
   id: z.number(),
   authorId: z.string(),
   subjectId: z.string(),
-  note: z.string().min(1).max(1000),
+  note: z.string().min(1).max(SOCIAL_CONSTANTS.MAX_NOTE_LENGTH),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -36,7 +45,7 @@ export type PlayerNote = z.infer<typeof PlayerNoteSchema>;
 // Player note input
 export const CreatePlayerNoteSchema = z.object({
   subjectId: z.string(),
-  note: z.string().min(1).max(1000)
+  note: z.string().min(1).max(SOCIAL_CONSTANTS.MAX_NOTE_LENGTH)
 });
 export type CreatePlayerNote = z.infer<typeof CreatePlayerNoteSchema>;
 

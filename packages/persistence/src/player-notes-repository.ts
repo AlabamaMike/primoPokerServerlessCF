@@ -2,8 +2,10 @@ import {
   PlayerNote,
   CreatePlayerNote,
   PlayerNoteError,
-  CannotNoteYourselfError
+  CannotNoteYourselfError,
+  PlayerBlockedError
 } from '@primo-poker/shared';
+import { PlayerNoteRow, PlayerNoteWithUserInfoRow, BlockCheckRow } from './types/database-rows';
 
 export interface IPlayerNotesRepository {
   createOrUpdateNote(authorId: string, note: CreatePlayerNote): Promise<PlayerNote>;
@@ -22,6 +24,16 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
       throw new CannotNoteYourselfError();
     }
 
+    // Check if blocked
+    const blockCheck = await this.db.prepare(`
+      SELECT COUNT(*) as count FROM block_list 
+      WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
+    `).bind(authorId, note.subjectId, note.subjectId, authorId).first<BlockCheckRow>();
+    
+    if (blockCheck?.count && blockCheck.count > 0) {
+      throw new PlayerBlockedError('Cannot create notes about blocked players');
+    }
+
     // Check if note already exists
     const existing = await this.db.prepare(`
       SELECT * FROM player_notes 
@@ -35,7 +47,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
         SET note = ?, updated_at = datetime('now')
         WHERE author_id = ? AND subject_id = ?
         RETURNING *
-      `).bind(note.note, authorId, note.subjectId).first<PlayerNote>();
+      `).bind(note.note, authorId, note.subjectId).first<PlayerNoteRow>();
 
       if (!result) {
         throw new PlayerNoteError('Failed to update note');
@@ -48,7 +60,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
         INSERT INTO player_notes (author_id, subject_id, note)
         VALUES (?, ?, ?)
         RETURNING *
-      `).bind(authorId, note.subjectId, note.note).first<PlayerNote>();
+      `).bind(authorId, note.subjectId, note.note).first<PlayerNoteRow>();
 
       if (!result) {
         throw new PlayerNoteError('Failed to create note');
@@ -62,7 +74,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
     const result = await this.db.prepare(`
       SELECT * FROM player_notes 
       WHERE author_id = ? AND subject_id = ?
-    `).bind(authorId, subjectId).first();
+    `).bind(authorId, subjectId).first<PlayerNoteRow>();
 
     return result ? this.mapToPlayerNote(result) : null;
   }
@@ -77,7 +89,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
       LIMIT ? OFFSET ?
     `).bind(authorId, limit, offset).all();
 
-    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row));
+    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row as PlayerNoteWithUserInfoRow));
   }
 
   async deleteNote(authorId: string, subjectId: string): Promise<void> {
@@ -88,27 +100,32 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
   }
 
   async searchNotes(authorId: string, query: string, limit: number = 20): Promise<PlayerNote[]> {
-    // Search in note content and subject's username/display name
+    // Search using FTS for subject names and regular LIKE for note content
     const results = await this.db.prepare(`
-      SELECT pn.*, u.username, u.displayName as display_name
+      SELECT DISTINCT pn.*, u.username, u.displayName as display_name
       FROM player_notes pn
       JOIN users u ON u.id = pn.subject_id
+      LEFT JOIN player_search_fts fts ON fts.player_id = pn.subject_id
       WHERE pn.author_id = ? 
-        AND (pn.note LIKE ? OR u.username LIKE ? OR u.displayName LIKE ?)
+        AND (
+          pn.note LIKE ? 
+          OR fts.username MATCH ?
+          OR fts.display_name MATCH ?
+        )
       ORDER BY pn.updated_at DESC
       LIMIT ?
     `).bind(
       authorId, 
       `%${query}%`, 
-      `%${query}%`, 
-      `%${query}%`, 
+      query,
+      query,
       limit
     ).all();
 
-    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row));
+    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row as PlayerNoteWithUserInfoRow));
   }
 
-  private mapToPlayerNote(row: any): PlayerNote {
+  private mapToPlayerNote(row: PlayerNoteRow): PlayerNote {
     return {
       id: row.id,
       authorId: row.author_id,
@@ -119,7 +136,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
     };
   }
 
-  private mapToPlayerNoteWithUserInfo(row: any): PlayerNote {
+  private mapToPlayerNoteWithUserInfo(row: PlayerNoteWithUserInfoRow): PlayerNote {
     return {
       id: row.id,
       authorId: row.author_id,

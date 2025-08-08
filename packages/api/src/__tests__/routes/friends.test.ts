@@ -8,7 +8,7 @@ import {
 } from '@primo-poker/shared';
 
 // Mock FriendRepository
-jest.mock('@primo-poker/persistence/src/friend-repository', () => ({
+jest.mock('@primo-poker/persistence', () => ({
   FriendRepository: jest.fn().mockImplementation(() => ({
     sendFriendRequest: jest.fn(),
     acceptFriendRequest: jest.fn(),

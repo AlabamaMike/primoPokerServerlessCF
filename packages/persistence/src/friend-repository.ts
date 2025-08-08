@@ -151,7 +151,7 @@ export class FriendRepository implements IFriendRepository {
       ORDER BY u.username
     `).bind(userId, userId, userId, userId).all();
 
-    return results.results.map(row => this.mapToFriendWithUserInfo(row as FriendWithUserInfoRow));
+    return results.results.map(row => this.mapToFriendWithUserInfo(row as unknown as FriendWithUserInfoRow));
   }
 
   async getPendingRequests(userId: string): Promise<FriendWithUserInfo[]> {
@@ -171,7 +171,7 @@ export class FriendRepository implements IFriendRepository {
       ORDER BY fr.created_at DESC
     `).bind(userId).all();
 
-    return results.results.map(row => this.mapToFriendWithUserInfo(row as FriendWithUserInfoRow));
+    return results.results.map(row => this.mapToFriendWithUserInfo(row as unknown as FriendWithUserInfoRow));
   }
 
   async isFriend(userId1: string, userId2: string): Promise<boolean> {

@@ -266,6 +266,42 @@ export class SystemError extends BaseError {
   }
 }
 
+export class ProfileNotFoundError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.PLAYER_NOT_FOUND,
+      message,
+      details,
+      httpStatus: 404,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'Player profile not found.';
+  }
+}
+
+export class ProfileAlreadyExistsError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.VALIDATION_FAILED,
+      message,
+      details,
+      httpStatus: 409,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'Player profile already exists.';
+  }
+}
+
 export interface ErrorRecoveryStrategy {
   shouldRecover(error: BaseError): boolean;
   recover(error: BaseError): Promise<void>;

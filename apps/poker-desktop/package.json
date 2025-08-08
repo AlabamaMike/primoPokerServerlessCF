@@ -14,6 +14,9 @@
     "test:lobby": "jest --config jest.config.lobby.cjs",
     "test:lobby:watch": "jest --config jest.config.lobby.cjs --watch",
     "test:lobby:coverage": "jest --config jest.config.lobby.cjs --coverage",
+    "test:admin": "jest --config jest.config.admin.cjs",
+    "test:admin:watch": "jest --config jest.config.admin.cjs --watch",
+    "test:admin:coverage": "jest --config jest.config.admin.cjs --coverage",
     "test:e2e": "playwright test",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

@@ -112,6 +112,7 @@ export interface SpectatorUpdate {
   players: GamePlayer[]
   timestamp: number
 }
+
 export class SpectatorManager {
   private spectators: Map<string, SpectatorInfo> = new Map()
   private tableViewers: Map<string, Set<string>> = new Map() // tableId -> spectatorIds
@@ -139,6 +140,7 @@ export class SpectatorManager {
         console.log(`Table ${tableId} has reached max spectator limit`)
         return false
       }
+      
       this.spectators.set(spectatorInfo.spectatorId, spectatorInfo)
       
       if (!this.tableViewers.has(tableId)) {

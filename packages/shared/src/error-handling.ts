@@ -38,6 +38,12 @@ export enum ErrorCode {
   INVALID_INPUT = 'INVALID_INPUT',
   MISSING_REQUIRED_FIELD = 'MISSING_REQUIRED_FIELD',
 
+  // Profile Errors
+  PROFILE_NOT_FOUND = 'PROFILE_NOT_FOUND',
+  PROFILE_ALREADY_EXISTS = 'PROFILE_ALREADY_EXISTS',
+  PROFILE_INVALID_DATA = 'PROFILE_INVALID_DATA',
+  PROFILE_AVATAR_ERROR = 'PROFILE_AVATAR_ERROR',
+
   // System Errors
   INTERNAL_ERROR = 'INTERNAL_ERROR',
   SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
@@ -272,7 +278,7 @@ export class ProfileNotFoundError extends BaseError {
     details?: any
   ) {
     super({
-      code: ErrorCode.PLAYER_NOT_FOUND,
+      code: ErrorCode.PROFILE_NOT_FOUND,
       message,
       details,
       httpStatus: 404,
@@ -290,7 +296,7 @@ export class ProfileAlreadyExistsError extends BaseError {
     details?: any
   ) {
     super({
-      code: ErrorCode.VALIDATION_FAILED,
+      code: ErrorCode.PROFILE_ALREADY_EXISTS,
       message,
       details,
       httpStatus: 409,
@@ -308,7 +314,7 @@ export class InvalidFileTypeError extends BaseError {
     details?: any
   ) {
     super({
-      code: ErrorCode.VALIDATION_FAILED,
+      code: ErrorCode.PROFILE_AVATAR_ERROR,
       message,
       details,
       httpStatus: 400,
@@ -326,7 +332,7 @@ export class FileSizeTooLargeError extends BaseError {
     details?: any
   ) {
     super({
-      code: ErrorCode.VALIDATION_FAILED,
+      code: ErrorCode.PROFILE_AVATAR_ERROR,
       message,
       details,
       httpStatus: 413,

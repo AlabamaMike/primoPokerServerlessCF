@@ -218,7 +218,10 @@ export class WalletManager {
       ? allTransactions[startIndex + limit]?.id 
       : undefined;
     
-    return { transactions, nextCursor };
+    return { 
+      transactions, 
+      ...(nextCursor && { nextCursor })
+    };
   }
 
   /**

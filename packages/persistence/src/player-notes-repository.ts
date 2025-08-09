@@ -89,7 +89,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
       LIMIT ? OFFSET ?
     `).bind(authorId, limit, offset).all();
 
-    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row as PlayerNoteWithUserInfoRow));
+    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row as unknown as PlayerNoteWithUserInfoRow));
   }
 
   async deleteNote(authorId: string, subjectId: string): Promise<void> {
@@ -122,7 +122,7 @@ export class PlayerNotesRepository implements IPlayerNotesRepository {
       limit
     ).all();
 
-    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row as PlayerNoteWithUserInfoRow));
+    return results.results.map(row => this.mapToPlayerNoteWithUserInfo(row as unknown as PlayerNoteWithUserInfoRow));
   }
 
   private mapToPlayerNote(row: PlayerNoteRow): PlayerNote {

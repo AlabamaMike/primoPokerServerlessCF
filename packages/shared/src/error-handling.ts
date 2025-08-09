@@ -38,6 +38,12 @@ export enum ErrorCode {
   INVALID_INPUT = 'INVALID_INPUT',
   MISSING_REQUIRED_FIELD = 'MISSING_REQUIRED_FIELD',
 
+  // Profile Errors
+  PROFILE_NOT_FOUND = 'PROFILE_NOT_FOUND',
+  PROFILE_ALREADY_EXISTS = 'PROFILE_ALREADY_EXISTS',
+  PROFILE_INVALID_DATA = 'PROFILE_INVALID_DATA',
+  PROFILE_AVATAR_ERROR = 'PROFILE_AVATAR_ERROR',
+
   // System Errors
   INTERNAL_ERROR = 'INTERNAL_ERROR',
   SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
@@ -263,6 +269,78 @@ export class SystemError extends BaseError {
 
   protected getDefaultUserMessage(): string {
     return 'An unexpected error occurred. Please try again later.';
+  }
+}
+
+export class ProfileNotFoundError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.PROFILE_NOT_FOUND,
+      message,
+      details,
+      httpStatus: 404,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'Player profile not found.';
+  }
+}
+
+export class ProfileAlreadyExistsError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.PROFILE_ALREADY_EXISTS,
+      message,
+      details,
+      httpStatus: 409,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'Player profile already exists.';
+  }
+}
+
+export class InvalidFileTypeError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.PROFILE_AVATAR_ERROR,
+      message,
+      details,
+      httpStatus: 400,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'Invalid file type. Please upload a valid image file.';
+  }
+}
+
+export class FileSizeTooLargeError extends BaseError {
+  constructor(
+    message: string,
+    details?: any
+  ) {
+    super({
+      code: ErrorCode.PROFILE_AVATAR_ERROR,
+      message,
+      details,
+      httpStatus: 413,
+    });
+  }
+
+  protected getDefaultUserMessage(): string {
+    return 'File size too large. Please upload a smaller image.';
   }
 }
 

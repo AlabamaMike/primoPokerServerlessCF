@@ -8,7 +8,7 @@
  * - Audit logging
  */
 
-import crypto from 'crypto'
+// Using Web Crypto API instead of Node.js crypto
 import { logger } from '@primo-poker/core'
 
 export interface SecurityConfig {
@@ -129,10 +129,26 @@ export class WalletSecurityManager {
     // Verify HMAC signature
     try {
       const body = await request.clone().text()
-      const expectedSignature = crypto
-        .createHmac('sha256', this.config.hmacSecret)
-        .update(body)
-        .digest('hex')
+      
+      // Use Web Crypto API for HMAC
+      const encoder = new TextEncoder()
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(this.config.hmacSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      )
+      
+      const signatureBuffer = await crypto.subtle.sign(
+        'HMAC',
+        key,
+        encoder.encode(body)
+      )
+      
+      const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
 
       if (signature !== expectedSignature) {
         return { valid: false, error: 'Invalid signature' }
@@ -189,7 +205,7 @@ export class WalletSecurityManager {
     const limit = endpointLimits[endpoint] || this.config.rateLimitConfig.maxRequests
 
     if (entries.length >= limit) {
-      const oldestEntry = entries[0]
+      const oldestEntry = entries[0]!
       const retryAfter = Math.ceil((oldestEntry.timestamp + this.config.rateLimitConfig.windowMs - now) / 1000)
       return { allowed: false, retryAfter }
     }
@@ -344,11 +360,11 @@ export class WalletSecurityManager {
       timestamp: Date.now(),
       event,
       severity,
-      playerId: context.playerId,
-      ipAddress: context.ipAddress,
-      country: context.country,
-      userAgent: context.userAgent,
-      details
+      ...(context.playerId && { playerId: context.playerId }),
+      ...(context.ipAddress && { ipAddress: context.ipAddress }),
+      ...(context.country && { country: context.country }),
+      ...(context.userAgent && { userAgent: context.userAgent }),
+      ...(details && { details })
     }
 
     this.securityLogs.push(logEntry)
@@ -563,7 +579,7 @@ interface TransactionHistoryEntry {
   flagged: boolean
 }
 
-interface AuditLogFilters {
+export interface AuditLogFilters {
   playerId?: string
   action?: string
   startDate?: number

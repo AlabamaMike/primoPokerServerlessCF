@@ -2129,7 +2129,7 @@ export class WalletManagerDurableObject {
       ...(url.searchParams.get('action') && { action: url.searchParams.get('action')! }),
       ...(url.searchParams.get('startDate') && { startDate: parseInt(url.searchParams.get('startDate')!) }),
       ...(url.searchParams.get('endDate') && { endDate: parseInt(url.searchParams.get('endDate')!) }),
-      limit: url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : 50
+      ...(url.searchParams.get('limit') && { limit: parseInt(url.searchParams.get('limit')!) })
     }
 
     const result = this.securityManager.getAuditLogs(filters)

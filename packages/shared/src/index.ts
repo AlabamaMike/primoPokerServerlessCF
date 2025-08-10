@@ -3,6 +3,7 @@ export * from './utils';
 export * from './error-handling';
 export * from './websocket-utils';
 export * from './chat-moderation';
+export * from './types/statistics';
 
 // Re-export commonly used items for convenience
 export {

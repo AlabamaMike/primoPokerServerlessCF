@@ -271,7 +271,6 @@ export class SystemError extends BaseError {
     return 'An unexpected error occurred. Please try again later.';
   }
 }
-
 export class ProfileNotFoundError extends BaseError {
   constructor(
     message: string,

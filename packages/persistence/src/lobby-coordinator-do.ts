@@ -376,7 +376,7 @@ export class LobbyCoordinatorDurableObject {
           playersPerFlop: this.calculatePlayersPerFlop(table)
         },
         waitingList: table.waitingList || 0,
-        isActive: table.status === 'playing',
+        isActive: table.status === 'active',
         createdAt: new Date(table.createdAt).toISOString()
       }))
 
@@ -1057,7 +1057,7 @@ export class LobbyCoordinatorDurableObject {
         if (parts.length === 2) {
           const [min, max] = parts
           const availableSeats = table.maxPlayers - table.currentPlayers
-          if (availableSeats < min || availableSeats > max) {
+          if (min !== undefined && max !== undefined && (availableSeats < min || availableSeats > max)) {
             return false
           }
         }
@@ -1131,7 +1131,7 @@ export class LobbyCoordinatorDurableObject {
 
     return {
       tables: paginatedTables,
-      nextCursor,
+      ...(nextCursor && { nextCursor }),
       hasMore
     }
   }

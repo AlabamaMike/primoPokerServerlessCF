@@ -22,7 +22,7 @@ import {
   walletCashOutSchema,
   validateRequestBody 
 } from './validation'
-import { WalletSecurityManager, SecurityConfig, SecurityContext } from './wallet-security'
+import { WalletSecurityManager, SecurityConfig, SecurityContext, AuditLogFilters } from './wallet-security'
 
 export interface WalletTransaction {
   id: string
@@ -247,9 +247,9 @@ export class WalletManagerDurableObject {
       // Extract security context
       const securityContext: SecurityContext = {
         playerId: '', // Will be set from request body/params
-        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-        country: request.headers.get('CF-IPCountry') || undefined,
-        userAgent: request.headers.get('User-Agent') || undefined,
+        ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+        ...(request.headers.get('CF-IPCountry') && { country: request.headers.get('CF-IPCountry')! }),
+        ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! }),
         timestamp: Date.now()
       }
       
@@ -546,8 +546,8 @@ export class WalletManagerDurableObject {
       playerId,
       action: 'get_wallet',
       success: true,
-      ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-      userAgent: request.headers.get('User-Agent') || undefined
+      ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+      ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
     })
 
     return this.createSuccessResponse({
@@ -989,8 +989,8 @@ export class WalletManagerDurableObject {
         action: 'deposit',
         amount,
         success: true,
-        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-        userAgent: request.headers.get('User-Agent') || undefined
+        ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+        ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
       })
 
       return new Response(JSON.stringify({
@@ -1043,8 +1043,8 @@ export class WalletManagerDurableObject {
           amount,
           success: false,
           error: 'Player temporarily blocked due to multiple failed attempts',
-          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-          userAgent: request.headers.get('User-Agent') || undefined
+          ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+          ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
         })
         
         return new Response(JSON.stringify({
@@ -1065,8 +1065,8 @@ export class WalletManagerDurableObject {
           amount,
           success: false,
           error: 'Wallet not found',
-          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-          userAgent: request.headers.get('User-Agent') || undefined
+          ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+          ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
         })
         
         return new Response(JSON.stringify({
@@ -1087,8 +1087,8 @@ export class WalletManagerDurableObject {
           amount,
           success: false,
           error: 'Insufficient available balance',
-          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-          userAgent: request.headers.get('User-Agent') || undefined
+          ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+          ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
         })
         
         return new Response(JSON.stringify({
@@ -1108,8 +1108,8 @@ export class WalletManagerDurableObject {
           amount,
           success: false,
           error: 'Daily withdrawal limit exceeded',
-          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-          userAgent: request.headers.get('User-Agent') || undefined
+          ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+          ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
         })
         
         return new Response(JSON.stringify({
@@ -1140,9 +1140,9 @@ export class WalletManagerDurableObject {
       // Fraud detection
       const securityContext: SecurityContext = {
         playerId,
-        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-        country: request.headers.get('CF-IPCountry') || undefined,
-        userAgent: request.headers.get('User-Agent') || undefined,
+        ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+        ...(request.headers.get('CF-IPCountry') && { country: request.headers.get('CF-IPCountry')! }),
+        ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! }),
         timestamp: Date.now()
       }
       
@@ -1166,7 +1166,7 @@ export class WalletManagerDurableObject {
       }
 
       // Check if approval is required for large amounts
-      if (amount > this.config.largeAmountThreshold) {
+      if (this.config.largeAmountThreshold && amount > this.config.largeAmountThreshold) {
         const approval = this.securityManager.createPendingApproval(
           playerId,
           'withdrawal',
@@ -1180,8 +1180,8 @@ export class WalletManagerDurableObject {
           amount,
           success: true,
           metadata: { approvalId: approval.approvalId },
-          ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-          userAgent: request.headers.get('User-Agent') || undefined
+          ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+          ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
         })
         
         return new Response(JSON.stringify({
@@ -1222,8 +1222,8 @@ export class WalletManagerDurableObject {
         action: 'withdraw',
         amount,
         success: true,
-        ipAddress: request.headers.get('CF-Connecting-IP') || undefined,
-        userAgent: request.headers.get('User-Agent') || undefined
+        ...(request.headers.get('CF-Connecting-IP') && { ipAddress: request.headers.get('CF-Connecting-IP')! }),
+        ...(request.headers.get('User-Agent') && { userAgent: request.headers.get('User-Agent')! })
       })
 
       return new Response(JSON.stringify({
@@ -2010,10 +2010,18 @@ export class WalletManagerDurableObject {
       return false
     }
     
-    return crypto.timingSafeEqual(
-      Buffer.from(adminToken),
-      Buffer.from(configuredToken)
-    )
+    // Use constant-time comparison to prevent timing attacks
+    const encoder = new TextEncoder()
+    const a = encoder.encode(adminToken)
+    const b = encoder.encode(configuredToken)
+    
+    if (a.length !== b.length) return false
+    
+    let result = 0
+    for (let i = 0; i < a.length; i++) {
+      result |= a[i]! ^ b[i]!
+    }
+    return result === 0
   }
 
   /**
@@ -2116,12 +2124,12 @@ export class WalletManagerDurableObject {
     }
 
     const url = new URL(request.url)
-    const filters = {
-      playerId: url.searchParams.get('playerId') || undefined,
-      action: url.searchParams.get('action') || undefined,
-      startDate: url.searchParams.get('startDate') ? parseInt(url.searchParams.get('startDate')!) : undefined,
-      endDate: url.searchParams.get('endDate') ? parseInt(url.searchParams.get('endDate')!) : undefined,
-      limit: url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!) : 50
+    const filters: AuditLogFilters = {
+      ...(url.searchParams.get('playerId') && { playerId: url.searchParams.get('playerId')! }),
+      ...(url.searchParams.get('action') && { action: url.searchParams.get('action')! }),
+      ...(url.searchParams.get('startDate') && { startDate: parseInt(url.searchParams.get('startDate')!) }),
+      ...(url.searchParams.get('endDate') && { endDate: parseInt(url.searchParams.get('endDate')!) }),
+      ...(url.searchParams.get('limit') && { limit: parseInt(url.searchParams.get('limit')!) })
     }
 
     const result = this.securityManager.getAuditLogs(filters)

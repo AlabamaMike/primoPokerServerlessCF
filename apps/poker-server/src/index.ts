@@ -1,10 +1,11 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
+import { ProfileDurableObject } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
 
 // Export Durable Objects for Cloudflare Workers
-export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject };
+export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, ProfileDurableObject };
 
 // Environment interface
 interface Env {
@@ -13,11 +14,13 @@ interface Env {
   METRICS_NAMESPACE: KVNamespace; // For metrics storage
   HAND_HISTORY_BUCKET: R2Bucket;
   AUDIT_BUCKET: R2Bucket; // For RNG audit logs
+  AVATAR_BUCKET: R2Bucket; // For player avatars
   TABLE_OBJECTS: DurableObjectNamespace;
   GAME_TABLES: DurableObjectNamespace; // Our new GameTable Durable Objects
   SECURE_RNG_DO: DurableObjectNamespace; // SecureRNG Durable Objects
   RATE_LIMIT_DO: DurableObjectNamespace; // Rate Limiting Durable Objects
   GAME_TABLE_DO: DurableObjectNamespace; // For permission checks
+  PROFILE_DO: DurableObjectNamespace; // Profile Durable Objects
   TOURNAMENT_QUEUE: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   
@@ -30,6 +33,8 @@ interface Env {
   ENVIRONMENT: string;
   NODE_ENV?: string;
   ALLOWED_ORIGINS?: string;
+  MAX_AVATAR_SIZE?: string;
+  CDN_BASE_URL?: string;
 }
 
 // Initialize API routes and WebSocket manager

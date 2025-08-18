@@ -8,6 +8,8 @@ compatibility_flags = ["nodejs_compat"]
 ENVIRONMENT = "production"
 JWT_SECRET = "your-super-secret-jwt-key-for-development-only-change-in-production"
 ALLOWED_ORIGINS = "https://localhost:3000,tauri://localhost"
+MAX_AVATAR_SIZE = "5242880"  # 5MB in bytes
+CDN_BASE_URL = "https://avatars.primo-poker.com"
 
 # D1 Database
 [[d1_databases]]
@@ -40,6 +42,12 @@ binding = "AUDIT_BUCKET"
 bucket_name = "primo-poker-rng-audit"
 preview_bucket_name = "primo-poker-rng-audit-preview"
 
+# R2 Bucket for player avatars
+[[r2_buckets]]
+binding = "AVATAR_BUCKET"
+bucket_name = "primo-poker-avatars"
+preview_bucket_name = "primo-poker-avatars-preview"
+
 # Durable Objects
 [[durable_objects.bindings]]
 name = "TABLE_OBJECTS"
@@ -70,6 +78,12 @@ name = "RATE_LIMIT_DO"
 class_name = "RateLimitDurableObject"
 script_name = "primo-poker-server"
 
+# Profile Management Durable Object
+[[durable_objects.bindings]]
+name = "PROFILE_DO"
+class_name = "ProfileDurableObject"
+script_name = "primo-poker-server"
+
 [[migrations]]
 tag = "v1"
 new_classes = ["TableDurableObject"]
@@ -82,7 +96,11 @@ new_classes = ["GameTableDurableObject"]
 tag = "v3"
 new_classes = ["SecureRNGDurableObject", "RateLimitDurableObject"]
 
-# Removed v4 migration - not needed
+[[migrations]]
+tag = "v4"
+new_classes = ["ProfileDurableObject"]
+
+# Removed v5 migration - not needed
 # Build configuration ensures dist/index.js is created
 
 # Queue for tournament processing

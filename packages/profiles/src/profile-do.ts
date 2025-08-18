@@ -1,12 +1,16 @@
 import { DurableObject } from '@cloudflare/workers-types';
 import { ProfileManager } from './profile-manager';
 import { AvatarHandler, AvatarConfig } from './avatar-handler';
+import { StatisticsManager } from './statistics-manager';
+import { AchievementManager } from './achievement-manager';
 import { 
   PlayerProfile, 
   CreateProfileData, 
   UpdateProfileData,
   PublicPlayerProfile 
 } from './profile-manager';
+import { ProfileVersionManager, VersionedProfile } from './profile-versioning';
+import { logger } from '@primo-poker/core';
 
 /**
  * Durable Object for managing player profiles with persistent storage.
@@ -16,11 +20,17 @@ import {
 export class ProfileDurableObject extends DurableObject {
   private profileManager: ProfileManager;
   private avatarHandler: AvatarHandler | null = null;
+  private statisticsManager: StatisticsManager;
+  private achievementManager: AchievementManager;
+  private versionManager: ProfileVersionManager;
   private initialized = false;
 
   constructor(state: DurableObjectState, env: any) {
     super(state, env);
     this.profileManager = new ProfileManager();
+    this.statisticsManager = new StatisticsManager();
+    this.achievementManager = new AchievementManager();
+    this.versionManager = new ProfileVersionManager();
   }
 
   /**
@@ -29,13 +39,29 @@ export class ProfileDurableObject extends DurableObject {
   private async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Load persisted profiles from storage
+    // Load persisted profiles from storage and migrate if needed
     const storedProfiles = await this.state.storage.list<PlayerProfile>();
     for (const [key, profile] of storedProfiles) {
       // Reconstruct the in-memory map
       if (key.startsWith('profile:')) {
         const playerId = key.substring(8);
-        (this.profileManager as any).profiles.set(playerId, profile);
+        
+        // Check if migration is needed
+        if (this.versionManager.needsMigration(profile)) {
+          try {
+            const migrated = await this.versionManager.migrate(profile);
+            (this.profileManager as any).profiles.set(playerId, migrated);
+            // Update storage with migrated profile
+            await this.state.storage.put(key, migrated);
+            logger.info('Profile migrated', { playerId, version: migrated._version });
+          } catch (error) {
+            logger.error('Profile migration failed during initialization', { playerId, error });
+            // Keep original profile if migration fails
+            (this.profileManager as any).profiles.set(playerId, profile);
+          }
+        } else {
+          (this.profileManager as any).profiles.set(playerId, profile);
+        }
       }
     }
 
@@ -57,15 +83,19 @@ export class ProfileDurableObject extends DurableObject {
   /**
    * Creates a new player profile and persists it.
    */
-  async createProfile(data: CreateProfileData): Promise<PlayerProfile> {
+  async createProfile(data: CreateProfileData): Promise<VersionedProfile> {
     await this.initialize();
     
     const profile = await this.profileManager.createProfile(data);
+    const versionedProfile = this.versionManager.addVersionMetadata(profile);
+    
+    // Update in-memory storage
+    (this.profileManager as any).profiles.set(profile.playerId, versionedProfile);
     
     // Persist to Durable Object storage
-    await this.state.storage.put(`profile:${profile.playerId}`, profile);
+    await this.state.storage.put(`profile:${profile.playerId}`, versionedProfile);
     
-    return profile;
+    return versionedProfile;
   }
 
   /**
@@ -206,6 +236,101 @@ export class ProfileDurableObject extends DurableObject {
         const avatarUrl = await this.uploadAvatar(playerId, buffer, file.type);
         
         return new Response(JSON.stringify({ avatarUrl }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Statistics endpoints
+      if (path === '/statistics/record-hand' && request.method === 'POST') {
+        const handData = await request.json();
+        const handStat = await this.statisticsManager.recordHand(handData);
+        
+        // Check for new achievements
+        const stats = await this.statisticsManager.getPlayerStatistics(handData.playerId);
+        if (stats) {
+          const context = {
+            playerId: handData.playerId,
+            stats,
+            currentHand: handStat,
+            biggestPotWon: stats.biggestPotWon
+          };
+          const newAchievements = await this.achievementManager.checkAchievements(context);
+          
+          // Update profile with new achievements if any
+          if (newAchievements.length > 0) {
+            const profile = await this.getProfile(handData.playerId);
+            profile.achievements = await this.achievementManager.getPlayerAchievements(handData.playerId);
+            await this.state.storage.put(`profile:${handData.playerId}`, profile);
+          }
+        }
+        
+        return new Response(JSON.stringify({ handStat, newAchievements: [] }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/statistics/start-session' && request.method === 'POST') {
+        const sessionData = await request.json();
+        const session = await this.statisticsManager.startSession(sessionData);
+        return new Response(JSON.stringify(session), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/statistics/end-session' && request.method === 'POST') {
+        const { playerId, tableId, cashOutAmount } = await request.json();
+        const session = await this.statisticsManager.endSession(playerId, tableId, cashOutAmount);
+        return new Response(JSON.stringify(session), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/statistics/player/') && request.method === 'GET') {
+        const playerId = path.substring(18);
+        const stats = await this.statisticsManager.getPlayerStatistics(playerId);
+        return new Response(JSON.stringify(stats), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/statistics/sessions/') && request.method === 'GET') {
+        const playerId = path.substring(20);
+        const limit = parseInt(url.searchParams.get('limit') || '20');
+        const sessions = await this.statisticsManager.getSessionHistory(playerId, limit);
+        return new Response(JSON.stringify(sessions), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/statistics/hands/') && request.method === 'GET') {
+        const playerId = path.substring(17);
+        const limit = parseInt(url.searchParams.get('limit') || '100');
+        const hands = await this.statisticsManager.getHandHistory(playerId, limit);
+        return new Response(JSON.stringify(hands), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Achievement endpoints
+      if (path.startsWith('/achievements/player/') && request.method === 'GET') {
+        const playerId = path.substring(20);
+        const achievements = await this.achievementManager.getPlayerAchievements(playerId);
+        return new Response(JSON.stringify(achievements), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/achievements/progress/') && request.method === 'GET') {
+        const playerId = path.substring(22);
+        const progress = await this.achievementManager.getAchievementProgress(playerId);
+        return new Response(JSON.stringify(progress), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/achievements/stats' && request.method === 'GET') {
+        const stats = await this.achievementManager.getAchievementStats();
+        return new Response(JSON.stringify(stats), {
           headers: { 'Content-Type': 'application/json' }
         });
       }

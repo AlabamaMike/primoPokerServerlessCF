@@ -6,6 +6,7 @@ export * from './lobby-manager';
 export * from './secure-rng-do';
 export * from './friend-repository';
 export * from './player-notes-repository';
+export * from './statistics-repository';
 
 // Re-export key interfaces and classes
 export type {

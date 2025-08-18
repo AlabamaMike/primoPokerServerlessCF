@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<<<<<<< HEAD
+<coverage generated="1754758415956" clover="3.2.0">
+  <project timestamp="1754758415956" name="All files">
+    <metrics statements="0" coveredstatements="0" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0" elements="0" coveredelements="0" complexity="0" loc="0" ncloc="0" packages="0" files="0" classes="0"/>
+=======
 <coverage generated="1754609908760" clover="3.2.0">
   <project timestamp="1754609908760" name="All files">
     <metrics statements="4475" coveredstatements="0" conditionals="1776" coveredconditionals="0" methods="686" coveredmethods="0" elements="6937" coveredelements="0" complexity="0" loc="4475" ncloc="4475" packages="4" files="27" classes="27"/>
@@ -4570,5 +4575,6 @@
         <line num="86" count="0" type="stmt"/>
       </file>
     </package>
+>>>>>>> origin/main
   </project>
 </coverage>

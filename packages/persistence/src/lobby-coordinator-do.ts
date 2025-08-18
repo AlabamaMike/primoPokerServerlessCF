@@ -362,7 +362,8 @@ export class LobbyCoordinatorDurableObject {
         gameType: table.gameType,
         stakes: {
           smallBlind: table.stakes.smallBlind,
-          bigBlind: table.stakes.bigBlind
+          bigBlind: table.stakes.bigBlind,
+          currency: table.stakes.currency || 'USD'
         },
         seats: {
           total: table.maxPlayers,

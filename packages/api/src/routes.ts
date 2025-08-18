@@ -115,7 +115,7 @@ export class PokerAPIRoutes {
     this.router.all('/api/admin/statistics/*', statisticsAdminRoutes.handle);
 
     // Public statistics routes - mount the sub-router
-    this.router.all('/api/players/*/statistics', this.authenticateRequest.bind(this), statisticsRoutes.handle);
+    this.router.all('/api/players/:playerId/statistics', this.authenticateRequest.bind(this), statisticsRoutes.handle);
     this.router.all('/api/leaderboards', statisticsRoutes.handle);
 
     // CORS preflight handler - more specific patterns first

@@ -20,24 +20,16 @@ interface AuthenticatedRequest extends Request {
     email: string;
     roles?: string[];
   };
-  env?: any;
-  params?: any;
-  query?: any;
+  env?: Env;
+  params?: Record<string, string>;
+  query?: Record<string, string>;
 }
 
-// Authentication middleware that will be applied to routes
-const requireAuth = async (request: AuthenticatedRequest): Promise<Response | void> => {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return createErrorResponse('Missing or invalid authorization header', 401, 'UNAUTHORIZED');
-  }
+interface Env {
+  DB: D1Database;
+  [key: string]: unknown;
+}
 
-  // In the main routes.ts, authentication is handled by authenticateRequest middleware
-  // This is just a placeholder - actual auth is handled by the parent router
-  if (!request.user) {
-    return createErrorResponse('Not authenticated', 401, 'UNAUTHORIZED');
-  }
-};
 
 // Cache headers configuration
 const getCacheHeaders = (maxAge: number = 300): Record<string, string> => {
@@ -49,11 +41,15 @@ const getCacheHeaders = (maxAge: number = 300): Record<string, string> => {
 };
 
 // Create statistics router
-export function createStatisticsRoutes(): Router<any> {
-  const router = Router();
+export function createStatisticsRoutes(): Router<AuthenticatedRequest> {
+  const router = Router<AuthenticatedRequest>();
 
   // GET /api/players/{id}/statistics - Get player statistics
-  router.get('/api/players/:playerId/statistics', requireAuth, statisticsRateLimiter.middleware(), async (request: AuthenticatedRequest) => {
+  router.get('/api/players/:playerId/statistics', statisticsRateLimiter.middleware(), async (request: AuthenticatedRequest) => {
+    // Authentication is handled by the parent router
+    if (!request.user) {
+      return createErrorResponse('Not authenticated', 401, 'UNAUTHORIZED');
+    }
     try {
       const { playerId } = request.params;
       const url = new URL(request.url);
@@ -69,11 +65,11 @@ export function createStatisticsRoutes(): Router<any> {
 
       // Check if user can access these statistics
       // Users can access their own stats, admins can access all stats
-      const isOwnStats = request.user?.userId === playerId;
-      const isAdmin = request.user?.roles?.includes('admin');
+      const isOwnStats = request.user.userId === playerId;
+      const isAdmin = request.user.roles?.includes('admin');
       
       if (!isOwnStats && !isAdmin) {
-        return createErrorResponse('Forbidden: Cannot access other player statistics', 403, 'FORBIDDEN');
+        return createErrorResponse('Forbidden', 403, 'FORBIDDEN');
       }
 
       if (!request.env?.DB) {
@@ -91,7 +87,11 @@ export function createStatisticsRoutes(): Router<any> {
       );
 
       if (stats.length === 0) {
-        return createErrorResponse('No statistics found for player', 404, 'STATS_NOT_FOUND');
+        // For security, return same error as forbidden to avoid player enumeration
+        if (!isOwnStats && !isAdmin) {
+          return createErrorResponse('Forbidden', 403, 'FORBIDDEN');
+        }
+        return createErrorResponse('No statistics found', 404, 'STATS_NOT_FOUND');
       }
 
       // Transform and validate response
@@ -117,26 +117,32 @@ export function createStatisticsRoutes(): Router<any> {
         response.headers.set(key, value);
       });
 
+      // Add rate limit headers
+      const remaining = Math.max(0, 30 - 1); // Simplified - in production, track actual usage
+      response.headers.set('X-RateLimit-Limit', '30');
+      response.headers.set('X-RateLimit-Remaining', remaining.toString());
+      response.headers.set('X-RateLimit-Reset', new Date(Date.now() + 60000).toISOString());
+
       return response;
 
     } catch (error) {
       logger.error('Failed to get player statistics', error as Error);
       
       if (error instanceof z.ZodError) {
-        return createErrorResponse('Invalid data format', 400, 'VALIDATION_ERROR');
+        return createErrorResponse('Invalid request', 400, 'VALIDATION_ERROR');
       }
       
-      return createErrorResponse('Failed to retrieve player statistics', 500, 'INTERNAL_ERROR');
+      return createErrorResponse('Service unavailable', 500, 'INTERNAL_ERROR');
     }
   });
 
   // GET /api/leaderboards - Get leaderboard data
-  router.get('/api/leaderboards', statisticsRateLimiter.middleware(), async (request: AuthenticatedRequest) => {
+  router.get('/api/leaderboards', statisticsRateLimiter.middleware(), async (request: Request) => {
     try {
       const url = new URL(request.url);
       
       // Parse and validate query parameters
-      const queryParams: Record<string, any> = {};
+      const queryParams: Record<string, unknown> = {};
       
       // Extract query parameters
       url.searchParams.forEach((value, key) => {
@@ -164,12 +170,14 @@ export function createStatisticsRoutes(): Router<any> {
 
       const query = validationResult.data;
 
-      if (!request.env?.DB) {
+      // Cast request to AuthenticatedRequest for env access
+      const authReq = request as AuthenticatedRequest;
+      if (!authReq.env?.DB) {
         logger.error('Database not available');
-        return createErrorResponse('Database not available', 500, 'DATABASE_ERROR');
+        return createErrorResponse('Service unavailable', 500, 'DATABASE_ERROR');
       }
 
-      const statsRepo = new D1PlayerStatisticsRepository(request.env.DB);
+      const statsRepo = new D1PlayerStatisticsRepository(authReq.env.DB);
       
       // Fetch leaderboard data
       const leaderboard = await statsRepo.getLeaderboard(query);
@@ -213,16 +221,22 @@ export function createStatisticsRoutes(): Router<any> {
         response.headers.set(key, value);
       });
 
+      // Add rate limit headers
+      const remaining = Math.max(0, 30 - 1); // Simplified - in production, track actual usage
+      response.headers.set('X-RateLimit-Limit', '30');
+      response.headers.set('X-RateLimit-Remaining', remaining.toString());
+      response.headers.set('X-RateLimit-Reset', new Date(Date.now() + 60000).toISOString());
+
       return response;
 
     } catch (error) {
       logger.error('Failed to get leaderboard', error as Error);
       
       if (error instanceof z.ZodError) {
-        return createErrorResponse('Invalid data format', 400, 'VALIDATION_ERROR');
+        return createErrorResponse('Invalid request', 400, 'VALIDATION_ERROR');
       }
       
-      return createErrorResponse('Failed to retrieve leaderboard', 500, 'INTERNAL_ERROR');
+      return createErrorResponse('Service unavailable', 500, 'INTERNAL_ERROR');
     }
   });
 

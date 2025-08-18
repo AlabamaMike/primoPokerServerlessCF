@@ -17,6 +17,7 @@ import { HealthChecker } from './routes/health';
 import { LobbyTablesRoute } from './routes/lobby/tables';
 import { friendRoutes } from './routes/friends';
 import { playerNotesRoutes } from './routes/player-notes';
+import { profileRoutes } from './routes/profiles';
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -103,6 +104,9 @@ export class PokerAPIRoutes {
 
     // Player notes routes - mount the sub-router
     this.router.all('/api/notes/*', playerNotesRoutes.handle);
+
+    // Profile routes - mount the sub-router
+    this.router.all('/api/profiles/*', profileRoutes.handle);
 
     // CORS preflight handler - more specific patterns first
     this.router.options('/api/*', this.handleOptionsRequest.bind(this));

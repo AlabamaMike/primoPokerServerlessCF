@@ -1,6 +1,8 @@
 import { DurableObject } from '@cloudflare/workers-types';
 import { ProfileManager } from './profile-manager';
 import { AvatarHandler, AvatarConfig } from './avatar-handler';
+import { StatisticsManager } from './statistics-manager';
+import { AchievementManager } from './achievement-manager';
 import { 
   PlayerProfile, 
   CreateProfileData, 
@@ -16,11 +18,15 @@ import {
 export class ProfileDurableObject extends DurableObject {
   private profileManager: ProfileManager;
   private avatarHandler: AvatarHandler | null = null;
+  private statisticsManager: StatisticsManager;
+  private achievementManager: AchievementManager;
   private initialized = false;
 
   constructor(state: DurableObjectState, env: any) {
     super(state, env);
     this.profileManager = new ProfileManager();
+    this.statisticsManager = new StatisticsManager();
+    this.achievementManager = new AchievementManager();
   }
 
   /**
@@ -206,6 +212,101 @@ export class ProfileDurableObject extends DurableObject {
         const avatarUrl = await this.uploadAvatar(playerId, buffer, file.type);
         
         return new Response(JSON.stringify({ avatarUrl }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Statistics endpoints
+      if (path === '/statistics/record-hand' && request.method === 'POST') {
+        const handData = await request.json();
+        const handStat = await this.statisticsManager.recordHand(handData);
+        
+        // Check for new achievements
+        const stats = await this.statisticsManager.getPlayerStatistics(handData.playerId);
+        if (stats) {
+          const context = {
+            playerId: handData.playerId,
+            stats,
+            currentHand: handStat,
+            biggestPotWon: stats.biggestPotWon
+          };
+          const newAchievements = await this.achievementManager.checkAchievements(context);
+          
+          // Update profile with new achievements if any
+          if (newAchievements.length > 0) {
+            const profile = await this.getProfile(handData.playerId);
+            profile.achievements = await this.achievementManager.getPlayerAchievements(handData.playerId);
+            await this.state.storage.put(`profile:${handData.playerId}`, profile);
+          }
+        }
+        
+        return new Response(JSON.stringify({ handStat, newAchievements: [] }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/statistics/start-session' && request.method === 'POST') {
+        const sessionData = await request.json();
+        const session = await this.statisticsManager.startSession(sessionData);
+        return new Response(JSON.stringify(session), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/statistics/end-session' && request.method === 'POST') {
+        const { playerId, tableId, cashOutAmount } = await request.json();
+        const session = await this.statisticsManager.endSession(playerId, tableId, cashOutAmount);
+        return new Response(JSON.stringify(session), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/statistics/player/') && request.method === 'GET') {
+        const playerId = path.substring(18);
+        const stats = await this.statisticsManager.getPlayerStatistics(playerId);
+        return new Response(JSON.stringify(stats), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/statistics/sessions/') && request.method === 'GET') {
+        const playerId = path.substring(20);
+        const limit = parseInt(url.searchParams.get('limit') || '20');
+        const sessions = await this.statisticsManager.getSessionHistory(playerId, limit);
+        return new Response(JSON.stringify(sessions), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/statistics/hands/') && request.method === 'GET') {
+        const playerId = path.substring(17);
+        const limit = parseInt(url.searchParams.get('limit') || '100');
+        const hands = await this.statisticsManager.getHandHistory(playerId, limit);
+        return new Response(JSON.stringify(hands), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Achievement endpoints
+      if (path.startsWith('/achievements/player/') && request.method === 'GET') {
+        const playerId = path.substring(20);
+        const achievements = await this.achievementManager.getPlayerAchievements(playerId);
+        return new Response(JSON.stringify(achievements), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path.startsWith('/achievements/progress/') && request.method === 'GET') {
+        const playerId = path.substring(22);
+        const progress = await this.achievementManager.getAchievementProgress(playerId);
+        return new Response(JSON.stringify(progress), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/achievements/stats' && request.method === 'GET') {
+        const stats = await this.achievementManager.getAchievementStats();
+        return new Response(JSON.stringify(stats), {
           headers: { 'Content-Type': 'application/json' }
         });
       }

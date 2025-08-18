@@ -11,6 +11,7 @@ export interface WorkerEnvironment {
   METRICS_NAMESPACE: KVNamespace;
   HAND_HISTORY_BUCKET: R2Bucket;
   AUDIT_BUCKET: R2Bucket;
+  AVATAR_BUCKET: R2Bucket;
   
   // Durable Objects
   TABLE_OBJECTS: DurableObjectNamespace;
@@ -19,6 +20,7 @@ export interface WorkerEnvironment {
   RATE_LIMIT_DO: DurableObjectNamespace;
   GAME_TABLE_DO: DurableObjectNamespace;
   LOBBY_COORDINATOR: DurableObjectNamespace;
+  PROFILE_DO: DurableObjectNamespace;
   
   // Queues
   TOURNAMENT_QUEUE: Queue;
@@ -37,4 +39,6 @@ export interface WorkerEnvironment {
   ALLOWED_ORIGINS?: string;
   WEBSOCKET_URL?: string;
   VERSION?: string;
+  MAX_AVATAR_SIZE?: string;
+  CDN_BASE_URL?: string;
 }

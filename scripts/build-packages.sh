@@ -31,6 +31,10 @@ echo "Building @primo-poker/core..."
 echo "Building @primo-poker/persistence..."
 (cd "$ROOT_DIR/packages/persistence" && npx tsc)
 
+# Build profiles (depends on shared, core, and security)
+echo "Building @primo-poker/profiles..."
+(cd "$ROOT_DIR/packages/profiles" && npx tsc)
+
 # Build api (depends on all above)
 echo "Building @primo-poker/api..."
 (cd "$ROOT_DIR/packages/api" && npx tsc)

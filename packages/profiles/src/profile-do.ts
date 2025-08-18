@@ -9,6 +9,8 @@ import {
   UpdateProfileData,
   PublicPlayerProfile 
 } from './profile-manager';
+import { ProfileVersionManager, VersionedProfile } from './profile-versioning';
+import { logger } from '@primo-poker/core';
 
 /**
  * Durable Object for managing player profiles with persistent storage.
@@ -20,6 +22,7 @@ export class ProfileDurableObject extends DurableObject {
   private avatarHandler: AvatarHandler | null = null;
   private statisticsManager: StatisticsManager;
   private achievementManager: AchievementManager;
+  private versionManager: ProfileVersionManager;
   private initialized = false;
 
   constructor(state: DurableObjectState, env: any) {
@@ -27,6 +30,7 @@ export class ProfileDurableObject extends DurableObject {
     this.profileManager = new ProfileManager();
     this.statisticsManager = new StatisticsManager();
     this.achievementManager = new AchievementManager();
+    this.versionManager = new ProfileVersionManager();
   }
 
   /**
@@ -35,13 +39,29 @@ export class ProfileDurableObject extends DurableObject {
   private async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Load persisted profiles from storage
+    // Load persisted profiles from storage and migrate if needed
     const storedProfiles = await this.state.storage.list<PlayerProfile>();
     for (const [key, profile] of storedProfiles) {
       // Reconstruct the in-memory map
       if (key.startsWith('profile:')) {
         const playerId = key.substring(8);
-        (this.profileManager as any).profiles.set(playerId, profile);
+        
+        // Check if migration is needed
+        if (this.versionManager.needsMigration(profile)) {
+          try {
+            const migrated = await this.versionManager.migrate(profile);
+            (this.profileManager as any).profiles.set(playerId, migrated);
+            // Update storage with migrated profile
+            await this.state.storage.put(key, migrated);
+            logger.info('Profile migrated', { playerId, version: migrated._version });
+          } catch (error) {
+            logger.error('Profile migration failed during initialization', { playerId, error });
+            // Keep original profile if migration fails
+            (this.profileManager as any).profiles.set(playerId, profile);
+          }
+        } else {
+          (this.profileManager as any).profiles.set(playerId, profile);
+        }
       }
     }
 
@@ -63,15 +83,19 @@ export class ProfileDurableObject extends DurableObject {
   /**
    * Creates a new player profile and persists it.
    */
-  async createProfile(data: CreateProfileData): Promise<PlayerProfile> {
+  async createProfile(data: CreateProfileData): Promise<VersionedProfile> {
     await this.initialize();
     
     const profile = await this.profileManager.createProfile(data);
+    const versionedProfile = this.versionManager.addVersionMetadata(profile);
+    
+    // Update in-memory storage
+    (this.profileManager as any).profiles.set(profile.playerId, versionedProfile);
     
     // Persist to Durable Object storage
-    await this.state.storage.put(`profile:${profile.playerId}`, profile);
+    await this.state.storage.put(`profile:${profile.playerId}`, versionedProfile);
     
-    return profile;
+    return versionedProfile;
   }
 
   /**

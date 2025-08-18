@@ -3,7 +3,8 @@ import {
   ApiResponse,
   ValidationUtils,
   RandomUtils,
-  WorkerEnvironment
+  WorkerEnvironment,
+  ErrorCode
 } from '@primo-poker/shared';
 import { logger } from '@primo-poker/core';
 import { AuthenticationManager, TokenPayload } from '@primo-poker/security';
@@ -11,7 +12,15 @@ import {
   CreateProfileDataSchema, 
   UpdateProfileDataSchema,
   CreateProfileData,
-  UpdateProfileData 
+  UpdateProfileData,
+  ProfileCacheManager,
+  fetchProfileWithCache,
+  createErrorResponse,
+  createSuccessResponse,
+  extractCorrelationId,
+  ProfileErrorCode,
+  withErrorHandling,
+  ProfileNotFoundError
 } from '@primo-poker/profiles';
 
 // Extended request interface with authentication
@@ -29,11 +38,29 @@ type WorkerEnv = WorkerEnvironment & {
 
 export const profileRoutes = Router();
 
-// Authentication middleware
+// Initialize cache manager
+const cacheManager = new ProfileCacheManager({
+  publicProfileTtl: 3600, // 1 hour for public profiles
+  privateProfileTtl: 60,  // 1 minute for private profiles
+  cacheControl: {
+    public: true,
+    private: false,
+    sMaxAge: 3600,
+    staleWhileRevalidate: 86400
+  }
+});
+
+// Authentication middleware with correlation ID
 async function authenticateRequest(request: AuthenticatedRequest): Promise<Response | void> {
+  const correlationId = extractCorrelationId(request);
   const authHeader = request.headers.get('Authorization');
+  
   if (!authHeader?.startsWith('Bearer ')) {
-    return errorResponse('Missing or invalid authorization header', 401);
+    return createErrorResponse(
+      ErrorCode.AUTH_UNAUTHORIZED,
+      'Missing or invalid authorization header',
+      correlationId
+    );
   }
 
   const token = authHeader.slice(7);
@@ -43,7 +70,11 @@ async function authenticateRequest(request: AuthenticatedRequest): Promise<Respo
     const result = await authManager.verifyAccessToken(token);
     
     if (!result.valid) {
-      return errorResponse(result.error || 'Invalid token', 401);
+      return createErrorResponse(
+        ErrorCode.AUTH_INVALID_TOKEN,
+        result.error || 'Invalid token',
+        correlationId
+      );
     }
 
     if (result.payload) {
@@ -52,38 +83,43 @@ async function authenticateRequest(request: AuthenticatedRequest): Promise<Respo
   }
 }
 
-// Get current user's profile
-profileRoutes.get('/api/profiles/me', authenticateRequest, async (request: AuthenticatedRequest) => {
-  const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+// Get current user's profile with caching
+profileRoutes.get('/api/profiles/me', authenticateRequest, withErrorHandling(async (request: AuthenticatedRequest) => {
+  const correlationId = extractCorrelationId(request);
   logger.setContext({ correlationId, operation: 'getMyProfile' });
 
-  try {
-    if (!request.user || !request.env?.PROFILE_DO) {
-      return errorResponse('Not authenticated or service unavailable', 401);
-    }
-
-    const profileDO = request.env.PROFILE_DO.idFromName('profiles');
-    const profileObj = request.env.PROFILE_DO.get(profileDO);
-
-    const response = await profileObj.fetch(
-      `http://internal/profile/${request.user.userId}`,
-      { method: 'GET' }
+  if (!request.user || !request.env?.PROFILE_DO) {
+    return createErrorResponse(
+      ProfileErrorCode.SERVICE_UNAVAILABLE,
+      'Not authenticated or service unavailable',
+      correlationId
     );
-
-    if (!response.ok) {
-      const error = await response.text();
-      return errorResponse(error || 'Profile not found', response.status);
-    }
-
-    const profile = await response.json();
-    return successResponse(profile);
-  } catch (error) {
-    logger.error('Get profile error', error);
-    return errorResponse('Failed to fetch profile', 500);
-  } finally {
-    logger.clearContext();
   }
-});
+
+  // Use caching for private profiles
+  return fetchProfileWithCache(
+    request,
+    request.user.userId,
+    false, // private profile
+    async () => {
+      const profileDO = request.env!.PROFILE_DO.idFromName('profiles');
+      const profileObj = request.env!.PROFILE_DO.get(profileDO);
+
+      const response = await profileObj.fetch(
+        `http://internal/profile/${request.user!.userId}`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Profile not found');
+      }
+
+      return await response.json();
+    },
+    cacheManager
+  );
+}, 'getMyProfile'));
 
 // Create or update current user's profile
 profileRoutes.put('/api/profiles/me', authenticateRequest, async (request: AuthenticatedRequest) => {
@@ -164,75 +200,104 @@ profileRoutes.put('/api/profiles/me', authenticateRequest, async (request: Authe
 
     const profile = await response.json();
     return successResponse(profile);
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Update profile error', error);
-    return errorResponse('Failed to update profile', 500);
+    return createErrorResponse(
+      ProfileErrorCode.PROFILE_UPDATE_FAILED,
+      error.message || 'Failed to update profile',
+      correlationId,
+      error
+    );
   } finally {
     logger.clearContext();
   }
 });
 
-// Get public profile by player ID
-profileRoutes.get('/api/profiles/:playerId', async (request: AuthenticatedRequest) => {
-  const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+// Get public profile by player ID with caching
+profileRoutes.get('/api/profiles/:playerId', withErrorHandling(async (request: AuthenticatedRequest) => {
+  const correlationId = extractCorrelationId(request);
   logger.setContext({ correlationId, operation: 'getPublicProfile' });
 
-  try {
-    const playerId = request.params?.playerId;
-    if (!playerId || !request.env?.PROFILE_DO) {
-      return errorResponse('Invalid request', 400);
-    }
-
-    const profileDO = request.env.PROFILE_DO.idFromName('profiles');
-    const profileObj = request.env.PROFILE_DO.get(profileDO);
-
-    const response = await profileObj.fetch(
-      `http://internal/profile/${playerId}?public=true`,
-      { method: 'GET' }
+  const playerId = request.params?.playerId;
+  if (!playerId || !request.env?.PROFILE_DO) {
+    return createErrorResponse(
+      ProfileErrorCode.PROFILE_INVALID_DATA,
+      'Invalid request',
+      correlationId
     );
-
-    if (!response.ok) {
-      const error = await response.text();
-      return errorResponse(error || 'Profile not found', response.status);
-    }
-
-    const profile = await response.json();
-    return successResponse(profile);
-  } catch (error) {
-    logger.error('Get public profile error', error);
-    return errorResponse('Failed to fetch profile', 500);
-  } finally {
-    logger.clearContext();
   }
-});
 
-// Upload avatar
-profileRoutes.post('/api/profiles/me/avatar', authenticateRequest, async (request: AuthenticatedRequest) => {
-  const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+  // Use caching for public profiles
+  return fetchProfileWithCache(
+    request,
+    playerId,
+    true, // public profile
+    async () => {
+      const profileDO = request.env!.PROFILE_DO.idFromName('profiles');
+      const profileObj = request.env!.PROFILE_DO.get(profileDO);
+
+      const response = await profileObj.fetch(
+        `http://internal/profile/${playerId}?public=true`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        if (response.status === 404) {
+          throw new ProfileNotFoundError(playerId, correlationId);
+        }
+        throw new Error(error || 'Profile not found');
+      }
+
+      return await response.json();
+    },
+    cacheManager
+  );
+}, 'getPublicProfile'));
+
+// Upload avatar with enhanced validation
+profileRoutes.post('/api/profiles/me/avatar', authenticateRequest, withErrorHandling(async (request: AuthenticatedRequest) => {
+  const correlationId = extractCorrelationId(request);
   logger.setContext({ correlationId, operation: 'uploadAvatar' });
 
-  try {
-    if (!request.user || !request.env?.PROFILE_DO) {
-      return errorResponse('Not authenticated or service unavailable', 401);
-    }
+  if (!request.user || !request.env?.PROFILE_DO) {
+    return createErrorResponse(
+      ProfileErrorCode.SERVICE_UNAVAILABLE,
+      'Not authenticated or service unavailable',
+      correlationId
+    );
+  }
 
-    const contentType = request.headers.get('Content-Type');
-    if (!contentType?.includes('multipart/form-data')) {
-      return errorResponse('Invalid content type. Expected multipart/form-data', 400);
-    }
+  const contentType = request.headers.get('Content-Type');
+  if (!contentType?.includes('multipart/form-data')) {
+    return createErrorResponse(
+      ProfileErrorCode.AVATAR_INVALID_FORMAT,
+      'Invalid content type. Expected multipart/form-data',
+      correlationId
+    );
+  }
 
-    const formData = await request.formData();
-    const file = formData.get('avatar') as File;
+  const formData = await request.formData();
+  const file = formData.get('avatar') as File;
 
-    if (!file) {
-      return errorResponse('No avatar file provided', 400);
-    }
+  if (!file) {
+    return createErrorResponse(
+      ProfileErrorCode.AVATAR_UPLOAD_FAILED,
+      'No avatar file provided',
+      correlationId
+    );
+  }
 
-    // Check file size
-    const maxSize = parseInt(request.env.MAX_AVATAR_SIZE || '5242880'); // 5MB default
-    if (file.size > maxSize) {
-      return errorResponse(`File size exceeds maximum allowed size of ${maxSize} bytes`, 413);
-    }
+  // Check file size
+  const maxSize = parseInt(request.env.MAX_AVATAR_SIZE || '5242880'); // 5MB default
+  if (file.size > maxSize) {
+    return createErrorResponse(
+      ProfileErrorCode.AVATAR_TOO_LARGE,
+      `File size exceeds maximum allowed size of ${maxSize} bytes`,
+      correlationId,
+      { size: file.size, maxSize }
+    );
+  }
 
     // Forward to profile DO
     const profileDO = request.env.PROFILE_DO.idFromName('profiles');
@@ -255,14 +320,23 @@ profileRoutes.post('/api/profiles/me/avatar', authenticateRequest, async (reques
     }
 
     const result = await response.json();
-    return successResponse(result);
-  } catch (error) {
+    
+    // Invalidate profile cache after avatar update
+    await cacheManager.invalidateProfile(request.user.userId);
+    
+    return createSuccessResponse(result, correlationId);
+  } catch (error: any) {
     logger.error('Upload avatar error', error);
-    return errorResponse('Failed to upload avatar', 500);
+    return createErrorResponse(
+      ProfileErrorCode.AVATAR_UPLOAD_FAILED,
+      error.message || 'Failed to upload avatar',
+      correlationId,
+      error
+    );
   } finally {
     logger.clearContext();
   }
-});
+}, 'uploadAvatar'));
 
 // Delete current user's profile
 profileRoutes.delete('/api/profiles/me', authenticateRequest, async (request: AuthenticatedRequest) => {
@@ -337,39 +411,40 @@ profileRoutes.get('/api/profiles', async (request: AuthenticatedRequest) => {
   }
 });
 
-// Get player statistics
-profileRoutes.get('/api/profiles/:playerId/statistics', async (request: AuthenticatedRequest) => {
-  const correlationId = request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID();
+// Get player statistics with caching
+profileRoutes.get('/api/profiles/:playerId/statistics', withErrorHandling(async (request: AuthenticatedRequest) => {
+  const correlationId = extractCorrelationId(request);
   logger.setContext({ correlationId, operation: 'getPlayerStatistics' });
 
-  try {
-    const playerId = request.params?.playerId;
-    if (!playerId || !request.env?.PROFILE_DO) {
-      return errorResponse('Invalid request', 400);
-    }
-
-    const profileDO = request.env.PROFILE_DO.idFromName('profiles');
-    const profileObj = request.env.PROFILE_DO.get(profileDO);
-
-    const response = await profileObj.fetch(
-      `http://internal/statistics/player/${playerId}`,
-      { method: 'GET' }
+  const playerId = request.params?.playerId;
+  if (!playerId || !request.env?.PROFILE_DO) {
+    return createErrorResponse(
+      ProfileErrorCode.PROFILE_INVALID_DATA,
+      'Invalid request',
+      correlationId
     );
-
-    if (!response.ok) {
-      const error = await response.text();
-      return errorResponse(error || 'Statistics not found', response.status);
-    }
-
-    const stats = await response.json();
-    return successResponse(stats);
-  } catch (error) {
-    logger.error('Get statistics error', error);
-    return errorResponse('Failed to fetch statistics', 500);
-  } finally {
-    logger.clearContext();
   }
-});
+
+  const profileDO = request.env.PROFILE_DO.idFromName('profiles');
+  const profileObj = request.env.PROFILE_DO.get(profileDO);
+
+  const response = await profileObj.fetch(
+    `http://internal/statistics/player/${playerId}`,
+    { method: 'GET' }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    return createErrorResponse(
+      ProfileErrorCode.STATISTICS_NOT_FOUND,
+      error || 'Statistics not found',
+      correlationId
+    );
+  }
+
+  const stats = await response.json();
+  return createSuccessResponse(stats, correlationId, cacheManager.getCacheHeaders(true));
+}, 'getPlayerStatistics'));
 
 // Get player session history
 profileRoutes.get('/api/profiles/:playerId/sessions', async (request: AuthenticatedRequest) => {
@@ -508,46 +583,4 @@ profileRoutes.get('/api/achievements/stats', async (request: AuthenticatedReques
   }
 });
 
-// Helper functions
-function getCorsHeaders(): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
-  };
-}
-
-function successResponse<T>(data: T): Response {
-  const response: ApiResponse<T> = {
-    success: true,
-    data,
-    timestamp: new Date().toISOString(),
-  };
-
-  return new Response(JSON.stringify(response), {
-    headers: { 
-      'Content-Type': 'application/json',
-      ...getCorsHeaders(),
-    },
-  });
-}
-
-function errorResponse(message: string, status: number = 500): Response {
-  const response: ApiResponse = {
-    success: false,
-    error: {
-      code: status.toString(),
-      message,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  return new Response(JSON.stringify(response), {
-    status,
-    headers: { 
-      'Content-Type': 'application/json',
-      ...getCorsHeaders(),
-    },
-  });
-}
+// Note: Helper functions removed in favor of centralized error handling in profile-errors.ts

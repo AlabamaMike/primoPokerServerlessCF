@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { clsx } from 'clsx';
+import { useDebounce } from '../../hooks/useDebounce';
+import { SEARCH_DEBOUNCE_DELAY, DEFAULT_PAGE_SIZE } from './constants';
 
 export interface Transaction {
   id: string;
@@ -18,21 +20,29 @@ interface TransactionHistoryProps {
   pageSize?: number;
   showFilters?: boolean;
   showSort?: boolean;
+  showSearch?: boolean;
+  enableVirtualization?: boolean;
   onRefresh?: () => void;
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   transactions,
   isLoading = false,
-  pageSize = 10,
+  pageSize = DEFAULT_PAGE_SIZE,
   showFilters = false,
   showSort = false,
+  showSearch = false,
+  enableVirtualization = false,
   onRefresh
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [filterType, setFilterType] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('date_desc');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  
+  // Debounce search term for performance
+  const debouncedSearchTerm = useDebounce(searchTerm, SEARCH_DEBOUNCE_DELAY);
 
   const formatAmount = (amount: number, type: string): string => {
     const sign = type === 'deposit' ? '+' : '-';
@@ -61,37 +71,63 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         return '';
     }
   };
+  
+  // Memoize sort comparator for better performance
+  const sortComparator = useCallback((a: Transaction, b: Transaction): number => {
+    switch (sortBy) {
+      case 'date_desc':
+        return b.timestamp.getTime() - a.timestamp.getTime();
+      case 'date_asc':
+        return a.timestamp.getTime() - b.timestamp.getTime();
+      case 'amount_desc':
+        return b.amount - a.amount;
+      case 'amount_asc':
+        return a.amount - b.amount;
+      default:
+        return 0;
+    }
+  }, [sortBy]);
 
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
     
+    // Apply type filter
     if (filterType !== 'all') {
       filtered = filtered.filter(tx => tx.type === filterType);
     }
     
-    // Sort transactions
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'date_desc':
-          return b.timestamp.getTime() - a.timestamp.getTime();
-        case 'date_asc':
-          return a.timestamp.getTime() - b.timestamp.getTime();
-        case 'amount_desc':
-          return b.amount - a.amount;
-        case 'amount_asc':
-          return a.amount - b.amount;
-        default:
-          return 0;
-      }
-    });
+    // Apply search filter with debounced term
+    if (debouncedSearchTerm) {
+      const searchLower = debouncedSearchTerm.toLowerCase();
+      filtered = filtered.filter(tx => 
+        tx.description.toLowerCase().includes(searchLower) ||
+        tx.id.toLowerCase().includes(searchLower) ||
+        tx.amount.toString().includes(debouncedSearchTerm)
+      );
+    }
     
-    return filtered;
-  }, [transactions, filterType, sortBy]);
+    // Sort transactions using memoized comparator
+    const sortedFiltered = [...filtered];
+    sortedFiltered.sort(sortComparator);
+    
+    return sortedFiltered;
+  }, [transactions, filterType, sortComparator, debouncedSearchTerm]);
 
   const paginatedTransactions = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     return filteredTransactions.slice(startIndex, startIndex + pageSize);
   }, [filteredTransactions, currentPage, pageSize]);
+  
+  // Reset to first page when filters change
+  const handleFilterChange = useCallback((newFilterType: string) => {
+    setFilterType(newFilterType);
+    setCurrentPage(1);
+  }, []);
+  
+  const handleSortChange = useCallback((newSortBy: string) => {
+    setSortBy(newSortBy);
+    setCurrentPage(1);
+  }, []);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -128,8 +164,25 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         )}
       </div>
 
-      {(showFilters || showSort) && (
-        <div className="mb-4 flex gap-4">
+      {(showFilters || showSort || showSearch) && (
+        <div className="mb-4 flex gap-4 flex-wrap">
+          {showSearch && (
+            <div className="flex-1 min-w-[200px]">
+              <label htmlFor="search-transactions" className="block text-sm font-medium mb-1">
+                Search transactions
+              </label>
+              <input
+                id="search-transactions"
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by description, ID, or amount..."
+                className="w-full border rounded px-3 py-1"
+                aria-label="Search transactions"
+              />
+            </div>
+          )}
+          
           {showFilters && (
             <div>
               <label htmlFor="filter-type" className="block text-sm font-medium mb-1">
@@ -138,7 +191,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               <select
                 id="filter-type"
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
+                onChange={(e) => handleFilterChange(e.target.value)}
                 className="border rounded px-3 py-1"
               >
                 <option value="all">All</option>
@@ -158,7 +211,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               <select
                 id="sort-by"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => handleSortChange(e.target.value)}
                 className="border rounded px-3 py-1"
               >
                 <option value="date_desc">Date (Newest)</option>

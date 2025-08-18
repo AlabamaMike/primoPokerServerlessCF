@@ -5,3 +5,4 @@ export { DepositModal } from './DepositModal';
 export { WithdrawModal } from './WithdrawModal';
 export { BuyInFlow } from './BuyInFlow';
 export { TransactionStatus } from './TransactionStatus';
+export { WalletErrorBoundary, withWalletErrorBoundary } from './WalletErrorBoundary';

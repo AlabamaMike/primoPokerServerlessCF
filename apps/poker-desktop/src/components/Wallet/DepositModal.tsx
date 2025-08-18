@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { formatCurrency } from '../../utils/currency';
 
@@ -34,6 +34,13 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   const [amount, setAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>(paymentMethods[0]);
   const [validationError, setValidationError] = useState<string>('');
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState<number>(-1);
+  
+  // Refs for focus management
+  const modalRef = useRef<HTMLDivElement>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const firstPresetRef = useRef<HTMLButtonElement>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -41,8 +48,48 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       setAmount(0);
       setPaymentMethod(paymentMethods[0]);
       setValidationError('');
+      setSelectedPresetIndex(-1);
+    } else {
+      // Focus on amount input when modal opens
+      setTimeout(() => {
+        amountInputRef.current?.focus();
+      }, 100);
     }
   }, [isOpen, paymentMethods]);
+  
+  // Trap focus within modal
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+      
+      // Handle arrow key navigation for preset amounts
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const activeElement = document.activeElement;
+        const presetButtons = modalRef.current?.querySelectorAll('[data-preset-button]');
+        
+        if (presetButtons && activeElement?.hasAttribute('data-preset-button')) {
+          e.preventDefault();
+          const currentIndex = Array.from(presetButtons).indexOf(activeElement as Element);
+          let nextIndex = currentIndex;
+          
+          if (e.key === 'ArrowLeft') {
+            nextIndex = currentIndex > 0 ? currentIndex - 1 : presetButtons.length - 1;
+          } else {
+            nextIndex = currentIndex < presetButtons.length - 1 ? currentIndex + 1 : 0;
+          }
+          
+          (presetButtons[nextIndex] as HTMLElement).focus();
+        }
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -94,8 +141,22 @@ export const DepositModal: React.FC<DepositModalProps> = ({
         onClick={onClose}
       />
       
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-        <h2 className="text-2xl font-bold mb-6">Make a Deposit</h2>
+      <div ref={modalRef} className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" aria-labelledby="deposit-modal-title">
+        {/* Skip Links for Keyboard Navigation */}
+        <button 
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-blue-600 text-white px-4 py-2 rounded-lg z-10"
+          onClick={() => amountInputRef.current?.focus()}
+        >
+          Skip to amount input
+        </button>
+        <button 
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:right-4 bg-blue-600 text-white px-4 py-2 rounded-lg z-10"
+          onClick={() => submitButtonRef.current?.focus()}
+        >
+          Skip to submit button
+        </button>
+        
+        <h2 id="deposit-modal-title" className="text-2xl font-bold mb-6">Make a Deposit</h2>
         
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
@@ -107,6 +168,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 $
               </span>
               <input
+                ref={amountInputRef}
                 id="deposit-amount"
                 type="number"
                 step="0.01"
@@ -115,6 +177,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="0.00"
                 disabled={isProcessing}
+                aria-describedby={validationError ? 'deposit-error' : undefined}
               />
             </div>
           </div>
@@ -122,21 +185,36 @@ export const DepositModal: React.FC<DepositModalProps> = ({
           {presetAmounts.length > 0 && (
             <div className="mb-6">
               <div className="flex gap-2 flex-wrap">
-                {presetAmounts.map((preset) => (
+                {presetAmounts.map((preset, index) => (
                   <button
                     key={preset}
+                    ref={index === 0 ? firstPresetRef : undefined}
                     type="button"
+                    data-preset-button
                     onClick={() => {
                       setAmount(preset);
                       setValidationError('');
+                      setSelectedPresetIndex(index);
+                      // Announce to screen readers
+                      const announcement = `Selected ${formatCurrency(preset)} deposit amount`;
+                      const announcer = document.createElement('div');
+                      announcer.setAttribute('role', 'status');
+                      announcer.setAttribute('aria-live', 'polite');
+                      announcer.className = 'sr-only';
+                      announcer.textContent = announcement;
+                      document.body.appendChild(announcer);
+                      setTimeout(() => document.body.removeChild(announcer), 1000);
                     }}
+                    onFocus={() => setSelectedPresetIndex(index)}
                     className={clsx(
-                      'px-4 py-2 rounded-lg border',
+                      'px-4 py-2 rounded-lg border transition-all',
                       amount === preset
                         ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50',
+                      selectedPresetIndex === index && 'ring-2 ring-blue-500 ring-offset-2'
                     )}
                     disabled={isProcessing}
+                    aria-label={`Select ${formatCurrency(preset)} deposit amount`}
                   >
                     ${preset}
                   </button>
@@ -167,7 +245,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
           )}
 
           {(validationError || error) && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div id="deposit-error" role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {validationError || error}
             </div>
           )}
@@ -182,14 +260,16 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               Cancel
             </button>
             <button
+              ref={submitButtonRef}
               type="submit"
               className={clsx(
-                'flex-1 px-4 py-2 rounded-lg font-medium',
+                'flex-1 px-4 py-2 rounded-lg font-medium transition-colors',
                 isProcessing
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
               )}
               disabled={isProcessing}
+              aria-busy={isProcessing}
             >
               {isProcessing ? 'Processing...' : 'Deposit'}
             </button>

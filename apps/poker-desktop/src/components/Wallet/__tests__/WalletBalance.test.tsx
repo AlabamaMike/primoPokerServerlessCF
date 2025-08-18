@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { WalletBalance } from '../WalletBalance';
 
@@ -50,5 +50,84 @@ describe('WalletBalance', () => {
   it('should show wallet label', () => {
     render(<WalletBalance balance={100} showLabel />);
     expect(screen.getByText('Wallet Balance')).toBeInTheDocument();
+  });
+
+  describe('Screen Reader Announcements', () => {
+    beforeEach(() => {
+      // Clean up any existing announcer elements
+      document.querySelectorAll('[role="status"]').forEach(el => el.remove());
+    });
+
+    afterEach(() => {
+      // Clean up after tests
+      document.querySelectorAll('[role="status"]').forEach(el => el.remove());
+    });
+
+    it('should announce balance increases to screen readers', async () => {
+      const { rerender } = render(<WalletBalance balance={100} />);
+      
+      // Update balance to trigger announcement
+      rerender(<WalletBalance balance={150} />);
+      
+      await waitFor(() => {
+        const announcer = document.querySelector('[role="status"]');
+        expect(announcer).toBeInTheDocument();
+        expect(announcer).toHaveTextContent('Wallet balance increased by $50.00. New balance is $150.00');
+      });
+    });
+
+    it('should announce balance decreases to screen readers', async () => {
+      const { rerender } = render(<WalletBalance balance={100} />);
+      
+      // Update balance to trigger announcement
+      rerender(<WalletBalance balance={75} />);
+      
+      await waitFor(() => {
+        const announcer = document.querySelector('[role="status"]');
+        expect(announcer).toBeInTheDocument();
+        expect(announcer).toHaveTextContent('Wallet balance decreased by $25.00. New balance is $75.00');
+      });
+    });
+
+    it('should not announce when balance unchanged', async () => {
+      const { rerender } = render(<WalletBalance balance={100} />);
+      
+      // Rerender with same balance
+      rerender(<WalletBalance balance={100} />);
+      
+      // Should not create announcer element
+      const announcer = document.querySelector('[role="status"]');
+      expect(announcer).not.toBeInTheDocument();
+    });
+
+    it('should not announce during loading state', async () => {
+      const { rerender } = render(<WalletBalance balance={100} />);
+      
+      // Update balance while loading
+      rerender(<WalletBalance balance={150} isLoading />);
+      
+      // Should not create announcer element
+      const announcer = document.querySelector('[role="status"]');
+      expect(announcer).not.toBeInTheDocument();
+    });
+
+    it('should not announce during error state', async () => {
+      const { rerender } = render(<WalletBalance balance={100} />);
+      
+      // Update balance with error
+      rerender(<WalletBalance balance={150} error="Network error" />);
+      
+      // Should not create announcer element
+      const announcer = document.querySelector('[role="status"]');
+      expect(announcer).not.toBeInTheDocument();
+    });
+
+    it('should have correct ARIA attributes', () => {
+      render(<WalletBalance balance={123.45} />);
+      
+      const balanceElement = screen.getByText('$123.45');
+      expect(balanceElement).toHaveAttribute('aria-label', 'Wallet balance: $123.45');
+      expect(balanceElement).toHaveAttribute('role', 'text');
+    });
   });
 });

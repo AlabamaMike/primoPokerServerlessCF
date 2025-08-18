@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { formatCurrency } from '../../utils/currency';
 
@@ -22,34 +22,40 @@ export const WalletBalance: React.FC<WalletBalanceProps> = ({
   const previousBalanceRef = useRef<number>(balance);
   const announcerRef = useRef<HTMLDivElement | null>(null);
   
+  const announceBalance = useCallback((newBalance: number, currentCurrency: string) => {
+    if (!announcerRef.current) {
+      announcerRef.current = document.createElement('div');
+      announcerRef.current.setAttribute('role', 'status');
+      announcerRef.current.setAttribute('aria-live', 'polite');
+      announcerRef.current.setAttribute('aria-atomic', 'true');
+      announcerRef.current.className = 'sr-only';
+      document.body.appendChild(announcerRef.current);
+    }
+    
+    const difference = newBalance - previousBalanceRef.current;
+    const changeType = difference > 0 ? 'increased' : 'decreased';
+    const announcement = `Wallet balance ${changeType} by ${formatCurrency(Math.abs(difference), currentCurrency)}. New balance is ${formatCurrency(newBalance, currentCurrency)}`;
+    
+    announcerRef.current.textContent = announcement;
+  }, []);
+  
   // Announce balance changes to screen readers
   useEffect(() => {
     if (previousBalanceRef.current !== balance && !isLoading && !error) {
-      const difference = balance - previousBalanceRef.current;
-      const changeType = difference > 0 ? 'increased' : 'decreased';
-      const announcement = `Wallet balance ${changeType} by ${formatCurrency(Math.abs(difference), currency)}. New balance is ${formatCurrency(balance, currency)}`;
-      
-      // Create or update screen reader announcement
-      if (!announcerRef.current) {
-        announcerRef.current = document.createElement('div');
-        announcerRef.current.setAttribute('role', 'status');
-        announcerRef.current.setAttribute('aria-live', 'polite');
-        announcerRef.current.setAttribute('aria-atomic', 'true');
-        announcerRef.current.className = 'sr-only';
-        document.body.appendChild(announcerRef.current);
-      }
-      
-      announcerRef.current.textContent = announcement;
+      announceBalance(balance, currency);
       previousBalanceRef.current = balance;
     }
-    
+  }, [balance, currency, isLoading, error, announceBalance]);
+  
+  // Cleanup announcer element only on unmount
+  useEffect(() => {
     return () => {
       if (announcerRef.current && document.body.contains(announcerRef.current)) {
         document.body.removeChild(announcerRef.current);
         announcerRef.current = null;
       }
     };
-  }, [balance, currency, isLoading, error]);
+  }, []);
   if (isLoading) {
     return (
       <div className={clsx('wallet-balance', className)}>

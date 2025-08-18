@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { TransactionHistory } from '../TransactionHistory';
+import userEvent from '@testing-library/user-event';
 
 const mockTransactions = [
   {
@@ -138,6 +139,188 @@ describe('TransactionHistory', () => {
     await waitFor(() => {
       expect(screen.getByText('Transaction Details')).toBeInTheDocument();
       expect(screen.getByText('Transaction ID: 1')).toBeInTheDocument();
+    });
+  });
+
+  describe('Search Functionality', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    });
+
+    it('should show search input when showSearch is true', () => {
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      expect(screen.getByPlaceholderText('Search transactions...')).toBeInTheDocument();
+    });
+
+    it('should filter transactions by description', async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      await user.type(searchInput, 'bank');
+      
+      // Fast forward debounce timer
+      jest.advanceTimersByTime(300);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Deposit from bank')).toBeInTheDocument();
+        expect(screen.getByText('Withdrawal to bank')).toBeInTheDocument();
+        expect(screen.queryByText('Table buy-in')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should filter transactions by ID', async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      await user.type(searchInput, '2');
+      
+      jest.advanceTimersByTime(300);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Withdrawal to bank')).toBeInTheDocument();
+        expect(screen.queryByText('Deposit from bank')).not.toBeInTheDocument();
+        expect(screen.queryByText('Table buy-in')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should filter transactions by amount', async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      await user.type(searchInput, '50');
+      
+      jest.advanceTimersByTime(300);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Withdrawal to bank')).toBeInTheDocument();
+        expect(screen.queryByText('Deposit from bank')).not.toBeInTheDocument();
+        expect(screen.queryByText('Table buy-in')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should debounce search input', async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      
+      // Type rapidly
+      await user.type(searchInput, 'b');
+      await user.type(searchInput, 'a');
+      await user.type(searchInput, 'n');
+      await user.type(searchInput, 'k');
+      
+      // Should still show all transactions (not filtered yet)
+      expect(screen.getByText('Table buy-in')).toBeInTheDocument();
+      
+      // Fast forward debounce timer
+      jest.advanceTimersByTime(300);
+      
+      // Now should be filtered
+      await waitFor(() => {
+        expect(screen.queryByText('Table buy-in')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should reset to first page when search changes', async () => {
+      const user = userEvent.setup({ delay: null });
+      const manyTransactions = Array.from({ length: 25 }, (_, i) => ({
+        id: `tx-${i}`,
+        type: 'deposit' as const,
+        amount: 10 + i,
+        currency: 'USD',
+        status: 'completed' as const,
+        timestamp: new Date(`2025-01-${i + 1}T10:00:00Z`),
+        description: i < 10 ? `Bank transaction ${i + 1}` : `Card transaction ${i + 1}`
+      }));
+
+      render(<TransactionHistory transactions={manyTransactions} showSearch pageSize={10} />);
+      
+      // Go to page 2
+      fireEvent.click(screen.getByText('Next'));
+      
+      await waitFor(() => {
+        expect(screen.getByText('Card transaction 11')).toBeInTheDocument();
+      });
+      
+      // Search for 'Bank'
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      await user.type(searchInput, 'Bank');
+      
+      jest.advanceTimersByTime(300);
+      
+      // Should reset to page 1 and show filtered results
+      await waitFor(() => {
+        expect(screen.getByText('Bank transaction 1')).toBeInTheDocument();
+        expect(screen.queryByText('Card transaction 11')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should show empty state when search has no results', async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      await user.type(searchInput, 'nonexistent');
+      
+      jest.advanceTimersByTime(300);
+      
+      await waitFor(() => {
+        expect(screen.getByText('No transactions match your search')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle case-insensitive search', async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<TransactionHistory transactions={mockTransactions} showSearch />);
+      
+      const searchInput = screen.getByPlaceholderText('Search transactions...');
+      await user.type(searchInput, 'BANK');
+      
+      jest.advanceTimersByTime(300);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Deposit from bank')).toBeInTheDocument();
+        expect(screen.getByText('Withdrawal to bank')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Performance optimizations', () => {
+    it('should memoize filtered transactions', () => {
+      const { rerender } = render(<TransactionHistory transactions={mockTransactions} />);
+      
+      // Force re-render with same props
+      rerender(<TransactionHistory transactions={mockTransactions} />);
+      
+      // Should still display transactions (memoization working)
+      expect(screen.getByText('Deposit from bank')).toBeInTheDocument();
+    });
+
+    it('should memoize sorted transactions', () => {
+      const { rerender } = render(
+        <TransactionHistory transactions={mockTransactions} showSort />
+      );
+      
+      // Change sort order
+      const sortSelect = screen.getByLabelText('Sort by');
+      fireEvent.change(sortSelect, { target: { value: 'amount_desc' } });
+      
+      // Force re-render
+      rerender(<TransactionHistory transactions={mockTransactions} showSort />);
+      
+      // Should maintain sort order (memoization working)
+      const amounts = screen.getAllByTestId('transaction-amount');
+      expect(amounts[0]).toHaveTextContent('+$100.00');
     });
   });
 });

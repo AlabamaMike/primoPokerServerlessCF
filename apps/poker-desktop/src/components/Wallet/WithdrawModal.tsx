@@ -322,8 +322,22 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
         onClick={onClose}
       />
       
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-        <h2 className="text-2xl font-bold mb-6">
+      <div ref={modalRef} className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" aria-labelledby="withdraw-modal-title">
+        {/* Skip Links for Keyboard Navigation */}
+        <button 
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-blue-600 text-white px-4 py-2 rounded-lg z-10"
+          onClick={() => {
+            if (step === '2fa' && twoFactorInputRef.current) {
+              twoFactorInputRef.current.focus();
+            } else if (amountInputRef.current) {
+              amountInputRef.current.focus();
+            }
+          }}
+        >
+          Skip to input field
+        </button>
+        
+        <h2 id="withdraw-modal-title" className="text-2xl font-bold mb-6">
           {isProcessing ? 'Processing withdrawal...' : 'Withdraw Funds'}
         </h2>
         

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { useDebounce } from '../../hooks/useDebounce';
+import { SEARCH_DEBOUNCE_DELAY, DEFAULT_PAGE_SIZE } from './constants';
 
 export interface Transaction {
   id: string;
@@ -27,7 +28,7 @@ interface TransactionHistoryProps {
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   transactions,
   isLoading = false,
-  pageSize = 10,
+  pageSize = DEFAULT_PAGE_SIZE,
   showFilters = false,
   showSort = false,
   showSearch = false,
@@ -41,7 +42,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   
   // Debounce search term for performance
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedSearchTerm = useDebounce(searchTerm, SEARCH_DEBOUNCE_DELAY);
 
   const formatAmount = (amount: number, type: string): string => {
     const sign = type === 'deposit' ? '+' : '-';
@@ -70,6 +71,22 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         return '';
     }
   };
+  
+  // Memoize sort comparator for better performance
+  const sortComparator = useCallback((a: Transaction, b: Transaction): number => {
+    switch (sortBy) {
+      case 'date_desc':
+        return b.timestamp.getTime() - a.timestamp.getTime();
+      case 'date_asc':
+        return a.timestamp.getTime() - b.timestamp.getTime();
+      case 'amount_desc':
+        return b.amount - a.amount;
+      case 'amount_asc':
+        return a.amount - b.amount;
+      default:
+        return 0;
+    }
+  }, [sortBy]);
 
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
@@ -89,25 +106,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       );
     }
     
-    // Sort transactions - optimized to avoid unnecessary operations
+    // Sort transactions using memoized comparator
     const sortedFiltered = [...filtered];
-    sortedFiltered.sort((a, b) => {
-      switch (sortBy) {
-        case 'date_desc':
-          return b.timestamp.getTime() - a.timestamp.getTime();
-        case 'date_asc':
-          return a.timestamp.getTime() - b.timestamp.getTime();
-        case 'amount_desc':
-          return b.amount - a.amount;
-        case 'amount_asc':
-          return a.amount - b.amount;
-        default:
-          return 0;
-      }
-    });
+    sortedFiltered.sort(sortComparator);
     
     return sortedFiltered;
-  }, [transactions, filterType, sortBy, debouncedSearchTerm]);
+  }, [transactions, filterType, sortComparator, debouncedSearchTerm]);
 
   const paginatedTransactions = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;

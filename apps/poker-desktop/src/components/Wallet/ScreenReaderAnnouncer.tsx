@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { ANNOUNCEMENT_CLEAR_DELAY, FOCUS_ANIMATION_DELAY } from './constants';
 
 interface ScreenReaderAnnouncerProps {
   message: string;
@@ -9,9 +10,9 @@ interface ScreenReaderAnnouncerProps {
 export const ScreenReaderAnnouncer: React.FC<ScreenReaderAnnouncerProps> = ({
   message,
   priority = 'polite',
-  clearAfter = 1000
+  clearAfter = ANNOUNCEMENT_CLEAR_DELAY
 }) => {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (timeoutRef.current) {
@@ -49,7 +50,7 @@ export const useScreenReaderAnnouncement = () => {
 
   const announce = (message: string, priority: 'polite' | 'assertive' = 'polite') => {
     setAnnouncement(''); // Clear first to ensure re-announcement
-    setTimeout(() => setAnnouncement(message), 100);
+    setTimeout(() => setAnnouncement(message), FOCUS_ANIMATION_DELAY);
   };
 
   return { announcement, announce };

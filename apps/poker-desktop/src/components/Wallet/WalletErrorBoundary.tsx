@@ -8,10 +8,22 @@ interface WalletErrorFallbackProps {
 }
 
 const WalletErrorFallback: React.FC<WalletErrorFallbackProps> = ({ error, resetError }) => {
+  // More robust network error detection
   const isNetworkError = error.message.toLowerCase().includes('network') || 
-                        error.message.toLowerCase().includes('fetch');
+                        error.message.toLowerCase().includes('fetch') ||
+                        error.message.toLowerCase().includes('failed to fetch') ||
+                        error.message.toLowerCase().includes('networkerror') ||
+                        error.message.toLowerCase().includes('timeout') ||
+                        error.message.toLowerCase().includes('offline') ||
+                        error.name === 'NetworkError' ||
+                        error.name === 'TypeError' && error.message.includes('fetch') ||
+                        (error as any).code === 'ERR_NETWORK' ||
+                        (error as any).code === 'ECONNREFUSED';
+                        
   const isBalanceError = error.message.toLowerCase().includes('balance') ||
-                        error.message.toLowerCase().includes('insufficient');
+                        error.message.toLowerCase().includes('insufficient') ||
+                        error.message.toLowerCase().includes('funds') ||
+                        error.name === 'InsufficientFundsError';
   
   return (
     <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
@@ -78,6 +90,20 @@ const WalletErrorFallback: React.FC<WalletErrorFallbackProps> = ({ error, resetE
   );
 };
 
+class WalletErrorBoundaryClass extends ErrorBoundary {
+  render() {
+    if (this.state.hasError && this.state.error) {
+      return (
+        <WalletErrorFallback 
+          error={this.state.error} 
+          resetError={this.resetError} 
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const WalletErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const handleError = (error: Error, errorInfo: React.ErrorInfo) => {
     logger.error('Wallet component error:', {
@@ -91,37 +117,18 @@ export const WalletErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ c
   };
   
   return (
-    <ErrorBoundary
-      fallback={(error, errorInfo) => (
-        <WalletErrorFallback 
-          error={error} 
-          resetError={() => window.location.reload()} 
-        />
-      )}
-      onError={handleError}
-    >
+    <WalletErrorBoundaryClass onError={handleError}>
       {children}
-    </ErrorBoundary>
+    </WalletErrorBoundaryClass>
   );
 };
 
 export const withWalletErrorBoundary = <P extends object>(
   Component: React.ComponentType<P>
 ) => {
-  return withErrorBoundary(
-    Component,
-    (error, errorInfo) => (
-      <WalletErrorFallback 
-        error={error} 
-        resetError={() => window.location.reload()} 
-      />
-    ),
-    (error, errorInfo) => {
-      logger.error('Wallet component error:', {
-        error: error.toString(),
-        componentStack: errorInfo.componentStack,
-        timestamp: new Date().toISOString()
-      });
-    }
+  return (props: P) => (
+    <WalletErrorBoundary>
+      <Component {...props} />
+    </WalletErrorBoundary>
   );
 };

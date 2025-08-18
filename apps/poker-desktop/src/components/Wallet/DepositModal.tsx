@@ -142,6 +142,20 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       />
       
       <div ref={modalRef} className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" aria-labelledby="deposit-modal-title">
+        {/* Skip Links for Keyboard Navigation */}
+        <button 
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-blue-600 text-white px-4 py-2 rounded-lg z-10"
+          onClick={() => amountInputRef.current?.focus()}
+        >
+          Skip to amount input
+        </button>
+        <button 
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:right-4 bg-blue-600 text-white px-4 py-2 rounded-lg z-10"
+          onClick={() => submitButtonRef.current?.focus()}
+        >
+          Skip to submit button
+        </button>
+        
         <h2 id="deposit-modal-title" className="text-2xl font-bold mb-6">Make a Deposit</h2>
         
         <form onSubmit={handleSubmit}>

@@ -152,3 +152,20 @@ export const socialRateLimiter = new RateLimiter({
     return `social:${userId}`;
   }
 });
+
+export const statisticsRateLimiter = new RateLimiter({
+  windowMs: 60 * 1000,       // 1 minute
+  maxRequests: 30,           // 30 requests per minute for stats
+  keyGenerator: (request) => {
+    // Rate limit by authenticated user ID for player stats, IP for leaderboards
+    const userId = (request as any).user?.userId;
+    if (userId) {
+      return `stats:user:${userId}`;
+    }
+    // For public leaderboard endpoint, use IP
+    const ip = request.headers?.get('CF-Connecting-IP') || 
+               request.headers?.get('X-Forwarded-For') || 
+               'unknown';
+    return `stats:ip:${ip}`;
+  }
+});

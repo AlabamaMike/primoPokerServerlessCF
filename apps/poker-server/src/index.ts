@@ -1,8 +1,9 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
-import { ProfileDurableObject } from '@primo-poker/profiles';
+import { ProfileDurableObject, StatisticsAggregator } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
+import { StatsPeriod } from '@primo-poker/shared';
 
 // Export Durable Objects for Cloudflare Workers
 export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, ProfileDurableObject };
@@ -175,6 +176,18 @@ export default {
         break;
       case '0 2 * * *': // Daily at 2 AM
         ctx.waitUntil(runDailyMaintenance(env));
+        break;
+      case '0 * * * *': // Every hour
+        ctx.waitUntil(runHourlyStatisticsAggregation(env));
+        break;
+      case '0 3 * * *': // Daily at 3 AM
+        ctx.waitUntil(runDailyStatisticsAggregation(env));
+        break;
+      case '0 4 * * 1': // Weekly on Monday at 4 AM
+        ctx.waitUntil(runWeeklyStatisticsAggregation(env));
+        break;
+      case '0 5 1 * *': // Monthly on the 1st at 5 AM
+        ctx.waitUntil(runMonthlyStatisticsAggregation(env));
         break;
     }
   },
@@ -375,6 +388,117 @@ async function runDailyMaintenance(env: Env): Promise<void> {
     }
   } catch (error) {
     logger.error('Daily maintenance error', error as Error);
+  }
+}
+
+// Statistics aggregation functions
+async function runHourlyStatisticsAggregation(env: Env): Promise<void> {
+  try {
+    logger.info('Starting hourly statistics aggregation');
+    const aggregator = new StatisticsAggregator(env.DB, env.METRICS_NAMESPACE);
+    
+    // Run incremental updates for recent activity
+    await aggregator.runAggregation(StatsPeriod.DAILY);
+    
+    // Log completion
+    if (env.ANALYTICS) {
+      env.ANALYTICS.writeDataPoint({
+        blobs: ['statistics', 'hourly_aggregation'],
+        doubles: [Date.now()],
+        indexes: [env.ENVIRONMENT],
+      });
+    }
+  } catch (error) {
+    logger.error('Hourly statistics aggregation error', error as Error);
+    await errorReporter.report(error, {
+      job: 'hourly_statistics_aggregation',
+      environment: env.ENVIRONMENT,
+    });
+  }
+}
+
+async function runDailyStatisticsAggregation(env: Env): Promise<void> {
+  try {
+    logger.info('Starting daily statistics aggregation');
+    const aggregator = new StatisticsAggregator(env.DB, env.METRICS_NAMESPACE);
+    
+    // Run daily aggregation
+    await aggregator.runAggregation(StatsPeriod.DAILY);
+    
+    // Also update weekly stats for the current week
+    await aggregator.runAggregation(StatsPeriod.WEEKLY);
+    
+    // Log completion
+    if (env.ANALYTICS) {
+      env.ANALYTICS.writeDataPoint({
+        blobs: ['statistics', 'daily_aggregation'],
+        doubles: [Date.now()],
+        indexes: [env.ENVIRONMENT],
+      });
+    }
+  } catch (error) {
+    logger.error('Daily statistics aggregation error', error as Error);
+    await errorReporter.report(error, {
+      job: 'daily_statistics_aggregation',
+      environment: env.ENVIRONMENT,
+    });
+  }
+}
+
+async function runWeeklyStatisticsAggregation(env: Env): Promise<void> {
+  try {
+    logger.info('Starting weekly statistics aggregation');
+    const aggregator = new StatisticsAggregator(env.DB, env.METRICS_NAMESPACE);
+    
+    // Run weekly aggregation
+    await aggregator.runAggregation(StatsPeriod.WEEKLY);
+    
+    // Also update monthly stats for the current month
+    await aggregator.runAggregation(StatsPeriod.MONTHLY);
+    
+    // Log completion
+    if (env.ANALYTICS) {
+      env.ANALYTICS.writeDataPoint({
+        blobs: ['statistics', 'weekly_aggregation'],
+        doubles: [Date.now()],
+        indexes: [env.ENVIRONMENT],
+      });
+    }
+  } catch (error) {
+    logger.error('Weekly statistics aggregation error', error as Error);
+    await errorReporter.report(error, {
+      job: 'weekly_statistics_aggregation',
+      environment: env.ENVIRONMENT,
+    });
+  }
+}
+
+async function runMonthlyStatisticsAggregation(env: Env): Promise<void> {
+  try {
+    logger.info('Starting monthly statistics aggregation');
+    const aggregator = new StatisticsAggregator(env.DB, env.METRICS_NAMESPACE);
+    
+    // Run monthly aggregation
+    await aggregator.runAggregation(StatsPeriod.MONTHLY);
+    
+    // Also update yearly and all-time stats
+    await aggregator.runAggregation(StatsPeriod.YEARLY);
+    await aggregator.runAggregation(StatsPeriod.ALL_TIME);
+    
+    // Log completion
+    if (env.ANALYTICS) {
+      env.ANALYTICS.writeDataPoint({
+        blobs: ['statistics', 'monthly_aggregation'],
+        doubles: [Date.now()],
+        indexes: [env.ENVIRONMENT],
+      });
+    }
+  } catch (error) {
+    logger.error('Monthly statistics aggregation error', error as Error);
+    await errorReporter.report(error, {
+      job: 'monthly_statistics_aggregation',
+      environment: env.ENVIRONMENT,
+    });
   }
 }
 

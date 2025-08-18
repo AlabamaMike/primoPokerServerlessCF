@@ -2,6 +2,7 @@ export * from './profile-manager';
 export * from './avatar-handler';
 export * from './profile-do';
 export * from './statistics-manager';
+export * from './statistics-aggregator';
 export * from './achievement-manager';
 export * from './profile-cache';
 export * from './profile-errors';

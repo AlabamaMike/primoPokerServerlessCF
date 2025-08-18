@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { formatCurrency } from '../../utils/currency';
 
@@ -51,6 +51,11 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
   const [validationError, setValidationError] = useState<string>('');
   const [step, setStep] = useState<'amount' | 'confirm' | '2fa'>('amount');
   const [twoFactorCode, setTwoFactorCode] = useState<string>('');
+  
+  // Refs for focus management
+  const modalRef = useRef<HTMLDivElement>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const twoFactorInputRef = useRef<HTMLInputElement>(null);
 
   const dailyRemaining = dailyLimit ? dailyLimit - dailyWithdrawn : Infinity;
 

@@ -14,8 +14,12 @@ export const ChatLogSearch: React.FC = () => {
   const [hasMore, setHasMore] = useState(true)
   const [offset, setOffset] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set())
+  const [bulkAction, setBulkAction] = useState<string>('')
+  const [bulkReason, setBulkReason] = useState('')
+  const [showBulkModal, setShowBulkModal] = useState(false)
   
-  const { searchChatLogs } = useAdminApi()
+  const { searchChatLogs, bulkApplyActions } = useAdminApi()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const handleSearch = useCallback(async (newSearch = true) => {
@@ -82,7 +86,11 @@ export const ChatLogSearch: React.FC = () => {
   }, [handleSearch, loadingMore, hasMore])
 
   const handleExport = () => {
-    const data = results.map(log => ({
+    const exportData = selectedMessages.size > 0 
+      ? results.filter(log => selectedMessages.has(log.id))
+      : results
+
+    const data = exportData.map(log => ({
       timestamp: new Date(log.timestamp).toISOString(),
       playerId: log.playerId,
       username: log.username,
@@ -108,10 +116,65 @@ export const ChatLogSearch: React.FC = () => {
 
     // Show success message
     const successDiv = document.createElement('div')
-    successDiv.textContent = 'Results exported'
+    successDiv.textContent = `${exportData.length} messages exported`
     successDiv.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow'
     document.body.appendChild(successDiv)
     setTimeout(() => successDiv.remove(), 3000)
+  }
+
+  const toggleMessageSelection = (messageId: string) => {
+    setSelectedMessages(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId)
+      } else {
+        newSet.add(messageId)
+      }
+      return newSet
+    })
+  }
+
+  const selectAllMessages = () => {
+    if (selectedMessages.size === results.length) {
+      setSelectedMessages(new Set())
+    } else {
+      setSelectedMessages(new Set(results.map(r => r.id)))
+    }
+  }
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedMessages.size === 0 || !bulkReason) return
+
+    try {
+      const actions = Array.from(selectedMessages).map(messageId => {
+        const log = results.find(r => r.id === messageId)
+        if (!log) return null
+        
+        return {
+          playerId: log.playerId,
+          type: bulkAction as 'WARNING' | 'MUTE' | 'SHADOW_BAN' | 'BAN',
+          reason: bulkReason,
+          metadata: { messageId, originalMessage: log.message }
+        }
+      }).filter(Boolean)
+
+      await bulkApplyActions(actions as any)
+      
+      setSelectedMessages(new Set())
+      setBulkAction('')
+      setBulkReason('')
+      setShowBulkModal(false)
+
+      // Show success message
+      const successDiv = document.createElement('div')
+      successDiv.textContent = `Bulk action applied to ${actions.length} players`
+      successDiv.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow'
+      document.body.appendChild(successDiv)
+      setTimeout(() => successDiv.remove(), 3000)
+    } catch (err) {
+      setError('Failed to apply bulk action')
+      console.error(err)
+    }
   }
 
   const formatTimestamp = (timestamp: number) => {
@@ -192,7 +255,16 @@ export const ChatLogSearch: React.FC = () => {
               onClick={handleExport}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
             >
-              Export Results
+              Export {selectedMessages.size > 0 ? `${selectedMessages.size} Selected` : 'Results'}
+            </button>
+          )}
+          
+          {selectedMessages.size > 0 && (
+            <button
+              onClick={() => setShowBulkModal(true)}
+              className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+            >
+              Bulk Action ({selectedMessages.size})
             </button>
           )}
         </div>
@@ -222,6 +294,14 @@ export const ChatLogSearch: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedMessages.size === results.length && results.length > 0}
+                    onChange={selectAllMessages}
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Time
                 </th>
@@ -241,7 +321,15 @@ export const ChatLogSearch: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {results.map((log) => (
-                <tr key={log.id} className={`chat-log-item ${log.flagged ? 'flagged bg-red-50' : ''}`}>
+                <tr key={log.id} className={`chat-log-item ${selectedMessages.has(log.id) ? 'bg-indigo-50' : log.flagged ? 'flagged bg-red-50' : ''}`}>
+                  <td className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedMessages.has(log.id)}
+                      onChange={() => toggleMessageSelection(log.id)}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatTimestamp(log.timestamp)}
                   </td>
@@ -287,6 +375,70 @@ export const ChatLogSearch: React.FC = () => {
           {loadingMore && (
             <div className="text-center py-4">Loading more...</div>
           )}
+        </div>
+      )}
+
+      {/* Bulk Action Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold mb-4">Apply Bulk Action</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              This action will be applied to {selectedMessages.size} selected messages
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Action Type
+                </label>
+                <select
+                  value={bulkAction}
+                  onChange={(e) => setBulkAction(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select Action</option>
+                  <option value="WARNING">Warning</option>
+                  <option value="MUTE">Mute</option>
+                  <option value="SHADOW_BAN">Shadow Ban</option>
+                  <option value="BAN">Ban</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reason
+                </label>
+                <textarea
+                  value={bulkReason}
+                  onChange={(e) => setBulkReason(e.target.value)}
+                  rows={3}
+                  placeholder="Enter reason for this action..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowBulkModal(false)
+                  setBulkAction('')
+                  setBulkReason('')
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkAction}
+                disabled={!bulkAction || !bulkReason}
+                className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+              >
+                Apply Action
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

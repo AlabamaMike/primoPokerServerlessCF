@@ -1,5 +1,5 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
-import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES } from '@primo-poker/api';
+import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware, CacheableRequest } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, CacheDO } from '@primo-poker/persistence';
 import { ProfileDurableObject, StatisticsAggregator } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
@@ -98,14 +98,26 @@ export default {
         // Attach environment to the request object
         (extendedRequest as any).env = env;
         
-        return await apiRoutes.getRouter().handle(extendedRequest);
+        // Get response from API routes
+        const response = await apiRoutes.getRouter().handle(extendedRequest);
+        
+        // Apply cache headers based on route and authentication
+        const cachedResponse = await CacheHeadersMiddleware.middleware()(extendedRequest as CacheableRequest, response);
+        
+        // Apply ETag middleware for cacheable responses
+        const finalResponse = await CacheHeadersMiddleware.etagMiddleware()(extendedRequest as CacheableRequest, cachedResponse);
+        
+        return finalResponse;
       }
 
       // Handle static content or SPA routing
       if (url.pathname === '/' || url.pathname.startsWith('/app/')) {
-        return new Response(getIndexHTML(), {
+        const htmlResponse = new Response(getIndexHTML(), {
           headers: { 'Content-Type': 'text/html' },
         });
+        
+        // Apply cache headers for static HTML
+        return CacheHeadersMiddleware.setCacheHeaders(htmlResponse, 'cache', { ttl: 3600, edge: true }, request.url);
       }
 
       // 404 for other routes

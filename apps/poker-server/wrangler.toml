@@ -89,7 +89,6 @@ script_name = "primo-poker-server"
 name = "CACHE_DO"
 class_name = "CacheDO"
 script_name = "primo-poker-server"
-
 [[migrations]]
 tag = "v1"
 new_classes = ["TableDurableObject"]
@@ -109,7 +108,6 @@ new_classes = ["ProfileDurableObject"]
 [[migrations]]
 tag = "v5"
 new_classes = ["CacheDO"]
-
 # Build configuration ensures dist/index.js is created
 
 # Queue for tournament processing
@@ -146,4 +144,40 @@ crons = [
   "0 5 1 * *"         # Monthly on the 1st at 5 AM - monthly statistics aggregation
 ]
 
+# Cache Rules
+[[cache_rules]]
+expression = "(http.request.uri.path matches \"^/api/health$\")"
+ttl = 300  # 5 minutes
+cache_control = "public, max-age=300"
+
+[[cache_rules]]
+expression = "(http.request.uri.path matches \"^/api/lobby/tables$\")"
+ttl = 60  # 1 minute
+cache_control = "public, max-age=60"
+
+[[cache_rules]]
+expression = "(http.request.uri.path matches \"^/api/tables$\" and http.request.method eq \"GET\")"
+ttl = 60  # 1 minute
+cache_control = "public, max-age=60"
+
+[[cache_rules]]
+expression = "(http.request.uri.path matches \"^/api/leaderboards\")"
+ttl = 300  # 5 minutes
+cache_control = "public, max-age=300"
+
+[[cache_rules]]
+expression = "(http.request.uri.path matches \"^/api/tournaments$\" and http.request.method eq \"GET\")"
+ttl = 300  # 5 minutes
+cache_control = "public, max-age=300"
+
+# Static assets cache rules
+[[cache_rules]]
+expression = "(http.request.uri.path.extension in {\"js\" \"css\"})"
+ttl = 3600  # 1 hour
+cache_control = "public, max-age=3600"
+
+[[cache_rules]]
+expression = "(http.request.uri.path.extension in {\"png\" \"jpg\" \"jpeg\" \"svg\" \"webp\"})"
+ttl = 604800  # 7 days
+cache_control = "public, max-age=604800"
 # Let wrangler handle the build with esbuild

@@ -12,6 +12,7 @@ const mockUseAdminApi = useAdminApi as jest.MockedFunction<typeof useAdminApi>
 
 describe('ChatLogSearch', () => {
   const mockSearchChatLogs = jest.fn()
+  const mockBulkApplyActions = jest.fn()
   const mockChatLogs = [
     {
       id: '1',
@@ -41,7 +42,12 @@ describe('ChatLogSearch', () => {
       getReports: jest.fn(),
       processReport: jest.fn(),
       applyAction: jest.fn(),
-      bulkApplyActions: jest.fn(),
+      bulkApplyActions: mockBulkApplyActions,
+      getActiveActions: jest.fn(),
+      getPlayerActionHistory: jest.fn(),
+      updateAction: jest.fn(),
+      revokeAction: jest.fn(),
+      getReportStats: jest.fn(),
     })
   })
 
@@ -341,7 +347,162 @@ describe('ChatLogSearch', () => {
 
       // Check that download was triggered
       await waitFor(() => {
-        expect(screen.getByText('Results exported')).toBeInTheDocument()
+        expect(screen.getByText('1 messages exported')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Bulk Moderation', () => {
+    it('should show checkboxes for message selection', async () => {
+      mockSearchChatLogs.mockResolvedValue(mockChatLogs)
+
+      render(<ChatLogSearch />)
+
+      const searchButton = screen.getByText('Search')
+      fireEvent.click(searchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Hello world')).toBeInTheDocument()
+      })
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      expect(checkboxes).toHaveLength(3) // Select all + 2 messages
+    })
+
+    it('should select all messages when select all is clicked', async () => {
+      mockSearchChatLogs.mockResolvedValue(mockChatLogs)
+
+      render(<ChatLogSearch />)
+
+      const searchButton = screen.getByText('Search')
+      fireEvent.click(searchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Hello world')).toBeInTheDocument()
+      })
+
+      const selectAllCheckbox = screen.getAllByRole('checkbox')[0]
+      fireEvent.click(selectAllCheckbox)
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      checkboxes.forEach(checkbox => {
+        expect(checkbox).toBeChecked()
+      })
+    })
+
+    it('should show bulk action button when messages are selected', async () => {
+      mockSearchChatLogs.mockResolvedValue(mockChatLogs)
+
+      render(<ChatLogSearch />)
+
+      const searchButton = screen.getByText('Search')
+      fireEvent.click(searchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Hello world')).toBeInTheDocument()
+      })
+
+      const firstMessageCheckbox = screen.getAllByRole('checkbox')[1]
+      fireEvent.click(firstMessageCheckbox)
+
+      expect(screen.getByText('Bulk Action (1)')).toBeInTheDocument()
+    })
+
+    it('should open bulk action modal when bulk action button is clicked', async () => {
+      mockSearchChatLogs.mockResolvedValue(mockChatLogs)
+
+      render(<ChatLogSearch />)
+
+      const searchButton = screen.getByText('Search')
+      fireEvent.click(searchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Hello world')).toBeInTheDocument()
+      })
+
+      const firstMessageCheckbox = screen.getAllByRole('checkbox')[1]
+      fireEvent.click(firstMessageCheckbox)
+
+      const bulkActionButton = screen.getByText('Bulk Action (1)')
+      fireEvent.click(bulkActionButton)
+
+      expect(screen.getByText('Apply Bulk Action')).toBeInTheDocument()
+      expect(screen.getByText('This action will be applied to 1 selected messages')).toBeInTheDocument()
+    })
+
+    it('should apply bulk action to selected messages', async () => {
+      const user = userEvent.setup()
+      mockSearchChatLogs.mockResolvedValue(mockChatLogs)
+      mockBulkApplyActions.mockResolvedValue(undefined)
+
+      render(<ChatLogSearch />)
+
+      const searchButton = screen.getByText('Search')
+      fireEvent.click(searchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Hello world')).toBeInTheDocument()
+      })
+
+      // Select messages
+      const selectAllCheckbox = screen.getAllByRole('checkbox')[0]
+      fireEvent.click(selectAllCheckbox)
+
+      const bulkActionButton = screen.getByText('Bulk Action (2)')
+      fireEvent.click(bulkActionButton)
+
+      // Fill in the form
+      const actionSelect = screen.getByRole('combobox')
+      await user.selectOptions(actionSelect, 'WARNING')
+
+      const reasonTextarea = screen.getByPlaceholderText('Enter reason for this action...')
+      await user.type(reasonTextarea, 'Bulk warning for inappropriate content')
+
+      const applyButton = screen.getByText('Apply Action')
+      fireEvent.click(applyButton)
+
+      await waitFor(() => {
+        expect(mockBulkApplyActions).toHaveBeenCalledWith([
+          {
+            playerId: 'player123',
+            type: 'WARNING',
+            reason: 'Bulk warning for inappropriate content',
+            metadata: { messageId: '1', originalMessage: 'Hello world' }
+          },
+          {
+            playerId: 'player456',
+            type: 'WARNING',
+            reason: 'Bulk warning for inappropriate content',
+            metadata: { messageId: '2', originalMessage: 'Inappropriate content here' }
+          }
+        ])
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Bulk action applied to 2 players')).toBeInTheDocument()
+      })
+    })
+
+    it('should export only selected messages', async () => {
+      mockSearchChatLogs.mockResolvedValue(mockChatLogs)
+
+      render(<ChatLogSearch />)
+
+      const searchButton = screen.getByText('Search')
+      fireEvent.click(searchButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Hello world')).toBeInTheDocument()
+      })
+
+      const firstMessageCheckbox = screen.getAllByRole('checkbox')[1]
+      fireEvent.click(firstMessageCheckbox)
+
+      const exportButton = screen.getByText('Export 1 Selected')
+      fireEvent.click(exportButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('1 messages exported')).toBeInTheDocument()
       })
     })
   })

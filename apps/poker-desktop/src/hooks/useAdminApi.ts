@@ -163,6 +163,41 @@ export const useAdminApi = () => {
     })
   }, [apiCall])
 
+  const getActiveActions = useCallback(async (): Promise<any[]> => {
+    const result = await apiCall('/api/moderation/actions/active')
+    return result.data
+  }, [apiCall])
+
+  const getPlayerActionHistory = useCallback(async (): Promise<any[]> => {
+    const result = await apiCall('/api/moderation/players/history')
+    return result.data
+  }, [apiCall])
+
+  const updateAction = useCallback(async (params: {
+    actionId: string
+    reason?: string
+    expiresAt?: number
+  }): Promise<void> => {
+    await apiCall(`/api/moderation/actions/${params.actionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        reason: params.reason,
+        expiresAt: params.expiresAt,
+      }),
+    })
+  }, [apiCall])
+
+  const revokeAction = useCallback(async (actionId: string): Promise<void> => {
+    await apiCall(`/api/moderation/actions/${actionId}/revoke`, {
+      method: 'POST',
+    })
+  }, [apiCall])
+
+  const getReportStats = useCallback(async (): Promise<any> => {
+    const result = await apiCall('/api/moderation/reports/stats')
+    return result.data
+  }, [apiCall])
+
   return {
     getStats,
     searchChatLogs,
@@ -170,5 +205,10 @@ export const useAdminApi = () => {
     processReport,
     applyAction,
     bulkApplyActions,
+    getActiveActions,
+    getPlayerActionHistory,
+    updateAction,
+    revokeAction,
+    getReportStats,
   }
 }

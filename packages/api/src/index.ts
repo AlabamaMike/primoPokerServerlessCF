@@ -50,3 +50,11 @@ export { CacheInvalidationHandler } from './utils/cache-invalidation';
 export type { CacheInvalidationEnv } from './utils/cache-invalidation';
 export { cacheConfig, CacheControl, CACHEABLE_CONTENT_TYPES, CACHEABLE_API_ROUTES, NON_CACHEABLE_API_ROUTES } from './middleware/cache-config';
 export type { CacheTTL, CacheConfig } from './middleware/cache-config';
+
+// Request Coalescing exports
+export { RequestCoalescer, defaultCoalescer, withCoalescing } from './middleware/request-coalescer';
+export type { CoalescingOptions } from './middleware/request-coalescer';
+
+// Enhanced Idempotency exports  
+export { idempotencyManager, createIdempotencyManager, withIdempotency } from './middleware/idempotency';
+export type { IdempotencyOptions } from './middleware/idempotency';

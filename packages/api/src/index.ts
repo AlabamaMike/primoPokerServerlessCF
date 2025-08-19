@@ -45,5 +45,8 @@ export type { MessageReport, ReportStatus, ReportStats } from './chat-moderation
 
 // Cache middleware exports
 export { CacheHeadersMiddleware } from './middleware/cache-headers';
+export type { CacheableRequest } from './middleware/cache-headers';
+export { CacheInvalidationHandler } from './utils/cache-invalidation';
+export type { CacheInvalidationEnv } from './utils/cache-invalidation';
 export { cacheConfig, CacheControl, CACHEABLE_CONTENT_TYPES, CACHEABLE_API_ROUTES, NON_CACHEABLE_API_ROUTES } from './middleware/cache-config';
 export type { CacheTTL, CacheConfig } from './middleware/cache-config';

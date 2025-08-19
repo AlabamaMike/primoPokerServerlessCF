@@ -9,8 +9,10 @@ import {
   CacheTTL
 } from './cache-config';
 
-interface CacheableRequest extends IRequest {
+export interface CacheableRequest extends IRequest {
   user?: any;
+  url: string;
+  headers: Headers;
 }
 
 export class CacheHeadersMiddleware {
@@ -29,25 +31,25 @@ export class CacheHeadersMiddleware {
       
       if (!cacheSettings || cacheSettings.ttl === 0) {
         // No caching
-        return this.setCacheHeaders(response, 'no-cache');
+        return this.setCacheHeaders(response, 'no-cache', undefined, request.url);
       }
 
       // Set appropriate cache headers
-      return this.setCacheHeaders(response, 'cache', cacheSettings);
+      return this.setCacheHeaders(response, 'cache', cacheSettings, request.url);
     };
   }
 
   /**
    * Set cache headers on response
    */
-  static setCacheHeaders(response: Response, type: 'cache' | 'no-cache', settings?: CacheTTL): Response {
+  static setCacheHeaders(response: Response, type: 'cache' | 'no-cache', settings?: CacheTTL, url?: string): Response {
     const headers = new Headers(response.headers);
 
     if (type === 'no-cache') {
       headers.set('Cache-Control', CacheControl.PRIVATE_NO_CACHE);
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-    } else if (settings) {
+    } else if (settings && url) {
       const maxAge = settings.ttl;
       const cacheControl = settings.edge 
         ? `public, max-age=${maxAge}, s-maxage=${maxAge}`
@@ -56,7 +58,7 @@ export class CacheHeadersMiddleware {
       headers.set('Cache-Control', cacheControl);
       
       // Add CDN cache tag for easier purging
-      headers.set('Cache-Tag', this.generateCacheTag(response.url));
+      headers.set('Cache-Tag', this.generateCacheTag(url));
       
       // Set expires header
       const expires = new Date(Date.now() + maxAge * 1000).toUTCString();
@@ -90,20 +92,51 @@ export class CacheHeadersMiddleware {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     
-    return `"${hashHex.substring(0, 16)}"`;
+    // Use full SHA-256 hash for better collision resistance
+    return `"${hashHex}"`;
   }
 
   /**
    * Handle conditional requests (If-None-Match, If-Modified-Since)
    */
-  static async handleConditionalRequest(request: CacheableRequest): Promise<Response | null> {
+  static async handleConditionalRequest(request: CacheableRequest, currentETag?: string, lastModified?: Date): Promise<Response | null> {
     const ifNoneMatch = request.headers.get('If-None-Match');
     const ifModifiedSince = request.headers.get('If-Modified-Since');
 
-    // This would need to be implemented with actual content checking
-    // For now, we'll return null to indicate the request should proceed
-    logger.debug('Conditional request headers', { ifNoneMatch, ifModifiedSince });
+    // Check ETag match
+    if (ifNoneMatch && currentETag) {
+      // Handle multiple ETags (comma-separated)
+      const clientETags = ifNoneMatch.split(',').map(tag => tag.trim());
+      if (clientETags.includes(currentETag) || clientETags.includes('*')) {
+        return new Response(null, {
+          status: 304,
+          statusText: 'Not Modified',
+          headers: {
+            'ETag': currentETag,
+            'Cache-Control': 'public, max-age=0, must-revalidate'
+          }
+        });
+      }
+    }
+
+    // Check If-Modified-Since
+    if (ifModifiedSince && lastModified) {
+      const clientTime = new Date(ifModifiedSince).getTime();
+      const serverTime = lastModified.getTime();
+      
+      if (!isNaN(clientTime) && serverTime <= clientTime) {
+        return new Response(null, {
+          status: 304,
+          statusText: 'Not Modified',
+          headers: {
+            'Last-Modified': lastModified.toUTCString(),
+            'Cache-Control': 'public, max-age=0, must-revalidate'
+          }
+        });
+      }
+    }
     
+    // No match, proceed with normal request
     return null;
   }
 
@@ -154,17 +187,26 @@ export class CacheHeadersMiddleware {
 
     // Check API routes
     if (pathname.startsWith('/api/')) {
+      // Check specific cacheable routes first
+      if (pathname === '/api/leaderboards' || pathname.startsWith('/api/leaderboards/')) {
+        // Leaderboards can be cached even for authenticated users
+        return cacheConfig.api.public;
+      }
+
       // Authenticated requests generally shouldn't be cached
-      if (isAuthenticated && !pathname.includes('/leaderboards')) {
+      if (isAuthenticated) {
         return cacheConfig.api.authenticated;
       }
 
-      // Check specific cacheable routes
-      if (pathname.includes('/lobby/')) {
+      // Check lobby routes
+      if (pathname === '/api/lobby/tables' || pathname.startsWith('/api/lobby/tables/')) {
         return cacheConfig.api.lobby;
       }
 
-      if (CACHEABLE_API_ROUTES.some(route => pathname.startsWith(route))) {
+      // Check other cacheable routes
+      if (CACHEABLE_API_ROUTES.some(route => {
+        return pathname === route || pathname.startsWith(route + '/');
+      })) {
         return cacheConfig.api.public;
       }
     }
@@ -177,30 +219,36 @@ export class CacheHeadersMiddleware {
    * Generate a cache tag for a URL
    */
   private static generateCacheTag(url: string): string {
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    
-    // Generate tags based on path segments
-    const segments = pathname.split('/').filter(Boolean);
-    const tags: string[] = [];
-    
-    // Add hierarchical tags
-    let currentPath = '';
-    for (const segment of segments) {
-      currentPath += '/' + segment;
-      tags.push(`path:${currentPath}`);
+    try {
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname;
+      
+      // Generate tags based on path segments
+      const segments = pathname.split('/').filter(Boolean);
+      const tags: string[] = [];
+      
+      // Add hierarchical tags
+      let currentPath = '';
+      for (const segment of segments) {
+        currentPath += '/' + segment;
+        tags.push(`path:${currentPath}`);
+      }
+      
+      // Add route-specific tags
+      if (pathname.includes('/api/tables')) {
+        tags.push('api:tables');
+      } else if (pathname.includes('/api/lobby')) {
+        tags.push('api:lobby');
+      } else if (pathname.includes('/api/leaderboards')) {
+        tags.push('api:leaderboards');
+      }
+      
+      return tags.join(',');
+    } catch (error) {
+      logger.warn('Failed to parse URL for cache tag generation', { url, error });
+      // Return a generic tag as fallback
+      return 'generic:request';
     }
-    
-    // Add route-specific tags
-    if (pathname.includes('/api/tables')) {
-      tags.push('api:tables');
-    } else if (pathname.includes('/api/lobby')) {
-      tags.push('api:lobby');
-    } else if (pathname.includes('/api/leaderboards')) {
-      tags.push('api:leaderboards');
-    }
-    
-    return tags.join(',');
   }
 
   /**

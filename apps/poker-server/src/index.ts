@@ -1,5 +1,5 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
-import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware } from '@primo-poker/api';
+import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware, CacheableRequest } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
 import { ProfileDurableObject, StatisticsAggregator } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
@@ -101,10 +101,10 @@ export default {
         const response = await apiRoutes.getRouter().handle(extendedRequest);
         
         // Apply cache headers based on route and authentication
-        const cachedResponse = await CacheHeadersMiddleware.middleware()(extendedRequest as any, response);
+        const cachedResponse = await CacheHeadersMiddleware.middleware()(extendedRequest as CacheableRequest, response);
         
         // Apply ETag middleware for cacheable responses
-        const finalResponse = await CacheHeadersMiddleware.etagMiddleware()(extendedRequest as any, cachedResponse);
+        const finalResponse = await CacheHeadersMiddleware.etagMiddleware()(extendedRequest as CacheableRequest, cachedResponse);
         
         return finalResponse;
       }
@@ -116,7 +116,7 @@ export default {
         });
         
         // Apply cache headers for static HTML
-        return CacheHeadersMiddleware.setCacheHeaders(htmlResponse, 'cache', { ttl: 3600, edge: true });
+        return CacheHeadersMiddleware.setCacheHeaders(htmlResponse, 'cache', { ttl: 3600, edge: true }, request.url);
       }
 
       // 404 for other routes

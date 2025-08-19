@@ -7,6 +7,7 @@ export * from './secure-rng-do';
 export * from './friend-repository';
 export * from './player-notes-repository';
 export * from './statistics-repository';
+export * from './cache-do';
 
 // Re-export key interfaces and classes
 export type {
@@ -36,6 +37,9 @@ export { WalletManager } from './wallet-manager';
 export { SecureRNGDurableObject } from './secure-rng-do';
 export type { RNGRequest, RNGResponse, RNGStatus, AuditLog, StoredState } from './secure-rng-do';
 export { RateLimitDurableObject } from './rate-limit-do';
+export { CacheDO } from './cache-do';
+export type { CacheEntry, CacheOptions, CacheBatchOperation, CacheStats } from './cache-do';
+export { CacheHelper } from './cache-helper';
 
 // Phase 2 Durable Objects
 export { LobbyCoordinatorDurableObject } from './lobby-coordinator-do';

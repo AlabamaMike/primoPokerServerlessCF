@@ -1,12 +1,12 @@
 // Version: 1.0.2 - Security fixes applied with full audit logging
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware, CacheableRequest } from '@primo-poker/api';
-import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject } from '@primo-poker/persistence';
+import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, CacheDO } from '@primo-poker/persistence';
 import { ProfileDurableObject, StatisticsAggregator } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
 import { StatsPeriod } from '@primo-poker/shared';
 
 // Export Durable Objects for Cloudflare Workers
-export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, ProfileDurableObject };
+export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, ProfileDurableObject, CacheDO };
 
 // Environment interface
 interface Env {
@@ -22,6 +22,7 @@ interface Env {
   RATE_LIMIT_DO: DurableObjectNamespace; // Rate Limiting Durable Objects
   GAME_TABLE_DO: DurableObjectNamespace; // For permission checks
   PROFILE_DO: DurableObjectNamespace; // Profile Durable Objects
+  CACHE_DO: DurableObjectNamespace; // Distributed Cache Durable Objects
   TOURNAMENT_QUEUE: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   

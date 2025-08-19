@@ -49,6 +49,10 @@ export class CacheDO {
   private readonly maxEntries = 10000;
   private readonly defaultTTL = 300000; // 5 minutes
   private readonly cleanupInterval = 60000; // 1 minute
+  private persistCounter = 0; // For deterministic persistence
+  private readonly persistInterval = 10; // Persist every 10 operations
+  private memorySizeCache = 0; // Cache for memory size
+  private memorySizeDirty = true; // Flag to recalculate memory size
   
   constructor(state: DurableObjectState, env: WorkerEnvironment) {
     this.state = state;
@@ -148,10 +152,13 @@ export class CacheDO {
     this.cache.set(fullKey, entry);
     this.updateAccessOrder(fullKey);
     this.trackMetric('set', namespace);
+    this.memorySizeDirty = true; // Mark memory size for recalculation
 
-    // Persist periodically
-    if (Math.random() < 0.1) {
+    // Persist deterministically every N operations
+    this.persistCounter++;
+    if (this.persistCounter >= this.persistInterval) {
       await this.persistState();
+      this.persistCounter = 0;
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -167,6 +174,7 @@ export class CacheDO {
     if (deleted) {
       this.removeFromAccessOrder(fullKey);
       this.trackMetric('delete', namespace);
+      this.memorySizeDirty = true; // Mark memory size for recalculation
     }
 
     return new Response(JSON.stringify({ deleted }), {
@@ -202,6 +210,7 @@ export class CacheDO {
       this.cache.clear();
       this.accessOrder = [];
     }
+    this.memorySizeDirty = true; // Mark memory size for recalculation
 
     await this.persistState();
 
@@ -234,6 +243,7 @@ export class CacheDO {
         this.cache.set(fullKey, entry);
         this.updateAccessOrder(fullKey);
         this.trackMetric('set', op.namespace);
+        this.memorySizeDirty = true; // Mark memory size for recalculation
         results.push({ key: op.key, success: true });
       } else {
         // Get operation
@@ -295,6 +305,7 @@ export class CacheDO {
           this.cache.set(key, entry);
           this.updateAccessOrder(key);
         }
+        this.memorySizeDirty = true; // Mark memory size for recalculation after warming
         break;
     }
 
@@ -344,6 +355,10 @@ export class CacheDO {
       this.cache.delete(key);
       this.removeFromAccessOrder(key);
     }
+    
+    if (keysToDelete.length > 0) {
+      this.memorySizeDirty = true; // Mark memory size for recalculation
+    }
 
     logger.info('Cache cleanup completed', { 
       removed: keysToDelete.length,
@@ -362,13 +377,15 @@ export class CacheDO {
     if (cacheData) {
       this.cache = new Map(cacheData);
       
-      // Rebuild access order
+      // Rebuild access order with null checks
       this.accessOrder = Array.from(this.cache.keys())
         .sort((a, b) => {
-          const entryA = this.cache.get(a)!;
-          const entryB = this.cache.get(b)!;
+          const entryA = this.cache.get(a);
+          const entryB = this.cache.get(b);
+          if (!entryA || !entryB) return 0;
           return entryA.lastAccessed - entryB.lastAccessed;
-        });
+        })
+        .filter(key => this.cache.has(key)); // Only keep valid keys
     }
 
     const stats = await this.state.storage.get<{ hits: number; misses: number; evictions: number }>('stats');
@@ -416,6 +433,7 @@ export class CacheDO {
     this.cache.delete(keyToEvict);
     this.evictions++;
     this.trackMetric('eviction', entry?.namespace);
+    this.memorySizeDirty = true; // Mark memory size for recalculation
     
     logger.debug('Evicted LRU entry', { key: keyToEvict });
   }
@@ -431,14 +449,51 @@ export class CacheDO {
   }
 
   private estimateMemoryUsage(): number {
+    // Use cached value if available and not dirty
+    if (!this.memorySizeDirty) {
+      return this.memorySizeCache;
+    }
+    
     // Rough estimate of memory usage in bytes
     let size = 0;
     for (const [key, entry] of this.cache) {
       size += key.length * 2; // String characters
-      size += JSON.stringify(entry.value).length * 2;
+      // Use approximate size calculation instead of JSON serialization
+      size += this.approximateValueSize(entry.value);
       size += 32; // Overhead for metadata
     }
+    
+    this.memorySizeCache = size;
+    this.memorySizeDirty = false;
     return size;
+  }
+  
+  private approximateValueSize(value: any): number {
+    // Approximate size calculation without JSON serialization
+    if (value === null || value === undefined) return 0;
+    
+    switch (typeof value) {
+      case 'string':
+        return value.length * 2;
+      case 'number':
+        return 8;
+      case 'boolean':
+        return 4;
+      case 'object':
+        if (Array.isArray(value)) {
+          return value.reduce((acc, item) => acc + this.approximateValueSize(item), 20);
+        } else {
+          let size = 20; // Object overhead
+          for (const key in value) {
+            if (value.hasOwnProperty(key)) {
+              size += key.length * 2 + this.approximateValueSize(value[key]);
+            }
+          }
+          return size;
+        }
+      default:
+        return 100; // Conservative estimate for unknown types
+    }
   }
 
   private trackMetric(type: 'hit' | 'miss' | 'eviction' | 'set' | 'delete', namespace?: string): void {
@@ -455,7 +510,7 @@ export class CacheDO {
           indexes: ['cache_do', this.env.ENVIRONMENT || 'development']
         });
       } catch (error) {
-        // Silently fail metrics tracking to not impact cache operations
+        // Log metrics tracking errors at debug level to avoid impacting cache operations
         logger.debug('Failed to track cache metric', { error, type, namespace });
       }
     }

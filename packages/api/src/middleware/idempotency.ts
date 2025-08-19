@@ -155,7 +155,7 @@ export function withIdempotency<T extends IRequest>(
     // Apply coalescing if enabled
     if (manager.coalescer && (manager.dedupeStrategy === 'coalesce' || manager.dedupeStrategy === 'both')) {
       try {
-        const response = await manager.coalescer.coalesce(idempotencyKey, () => handler(request));
+        const response = await manager.coalescer.coalesce(idempotencyKey, () => handler(request), request);
         response.headers.set('X-Dedupe-Strategy', 'coalesce');
         return response;
       } catch (error) {

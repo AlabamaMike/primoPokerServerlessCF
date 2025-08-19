@@ -42,3 +42,8 @@ export { createModerationRoutes } from './routes/moderation';
 export type { ValidationResult, ViolationType } from './chat-moderation/content-validator';
 export type { ModerationAction, ModerationActionType, PlayerRestrictions } from './chat-moderation/moderation-actions';
 export type { MessageReport, ReportStatus, ReportStats } from './chat-moderation/report-system';
+
+// Cache middleware exports
+export { CacheHeadersMiddleware } from './middleware/cache-headers';
+export { cacheConfig, CacheControl, CACHEABLE_CONTENT_TYPES, CACHEABLE_API_ROUTES, NON_CACHEABLE_API_ROUTES } from './middleware/cache-config';
+export type { CacheTTL, CacheConfig } from './middleware/cache-config';

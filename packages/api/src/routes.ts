@@ -20,6 +20,7 @@ import { playerNotesRoutes } from './routes/player-notes';
 import { profileRoutes } from './routes/profiles';
 import { createStatisticsAdminRoutes } from './routes/admin/statistics';
 import { statisticsRoutes } from './routes/statistics';
+import { createMetricsRoutes } from './routes/metrics';
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -117,6 +118,10 @@ export class PokerAPIRoutes {
     // Public statistics routes - mount the sub-router
     this.router.all('/api/players/:playerId/statistics', this.authenticateRequest.bind(this), statisticsRoutes.handle);
     this.router.all('/api/leaderboards', statisticsRoutes.handle);
+
+    // Performance metrics routes
+    const metricsRoutes = createMetricsRoutes();
+    this.router.all('/api/metrics/*', metricsRoutes.handle);
 
     // CORS preflight handler - more specific patterns first
     this.router.options('/api/*', this.handleOptionsRequest.bind(this));

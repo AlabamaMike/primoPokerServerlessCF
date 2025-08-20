@@ -83,6 +83,20 @@ export {
   FLUSH_INTERVALS,
   PERCENTILES 
 } from './monitoring/constants';
+export { PerformanceMonitorDO } from './performance-monitor-do';
+export type {
+  PerformanceMetrics,
+  AggregatedMetrics,
+  TimeSeriesData,
+  AlertCondition,
+  Alert,
+  CacheMetrics,
+  ApiMetrics,
+  WebSocketMetrics,
+  EdgeMetrics,
+  RegionMetrics,
+  PerformanceDashboard,
+} from './monitoring/performance-types';
 
 // Sharding exports
 export { ShardingStrategy, ShardingManager } from './sharding-strategy';

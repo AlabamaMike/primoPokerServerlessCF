@@ -22,6 +22,7 @@ export interface WorkerEnvironment {
   LOBBY_COORDINATOR: DurableObjectNamespace;
   PROFILE_DO: DurableObjectNamespace;
   CACHE_DO: DurableObjectNamespace;
+  PERFORMANCE_MONITOR: DurableObjectNamespace;
   
   // Queues
   TOURNAMENT_QUEUE: Queue;

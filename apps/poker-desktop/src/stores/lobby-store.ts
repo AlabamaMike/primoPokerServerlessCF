@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { Table, Filters, StakeLevel } from '../components/LobbyV2/types';
 import LobbyService, { LobbyTable, LobbyStats } from '../services/lobby-service';
+import { useTableStore } from './table-store';
+import { useFilterStore } from './filter-store';
+import { useUIStore } from './ui-store';
+import { createFilteredTablesSelector, selectSelectedTable } from '../selectors/table-selectors';
 
 interface LobbyState {
   // Tables
@@ -83,175 +87,121 @@ const getStakeLevel = (bigBlind: number): StakeLevel => {
   return 'high';
 };
 
-export const useLobbyStore = create<LobbyState>((set, get) => ({
-  // Initial state
-  tables: [],
-  isLoadingTables: false,
-  tablesError: null,
-  selectedTableId: null,
-  selectedTable: null,
-  filters: {
-    gameTypes: ['nlhe'],
-    stakes: ['micro', 'low'],
-    tableSizes: [6, 9],
-    features: []
-  },
-  stats: {
-    playersOnline: 0,
-    activeTables: 0,
-    totalPot: 0
-  },
-  favoriteTables: JSON.parse(localStorage.getItem('favoriteTables') || '[]'),
-  favoriteTableIds: new Set(JSON.parse(localStorage.getItem('favoriteTables') || '[]')),
-  lastUpdateTimestamp: 0,
-  updateCount: 0,
+// Create a filtered tables selector instance
+const filteredTablesSelector = createFilteredTablesSelector();
 
-  // Actions
-  setFilters: (filters) => {
-    set({ filters });
-    // Trigger table refresh when filters change
-    const state = get();
-    if (state.tables.length > 0) {
-      // Re-filter existing tables locally for immediate feedback
-      // Real filtering will happen on next API call
+// Helper function to get combined state from all stores
+const getCombinedState = (): LobbyState => {
+  const tableState = useTableStore.getState();
+  const filterState = useFilterStore.getState();
+  const uiState = useUIStore.getState();
+  
+  // Use selector to get filtered tables
+  const filteredTables = filteredTablesSelector({ ...tableState, ...filterState });
+  const selectedTable = selectSelectedTable(tableState);
+  
+  return {
+    // Tables from table store with filtering applied
+    tables: filteredTables,
+    isLoadingTables: tableState.isLoadingTables,
+    tablesError: tableState.tablesError,
+    selectedTableId: tableState.selectedTableId,
+    selectedTable,
+    
+    // Filters from filter store
+    filters: filterState.filters,
+    
+    // Stats from UI store
+    stats: uiState.stats,
+    
+    // Favorites from table store
+    favoriteTables: tableState.favoriteTables,
+    favoriteTableIds: new Set(tableState.favoriteTables),
+    
+    // Performance tracking from table store
+    lastUpdateTimestamp: tableState.lastUpdateTimestamp,
+    updateCount: tableState.updateCount,
+    
+    // Actions will be delegated to respective stores
+    setFilters: () => {},
+    selectTable: () => {},
+    toggleFavorite: () => {},
+    fetchTables: async () => {},
+    fetchStats: async () => {},
+    joinTable: async () => false,
+    joinWaitlist: async () => null
+  };
+};
+
+export const useLobbyStore = create<LobbyState>((set, get) => {
+  // Subscribe to changes in the underlying stores
+  useTableStore.subscribe(() => {
+    set(getCombinedState());
+  });
+  
+  useFilterStore.subscribe(() => {
+    set(getCombinedState());
+  });
+  
+  useUIStore.subscribe(
+    (state) => state.stats,
+    () => {
+      set(getCombinedState());
     }
+  );
+  
+  return {
+    ...getCombinedState(),
+
+  // Actions - delegate to respective stores
+  setFilters: (filters) => {
+    useFilterStore.getState().setFilters(filters);
+    // Update local state to reflect changes
+    set(getCombinedState());
   },
 
   selectTable: (tableId) => {
-    const table = tableId ? get().tables.find(t => t.id === tableId) : null;
-    set({ 
-      selectedTableId: tableId,
-      selectedTable: table || null
-    });
+    useTableStore.getState().selectTable(tableId);
+    // Update local state to reflect changes
+    set(getCombinedState());
   },
 
   toggleFavorite: (tableId) => {
-    const favorites = get().favoriteTables;
-    const newFavorites = favorites.includes(tableId)
-      ? favorites.filter(id => id !== tableId)
-      : [...favorites, tableId];
-    
-    set({ 
-      favoriteTables: newFavorites,
-      favoriteTableIds: new Set(newFavorites)
-    });
-    localStorage.setItem('favoriteTables', JSON.stringify(newFavorites));
+    useTableStore.getState().toggleFavorite(tableId);
+    // Update local state to reflect changes
+    set(getCombinedState());
   },
 
   fetchTables: async (apiUrl) => {
-    set({ isLoadingTables: true, tablesError: null });
-    
-    try {
-      const service = new LobbyService(apiUrl);
-      const apiTables = await service.getTables();
-      
-      // Map API tables to UI format
-      const tables = apiTables.map(mapApiTableToUiTable);
-      
-      // Apply client-side filtering based on current filters
-      const { filters } = get();
-      const filteredTables = tables.filter(table => {
-        // Game type filter
-        if (filters.gameTypes.length > 0 && !filters.gameTypes.includes(table.gameType)) {
-          return false;
-        }
-        
-        // Stakes filter
-        const stakeLevel = getStakeLevel(table.stakes.big);
-        if (filters.stakes.length > 0 && !filters.stakes.includes(stakeLevel)) {
-          return false;
-        }
-        
-        // Table size filter
-        if (filters.tableSizes.length > 0 && !filters.tableSizes.includes(table.maxPlayers)) {
-          return false;
-        }
-        
-        // Feature filter
-        if (filters.features.length > 0) {
-          const hasRequiredFeature = filters.features.some(feature => 
-            table.features.includes(feature)
-          );
-          if (!hasRequiredFeature) return false;
-        }
-        
-        return true;
-      });
-      
-      set({ 
-        tables: filteredTables,
-        isLoadingTables: false,
-        lastUpdateTimestamp: Date.now(),
-        updateCount: get().updateCount + 1
-      });
-      
-      // Update selected table if it exists in new data
-      const { selectedTableId } = get();
-      if (selectedTableId) {
-        const updatedTable = filteredTables.find(t => t.id === selectedTableId);
-        if (updatedTable) {
-          set({ selectedTable: updatedTable });
-        }
-      }
-    } catch (error) {
-      set({ 
-        tablesError: error instanceof Error ? error.message : 'Failed to load tables',
-        isLoadingTables: false 
-      });
-    }
+    await useTableStore.getState().fetchTables(apiUrl);
+    // Update local state to reflect changes
+    set(getCombinedState());
   },
 
   fetchStats: async (apiUrl) => {
     try {
       const service = new LobbyService(apiUrl);
       const stats = await service.getLobbyStats();
-      set({ 
-        stats,
-        lastUpdateTimestamp: Date.now(),
-        updateCount: get().updateCount + 1
-      });
+      useUIStore.getState().updateStats(stats);
+      // Update local state to reflect changes
+      set(getCombinedState());
     } catch (error) {
       console.error('Failed to fetch lobby stats:', error);
     }
   },
 
   joinTable: async (apiUrl, tableId, buyIn) => {
-    try {
-      const service = new LobbyService(apiUrl);
-      const result = await service.joinTable(tableId, buyIn);
-      
-      if (!result.success && result.message) {
-        set({ tablesError: result.message });
-      }
-      
-      return result.success;
-    } catch (error) {
-      set({ tablesError: 'Failed to join table' });
-      return false;
-    }
+    const result = await useTableStore.getState().joinTable(apiUrl, tableId, buyIn);
+    // Update local state to reflect changes
+    set(getCombinedState());
+    return result;
   },
 
   joinWaitlist: async (apiUrl, tableId) => {
-    try {
-      const service = new LobbyService(apiUrl);
-      const result = await service.joinWaitlist(tableId);
-      
-      if (result.success && result.position !== undefined) {
-        // Update table waitlist count locally
-        set(state => ({
-          tables: state.tables.map(table => 
-            table.id === tableId 
-              ? { ...table, waitlist: table.waitlist + 1 }
-              : table
-          )
-        }));
-        return result.position;
-      }
-      
-      return null;
-    } catch (error) {
-      set({ tablesError: 'Failed to join waitlist' });
-      return null;
-    }
+    const result = await useTableStore.getState().joinWaitlist(apiUrl, tableId);
+    // Update local state to reflect changes
+    set(getCombinedState());
+    return result;
   }
-}));
+  };
+});

@@ -21,6 +21,7 @@ import { profileRoutes } from './routes/profiles';
 import { createStatisticsAdminRoutes } from './routes/admin/statistics';
 import { statisticsRoutes } from './routes/statistics';
 import { createMetricsRoutes } from './routes/metrics';
+import { walletRoutes } from './routes/wallet-routes';
 import { 
   DepositRequestSchema, 
   WithdrawRequestSchema, 
@@ -68,15 +69,8 @@ export class PokerAPIRoutes {
     this.router.get('/api/players/me', this.authenticateRequest.bind(this), this.handleGetProfile.bind(this));
     this.router.put('/api/players/me', this.authenticateRequest.bind(this), this.handleUpdateProfile.bind(this));
 
-    // Wallet routes
-    this.router.get('/api/wallet', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.handleGetWallet.bind(this));
-    this.router.get('/api/wallet/balance', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.handleGetBalance.bind(this));
-    this.router.post('/api/wallet/deposit', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleDeposit.bind(this));
-    this.router.post('/api/wallet/withdraw', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleWithdraw.bind(this));
-    this.router.post('/api/wallet/transfer', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleTransfer.bind(this));
-    this.router.post('/api/wallet/buyin', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleBuyIn.bind(this));
-    this.router.post('/api/wallet/cashout', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.idempotencyManager.middleware(), this.handleCashOut.bind(this));
-    this.router.get('/api/wallet/transactions', this.authenticateRequest.bind(this), walletRateLimiter.middleware(), this.handleGetTransactions.bind(this));
+    // Enhanced Wallet routes - mount the sub-router with authentication
+    this.router.all('/api/wallet/*', this.authenticateRequest.bind(this), walletRoutes.getRouter().handle);
 
     // Table routes
     this.router.get('/api/tables', this.handleGetTables.bind(this));

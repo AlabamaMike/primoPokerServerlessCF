@@ -1,48 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { GameType, StakeLevel, TableFeature, Filters } from './types';
 import { useFilterStore } from '../../stores/filter-store';
-
-interface CollapsibleSectionProps {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  ariaLabel: string;
-}
-
-const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ 
-  title, 
-  children, 
-  defaultOpen = true,
-  ariaLabel 
-}) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  return (
-    <div className="border-b border-slate-700/50 pb-4 last:border-0">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between text-sm font-semibold text-slate-400 mb-3 tracking-wider hover:text-purple-400 transition-colors"
-        aria-expanded={isOpen}
-        aria-controls={`section-${title.toLowerCase().replace(/\s/g, '-')}`}
-      >
-        <span>{title}</span>
-        {isOpen ? (
-          <span data-testid="collapse-icon" className="text-xs">▼</span>
-        ) : (
-          <span data-testid="expand-icon" className="text-xs">▶</span>
-        )}
-      </button>
-      <div
-        id={`section-${title.toLowerCase().replace(/\s/g, '-')}`}
-        className={`space-y-2 transition-all ${isOpen ? 'block' : 'hidden'}`}
-        role="region"
-        aria-label={ariaLabel}
-      >
-        {children}
-      </div>
-    </div>
-  );
-};
+import { CollapsibleSection } from '../shared';
 
 /**
  * FilterPanelV2 - Refactored version using the new filter store
@@ -112,7 +71,7 @@ const FilterPanelV2: React.FC = () => {
         </div>
 
         {/* Game Type Filter */}
-        <CollapsibleSection title="Game Type" ariaLabel="Game type filters">
+        <CollapsibleSection title="Game Type" ariaLabel="Game type filters" defaultOpen={true}>
           <label className="flex items-center space-x-3 hover:bg-slate-700/50 p-2 rounded-lg cursor-pointer transition-colors">
             <input 
               type="checkbox" 
@@ -166,7 +125,7 @@ const FilterPanelV2: React.FC = () => {
         </CollapsibleSection>
 
         {/* Stakes Filter */}
-        <CollapsibleSection title="Stakes" ariaLabel="Stakes filters">
+        <CollapsibleSection title="Stakes" ariaLabel="Stakes filters" defaultOpen={true}>
           <label className="flex items-center space-x-3 hover:bg-slate-700/50 p-2 rounded-lg cursor-pointer transition-colors">
             <input 
               type="checkbox" 
@@ -222,7 +181,7 @@ const FilterPanelV2: React.FC = () => {
         </CollapsibleSection>
 
         {/* Table Size Filter */}
-        <CollapsibleSection title="Table Size" ariaLabel="Table size filters">
+        <CollapsibleSection title="Table Size" ariaLabel="Table size filters" defaultOpen={true}>
           <label className="flex items-center space-x-3 hover:bg-slate-700/50 p-2 rounded-lg cursor-pointer transition-colors">
             <input 
               type="checkbox" 
@@ -256,7 +215,7 @@ const FilterPanelV2: React.FC = () => {
         </CollapsibleSection>
 
         {/* Special Features */}
-        <CollapsibleSection title="Features" ariaLabel="Feature filters">
+        <CollapsibleSection title="Features" ariaLabel="Feature filters" defaultOpen={true}>
           <label className="flex items-center space-x-3 hover:bg-slate-700/50 p-2 rounded-lg cursor-pointer transition-colors">
             <input 
               type="checkbox" 

@@ -203,3 +203,79 @@ export const selectQuickSeatSuggestions = (() => {
     return lastResult;
   };
 })();
+
+// Memoized selector for sorted tables with favorites at top
+export type SortColumn = 'name' | 'stakes' | 'players' | 'avgPot' | 'speed' | 'waitlist';
+export type SortDirection = 'asc' | 'desc';
+
+export const createSortedTablesSelector = () => {
+  let lastTables: Table[] = [];
+  let lastFavorites: string[] = [];
+  let lastSortColumn: SortColumn | null = null;
+  let lastSortDirection: SortDirection | null = null;
+  let lastResult: Table[] = [];
+  
+  return (
+    tables: Table[], 
+    favoriteTables: string[], 
+    sortColumn: SortColumn, 
+    sortDirection: SortDirection
+  ) => {
+    // Check if inputs have changed
+    if (
+      tables === lastTables && 
+      favoriteTables === lastFavorites && 
+      sortColumn === lastSortColumn && 
+      sortDirection === lastSortDirection
+    ) {
+      return lastResult;
+    }
+    
+    // Update cache
+    lastTables = tables;
+    lastFavorites = favoriteTables;
+    lastSortColumn = sortColumn;
+    lastSortDirection = sortDirection;
+    
+    // Create a set of favorite IDs for faster lookup
+    const favoriteIds = new Set(favoriteTables);
+    
+    // Sort tables
+    lastResult = [...tables].sort((a, b) => {
+      // First, sort by favorite status
+      const aIsFavorite = favoriteIds.has(a.id);
+      const bIsFavorite = favoriteIds.has(b.id);
+      
+      if (aIsFavorite && !bIsFavorite) return -1;
+      if (!aIsFavorite && bIsFavorite) return 1;
+      
+      // Then, sort by selected column
+      let compareValue = 0;
+      
+      switch (sortColumn) {
+        case 'name':
+          compareValue = a.name.localeCompare(b.name);
+          break;
+        case 'stakes':
+          compareValue = a.stakes.big - b.stakes.big;
+          break;
+        case 'players':
+          compareValue = a.players - b.players;
+          break;
+        case 'avgPot':
+          compareValue = a.avgPot - b.avgPot;
+          break;
+        case 'speed':
+          compareValue = (a.handsPerHour || 0) - (b.handsPerHour || 0);
+          break;
+        case 'waitlist':
+          compareValue = a.waitlist - b.waitlist;
+          break;
+      }
+      
+      return sortDirection === 'asc' ? compareValue : -compareValue;
+    });
+    
+    return lastResult;
+  };
+};

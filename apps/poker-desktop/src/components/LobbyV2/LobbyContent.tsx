@@ -3,6 +3,7 @@ import FilterPanel from './FilterPanel';
 import TableList from './TableList';
 import TablePreview from './TablePreview';
 import { useLobbyStore } from '../../stores/lobby-store';
+import { ErrorBoundary } from '../shared';
 
 interface LobbyContentProps {
   apiUrl: string;
@@ -20,18 +21,24 @@ const LobbyContent: React.FC<LobbyContentProps> = ({ apiUrl, onJoinTable }) => {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      <FilterPanel />
+      <ErrorBoundary>
+        <FilterPanel />
+      </ErrorBoundary>
       
-      <TableList 
-        apiUrl={apiUrl}
-        selectedTableId={selectedTableId}
-        onTableSelect={selectTable}
-      />
+      <ErrorBoundary>
+        <TableList 
+          apiUrl={apiUrl}
+          selectedTableId={selectedTableId}
+          onTableSelect={selectTable}
+        />
+      </ErrorBoundary>
       
-      <TablePreview 
-        table={selectedTable}
-        onJoinTable={onJoinTable}
-      />
+      <ErrorBoundary>
+        <TablePreview 
+          table={selectedTable}
+          onJoinTable={onJoinTable}
+        />
+      </ErrorBoundary>
     </div>
   );
 };

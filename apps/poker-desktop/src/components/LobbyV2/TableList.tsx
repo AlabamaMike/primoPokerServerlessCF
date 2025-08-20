@@ -4,7 +4,8 @@ import { useLobbyStore } from '../../stores/lobby-store';
 import TableListHeader from './TableListHeader';
 import TableListRow from './TableListRow';
 import { useContainerSize } from '../../hooks/common';
-import { LoadingSpinner, ErrorMessage, EmptyState } from '../shared';
+import { LoadingSpinner, ErrorMessage, EmptyState, ErrorBoundary } from '../shared';
+import { createSortedTablesSelector, type SortColumn, type SortDirection } from '../../selectors/table-selectors';
 
 interface TableListProps {
   apiUrl: string;
@@ -12,17 +13,17 @@ interface TableListProps {
   onTableSelect: (tableId: string) => void;
 }
 
-type SortColumn = 'name' | 'stakes' | 'players' | 'avgPot' | 'speed' | 'waitlist';
-type SortDirection = 'asc' | 'desc';
-
 const ITEM_HEIGHT = 56; // Height of each table row
+
+// Create the sorted tables selector instance
+const sortedTablesSelector = createSortedTablesSelector();
 
 const TableList: React.FC<TableListProps> = ({ 
   apiUrl, 
   selectedTableId, 
   onTableSelect 
 }) => {
-  const { tables, isLoadingTables, tablesError, toggleFavorite, favoriteTableIds } = useLobbyStore();
+  const { tables, isLoadingTables, tablesError, toggleFavorite, favoriteTableIds, favoriteTables } = useLobbyStore();
   const [sortColumn, setSortColumn] = useState<SortColumn>('stakes');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const { containerRef, width, height } = useContainerSize();
@@ -37,43 +38,8 @@ const TableList: React.FC<TableListProps> = ({
   }, [sortColumn]);
 
   const sortedTables = useMemo(() => {
-    const sorted = [...tables].sort((a, b) => {
-      let compareValue = 0;
-      
-      switch (sortColumn) {
-        case 'name':
-          compareValue = a.name.localeCompare(b.name);
-          break;
-        case 'stakes':
-          compareValue = a.stakes.big - b.stakes.big;
-          break;
-        case 'players':
-          compareValue = a.players - b.players;
-          break;
-        case 'avgPot':
-          compareValue = a.avgPot - b.avgPot;
-          break;
-        case 'speed':
-          compareValue = (a.handsPerHour || 0) - (b.handsPerHour || 0);
-          break;
-        case 'waitlist':
-          compareValue = a.waitlist - b.waitlist;
-          break;
-      }
-      
-      return sortDirection === 'asc' ? compareValue : -compareValue;
-    });
-
-    // Sort favorites to top if enabled
-    return sorted.sort((a, b) => {
-      const aIsFavorite = favoriteTableIds?.has(a.id) || false;
-      const bIsFavorite = favoriteTableIds?.has(b.id) || false;
-      
-      if (aIsFavorite && !bIsFavorite) return -1;
-      if (!aIsFavorite && bIsFavorite) return 1;
-      return 0;
-    });
-  }, [tables, sortColumn, sortDirection, favoriteTableIds]);
+    return sortedTablesSelector(tables, favoriteTables, sortColumn, sortDirection);
+  }, [tables, favoriteTables, sortColumn, sortDirection]);
 
   const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const table = sortedTables[index];

@@ -71,9 +71,22 @@ export function useAsync<T>(
         return data;
       } catch (error) {
         if (mountedRef.current) {
+          // Properly handle different error types
+          let errorObj: Error;
+          
+          if (error instanceof Error) {
+            errorObj = error;
+          } else if (typeof error === 'string') {
+            errorObj = new Error(error);
+          } else if (error && typeof error === 'object' && 'message' in error) {
+            errorObj = new Error(String(error.message));
+          } else {
+            errorObj = new Error('An unknown error occurred');
+          }
+          
           setState({
             data: null,
-            error: error as Error,
+            error: errorObj,
             isLoading: false,
             isError: true,
             isSuccess: false,

@@ -1,5 +1,6 @@
 import React from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
+import { cn } from '../../lib/utils';
 
 export interface AsyncButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
@@ -35,15 +36,15 @@ export const AsyncButton: React.FC<AsyncButtonProps> = ({
   return (
     <button
       disabled={isLoading || disabled}
-      className={`
-        ${variantClasses[variant]}
-        ${sizeClasses[size]}
-        ${fullWidth ? 'w-full' : ''}
-        rounded-lg font-medium transition-all transform hover:scale-105
-        disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
-        inline-flex items-center justify-center gap-2
-        ${className}
-      `}
+      className={cn(
+        variantClasses[variant],
+        sizeClasses[size],
+        'rounded-lg font-medium transition-all transform hover:scale-105',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none',
+        'inline-flex items-center justify-center gap-2',
+        fullWidth && 'w-full',
+        className
+      )}
       {...props}
     >
       {isLoading ? (

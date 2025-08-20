@@ -58,3 +58,49 @@ export type { CoalescingOptions } from './middleware/request-coalescer';
 // Enhanced Idempotency exports  
 export { idempotencyManager, createIdempotencyManager, withIdempotency } from './middleware/idempotency';
 export type { IdempotencyOptions } from './middleware/idempotency';
+
+// Response Validation exports
+export { 
+  ResponseValidator, 
+  createResponseValidator, 
+  validateApiResponse,
+  ResponseValidationError 
+} from './middleware/response-validator';
+export type { ValidationOptions } from './middleware/response-validator';
+
+export {
+  createValidatedSuccessResponse,
+  createValidatedErrorResponse,
+  withResponseValidation,
+  responseBuilder,
+  getResponseValidator,
+  ValidatedResponseBuilder
+} from './utils/validated-response-helpers';
+
+export {
+  ResponseSchemaRegistry,
+  ApiResponseSchema,
+  SuccessResponseSchema,
+  ErrorResponseSchema,
+  PaginatedResponseSchema,
+  // Auth schemas
+  LoginResponseSchema,
+  RegisterResponseSchema,
+  RefreshTokenResponseSchema,
+  // Player schemas
+  PlayerProfileResponseSchema,
+  // Table schemas
+  TablesListResponseSchema,
+  CreateTableResponseSchema,
+  TableStateResponseSchema,
+  JoinTableResponseSchema,
+  TableSeatsResponseSchema,
+  // Wallet schemas
+  WalletResponseSchema,
+  BalanceResponseSchema,
+  DepositResponseSchema,
+  TransactionHistoryResponseSchema,
+  // Health check schema
+  HealthCheckResponseSchema
+} from './validation/response-schemas';
+export type { ResponseSchemaKey } from './validation/response-schemas';

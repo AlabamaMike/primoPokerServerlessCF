@@ -22,7 +22,7 @@ export interface MessageBatcherMetrics {
 
 export class MessageBatcher<T = any> {
   private queue: BatchedMessage<T>[] = [];
-  private timer: NodeJS.Timeout | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private config: MessageBatcherConfig;
   private metrics: MessageBatcherMetrics = {
     totalMessages: 0,
@@ -195,8 +195,12 @@ export class MessageBatcher<T = any> {
   /**
    * Check if payload is a table update
    */
-  private isTableUpdate(payload: any): boolean {
-    return payload && typeof payload === 'object' && 'id' in payload;
+  private isTableUpdate(payload: unknown): payload is { id: string } {
+    return (
+      payload !== null &&
+      typeof payload === 'object' &&
+      'id' in payload
+    );
   }
 }
 
@@ -207,7 +211,7 @@ export function createDebouncer<T extends (...args: any[]) => any>(
   fn: T,
   delay: number
 ): T & { cancel: () => void } {
-  let timeoutId: NodeJS.Timeout | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const debounced = ((...args: Parameters<T>) => {
     if (timeoutId) {

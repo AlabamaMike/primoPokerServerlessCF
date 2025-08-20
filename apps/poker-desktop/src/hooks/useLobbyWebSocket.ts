@@ -90,33 +90,42 @@ export function useLobbyWebSocket({ url, enabled }: LobbyWebSocketOptions) {
   const connect = () => {
     if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
 
+    // Clean up any existing batcher and metrics interval before creating new ones
+    if (metricsIntervalRef.current) {
+      clearInterval(metricsIntervalRef.current);
+      metricsIntervalRef.current = null;
+    }
+    if (messageBatcherRef.current) {
+      messageBatcherRef.current.flush();
+      messageBatcherRef.current.destroy();
+      messageBatcherRef.current = null;
+    }
+
     try {
       // Initialize message batcher
-      if (!messageBatcherRef.current) {
-        messageBatcherRef.current = new MessageBatcher({
-          batchInterval: 100, // Process every 100ms
-          maxBatchSize: 50,
-          onBatch: processBatch,
-          onError: (error) => {
-            console.error('Message batching error:', error);
-          }
-        });
-
-        // Log metrics every 10 seconds in development
-        if (process.env.NODE_ENV === 'development') {
-          metricsIntervalRef.current = setInterval(() => {
-            const metrics = messageBatcherRef.current?.getMetrics();
-            if (metrics && metrics.totalBatches > 0) {
-              console.log('WebSocket Batch Metrics:', {
-                totalMessages: metrics.totalMessages,
-                totalBatches: metrics.totalBatches,
-                averageBatchSize: metrics.averageBatchSize.toFixed(2),
-                messagesDropped: metrics.messagesDropped,
-                averageProcessingTime: (metrics as any).averageProcessingTime?.toFixed(2) + 'ms'
-              });
-            }
-          }, 10000);
+      messageBatcherRef.current = new MessageBatcher({
+        batchInterval: 100, // Process every 100ms
+        maxBatchSize: 50,
+        onBatch: processBatch,
+        onError: (error) => {
+          console.error('Message batching error:', error);
         }
+      });
+
+      // Log metrics every 10 seconds in development
+      if (process.env.NODE_ENV === 'development') {
+        metricsIntervalRef.current = setInterval(() => {
+          const metrics = messageBatcherRef.current?.getMetrics();
+          if (metrics && metrics.totalBatches > 0) {
+            console.log('WebSocket Batch Metrics:', {
+              totalMessages: metrics.totalMessages,
+              totalBatches: metrics.totalBatches,
+              averageBatchSize: metrics.averageBatchSize.toFixed(2),
+              messagesDropped: metrics.messagesDropped,
+              averageProcessingTime: (metrics as any).averageProcessingTime?.toFixed(2) + 'ms'
+            });
+          }
+        }, 10000);
       }
 
       // Convert HTTP URL to WebSocket URL

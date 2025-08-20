@@ -46,15 +46,13 @@ interface RateLimitEntry {
 export class WalletRateLimiter {
   private config: WalletRateLimitConfig;
   private storage: Map<string, RateLimitEntry> = new Map();
-  private cleanupInterval: any;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<WalletRateLimitConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     
-    // Cleanup expired entries every minute
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 60000);
+    // Note: In Cloudflare Workers, we don't use setInterval
+    // Cleanup happens on each request to avoid memory leaks
   }
 
   /**
@@ -62,6 +60,11 @@ export class WalletRateLimiter {
    */
   middleware() {
     return async (request: IRequest & { user?: any }, env: any, ctx: any) => {
+      // Perform cleanup on each request (10% chance to avoid overhead)
+      if (Math.random() < 0.1) {
+        this.cleanup();
+      }
+
       // Skip if no user (will be caught by auth middleware)
       if (!request.user?.userId) {
         return;
@@ -212,12 +215,11 @@ export class WalletRateLimiter {
   }
 
   /**
-   * Destroy the rate limiter (cleanup interval)
+   * Destroy the rate limiter and clear all storage
    */
   destroy(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
+    // Clear all stored rate limit entries
+    this.storage.clear();
   }
 }
 

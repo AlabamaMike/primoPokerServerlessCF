@@ -16,7 +16,9 @@ import {
 } from '@primo-poker/shared';
 import { logger } from '@primo-poker/core';
 import { WalletManager } from '@primo-poker/persistence';
+import { AuthenticationManager } from '@primo-poker/security';
 import { WalletCacheService } from '../services/wallet-cache';
+import { AuditLogger, AuditLogEntry } from '../services/audit-logger';
 import { enhancedWalletRateLimiter } from '../middleware/wallet-rate-limit';
 import {
   DepositRequestSchema,
@@ -41,7 +43,11 @@ export class WalletRoutes {
   private router: ReturnType<typeof Router>;
   private walletManager: WalletManager;
   private cacheService?: WalletCacheService;
+  private auditLogger?: AuditLogger;
   private subscriptions: Map<string, Set<WebSocket>> = new Map();
+  
+  // Constants
+  private readonly MAX_BATCH_SIZE = 100;
 
   constructor() {
     this.router = Router();
@@ -51,42 +57,49 @@ export class WalletRoutes {
 
   private setupRoutes(): void {
     // Wallet information endpoints
-    this.router.get('/api/wallet', enhancedWalletRateLimiter.middleware(), this.handleGetWallet.bind(this));
-    this.router.get('/api/wallet/balance', enhancedWalletRateLimiter.middleware(), this.handleGetBalance.bind(this));
+    this.router.get('/', enhancedWalletRateLimiter.middleware(), this.handleGetWallet.bind(this));
+    this.router.get('/balance', enhancedWalletRateLimiter.middleware(), this.handleGetBalance.bind(this));
     
     // Transaction endpoints
-    this.router.post('/api/wallet/deposit', enhancedWalletRateLimiter.middleware(), this.handleDeposit.bind(this));
-    this.router.post('/api/wallet/withdraw', enhancedWalletRateLimiter.middleware(), this.handleWithdraw.bind(this));
-    this.router.post('/api/wallet/transfer', enhancedWalletRateLimiter.middleware(), this.handleTransfer.bind(this));
+    this.router.post('/deposit', enhancedWalletRateLimiter.middleware(), this.handleDeposit.bind(this));
+    this.router.post('/withdraw', enhancedWalletRateLimiter.middleware(), this.handleWithdraw.bind(this));
+    this.router.post('/transfer', enhancedWalletRateLimiter.middleware(), this.handleTransfer.bind(this));
     
     // Table operations
-    this.router.post('/api/wallet/buyin', enhancedWalletRateLimiter.middleware(), this.handleBuyIn.bind(this));
-    this.router.post('/api/wallet/cashout', enhancedWalletRateLimiter.middleware(), this.handleCashOut.bind(this));
+    this.router.post('/buyin', enhancedWalletRateLimiter.middleware(), this.handleBuyIn.bind(this));
+    this.router.post('/cashout', enhancedWalletRateLimiter.middleware(), this.handleCashOut.bind(this));
     
     // Transaction history
-    this.router.get('/api/wallet/transactions', enhancedWalletRateLimiter.middleware(), this.handleGetTransactions.bind(this));
+    this.router.get('/transactions', enhancedWalletRateLimiter.middleware(), this.handleGetTransactions.bind(this));
     
     // Batch operations
-    this.router.post('/api/wallet/batch/balances', enhancedWalletRateLimiter.middleware(), this.handleBatchGetBalances.bind(this));
+    this.router.post('/batch/balances', enhancedWalletRateLimiter.middleware(), this.handleBatchGetBalances.bind(this));
     
     // WebSocket endpoint for real-time updates
-    this.router.get('/api/wallet/subscribe', this.handleWebSocketUpgrade.bind(this));
+    this.router.get('/subscribe', this.handleWebSocketUpgrade.bind(this));
     
     // Admin endpoints
-    this.router.get('/api/wallet/stats', this.handleGetStats.bind(this));
-    this.router.post('/api/wallet/warm-cache', this.handleWarmCache.bind(this));
+    this.router.get('/stats', this.handleGetStats.bind(this));
+    this.router.post('/warm-cache', this.handleWarmCache.bind(this));
+    this.router.get('/audit', enhancedWalletRateLimiter.middleware(), this.handleGetAuditLogs.bind(this));
   }
 
   /**
-   * Initialize cache service if KV is available
+   * Initialize cache and audit services if KV is available
    */
-  private initializeCacheService(env: WorkerEnvironment): void {
-    if (!this.cacheService && env.KV) {
-      this.cacheService = new WalletCacheService(env.KV, {
-        ttlSeconds: 300,
-        staleWhileRevalidateSeconds: 60,
-        negativeCacheTtlSeconds: 30
-      });
+  private initializeServices(env: WorkerEnvironment): void {
+    if (env.KV) {
+      if (!this.cacheService) {
+        this.cacheService = new WalletCacheService(env.KV, {
+          ttlSeconds: 300,
+          staleWhileRevalidateSeconds: 60,
+          negativeCacheTtlSeconds: 30
+        });
+      }
+      
+      if (!this.auditLogger) {
+        this.auditLogger = new AuditLogger(env.KV);
+      }
     }
   }
 
@@ -99,7 +112,7 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      this.initializeCacheService(request.env!);
+      this.initializeServices(request.env!);
       const startTime = Date.now();
       
       let wallet: PlayerWallet;
@@ -154,7 +167,7 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      this.initializeCacheService(request.env!);
+      this.initializeServices(request.env!);
       
       let wallet: PlayerWallet;
       
@@ -202,7 +215,7 @@ export class WalletRoutes {
         return this.errorResponse(validation.error, 400);
       }
 
-      this.initializeCacheService(request.env!);
+      this.initializeServices(request.env!);
 
       // Record audit log
       await this.recordAuditLog(request, 'deposit', validation.data.amount, 'pending');
@@ -467,7 +480,7 @@ export class WalletRoutes {
 
       const { limit = 20, cursor } = validation.data;
       
-      this.initializeCacheService(request.env!);
+      this.initializeServices(request.env!);
       
       // Check cache first
       if (this.cacheService) {
@@ -523,11 +536,11 @@ export class WalletRoutes {
         return this.errorResponse('Invalid player IDs', 400);
       }
 
-      if (body.playerIds.length > 100) {
-        return this.errorResponse('Maximum 100 players per batch request', 400);
+      if (body.playerIds.length > this.MAX_BATCH_SIZE) {
+        return this.errorResponse(`Maximum ${this.MAX_BATCH_SIZE} players per batch request`, 400);
       }
 
-      this.initializeCacheService(request.env!);
+      this.initializeServices(request.env!);
       
       const results: Record<string, { balance: number; frozen: number }> = {};
       const uncachedIds: string[] = [];
@@ -601,7 +614,49 @@ export class WalletRoutes {
       try {
         const data = JSON.parse(event.data as string);
         
-        if (data.type === 'subscribe' && data.playerId) {
+        if (data.type === 'authenticate' && data.token) {
+          // Verify authentication token
+          if (request.env?.JWT_SECRET) {
+            const authManager = new AuthenticationManager(request.env.JWT_SECRET);
+            const result = await authManager.verifyAccessToken(data.token);
+            
+            if (!result.valid || !result.payload) {
+              server.send(JSON.stringify({
+                type: 'error',
+                error: 'Authentication failed'
+              }));
+              server.close(1008, 'Authentication required');
+              return;
+            }
+            
+            // Store authenticated user info
+            (server as any).userId = result.payload.userId;
+            (server as any).authenticated = true;
+            
+            server.send(JSON.stringify({
+              type: 'authenticated',
+              userId: result.payload.userId
+            }));
+          }
+        } else if (data.type === 'subscribe' && data.playerId) {
+          // Check authentication before allowing subscription
+          if (!(server as any).authenticated) {
+            server.send(JSON.stringify({
+              type: 'error',
+              error: 'Authentication required'
+            }));
+            return;
+          }
+          
+          // Verify user can only subscribe to their own wallet
+          if ((server as any).userId !== data.playerId) {
+            server.send(JSON.stringify({
+              type: 'error',
+              error: 'Unauthorized subscription'
+            }));
+            return;
+          }
+          
           // Add to subscriptions
           let subscribers = this.subscriptions.get(data.playerId);
           if (!subscribers) {
@@ -613,6 +668,11 @@ export class WalletRoutes {
           server.send(JSON.stringify({
             type: 'subscribed',
             playerId: data.playerId
+          }));
+        } else if (!(server as any).authenticated) {
+          server.send(JSON.stringify({
+            type: 'error',
+            error: 'Authentication required'
           }));
         }
       } catch (error) {
@@ -660,6 +720,7 @@ export class WalletRoutes {
       try {
         ws.send(message);
       } catch (error) {
+        logger.error('Failed to send WebSocket message', error as Error, { playerId });
         deadConnections.push(ws);
       }
     }
@@ -718,30 +779,64 @@ export class WalletRoutes {
   }
 
   /**
+   * Get audit logs for the authenticated user
+   */
+  private async handleGetAuditLogs(request: AuthenticatedRequest): Promise<Response> {
+    try {
+      if (!request.user?.userId) {
+        return this.errorResponse('User not authenticated', 401);
+      }
+
+      this.initializeServices(request.env!);
+
+      if (!this.auditLogger) {
+        return this.errorResponse('Audit service not available', 503);
+      }
+
+      const url = new URL(request.url);
+      const limit = parseInt(url.searchParams.get('limit') || '100');
+
+      const logs = await this.auditLogger.queryByUser(request.user.userId, limit);
+
+      return this.successResponse({
+        logs,
+        count: logs.length
+      }, request.rateLimitInfo);
+    } catch (error) {
+      logger.error('Get audit logs error', error as Error);
+      return this.errorResponse('Failed to retrieve audit logs', 500);
+    }
+  }
+
+  /**
    * Record audit log entry
    */
   private async recordAuditLog(
     request: AuthenticatedRequest,
     action: string,
     amount: number,
-    status: 'pending' | 'success' | 'failed'
+    status: 'pending' | 'success' | 'failed',
+    details?: Record<string, any>
   ): Promise<void> {
-    const entry = {
+    const entry: AuditLogEntry = {
       timestamp: Date.now(),
-      userId: request.user?.userId,
+      userId: request.user?.userId || 'unknown',
       username: request.user?.username,
       action,
       amount,
       status,
       ip: request.headers.get('CF-Connecting-IP') || 'unknown',
       userAgent: request.headers.get('User-Agent') || 'unknown',
-      correlationId: request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID()
+      correlationId: request.headers.get('X-Correlation-ID') || RandomUtils.generateUUID(),
+      details
     };
 
-    logger.info('Wallet audit log', entry);
-    
-    // In production, this would write to a persistent audit log
-    // For now, we just log it
+    // Use audit logger if available, otherwise fall back to console logging
+    if (this.auditLogger) {
+      await this.auditLogger.log(entry);
+    } else {
+      logger.info('Wallet audit log', entry);
+    }
   }
 
   private successResponse<T>(data: T, rateLimitInfo?: any): Response {

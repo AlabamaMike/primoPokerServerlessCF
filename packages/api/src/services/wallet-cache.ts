@@ -7,6 +7,7 @@
 
 import { PlayerWallet } from '@primo-poker/shared';
 import { logger } from '@primo-poker/core';
+import { WalletTransaction } from '@primo-poker/persistence';
 
 export interface WalletCacheConfig {
   ttlSeconds: number;
@@ -20,14 +21,33 @@ const DEFAULT_CONFIG: WalletCacheConfig = {
   negativeCacheTtlSeconds: 30 // 30 seconds for cache misses
 };
 
+interface CachedTransactionHistory {
+  transactions: WalletTransaction[];
+  timestamp: number;
+  cursor?: string;
+}
+
 export class WalletCacheService {
   private kv: KVNamespace;
   private config: WalletCacheConfig;
   private pendingUpdates: Map<string, Promise<any>> = new Map();
+  private readonly KV_TIMEOUT_MS = 5000; // 5 second timeout for KV operations
 
   constructor(kv: KVNamespace, config: Partial<WalletCacheConfig> = {}) {
     this.kv = kv;
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Wrap a promise with a timeout
+   */
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number = this.KV_TIMEOUT_MS): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => 
+        setTimeout(() => reject(new Error(`KV operation timed out after ${timeoutMs}ms`)), timeoutMs)
+      )
+    ]);
   }
 
   /**
@@ -37,7 +57,9 @@ export class WalletCacheService {
     const key = this.getWalletKey(playerId);
     
     try {
-      const cached = await this.kv.get(key, { type: 'json' }) as PlayerWallet | null;
+      const cached = await this.withTimeout(
+        this.kv.get(key, { type: 'json' })
+      ) as PlayerWallet | null;
       
       if (cached) {
         logger.debug('Wallet cache hit', { playerId });
@@ -59,13 +81,15 @@ export class WalletCacheService {
     const key = this.getWalletKey(wallet.playerId);
     
     try {
-      await this.kv.put(key, JSON.stringify(wallet), {
-        expirationTtl: this.config.ttlSeconds,
-        metadata: {
-          lastUpdated: Date.now(),
-          version: 1
-        }
-      });
+      await this.withTimeout(
+        this.kv.put(key, JSON.stringify(wallet), {
+          expirationTtl: this.config.ttlSeconds,
+          metadata: {
+            lastUpdated: Date.now(),
+            version: 1
+          }
+        })
+      );
       
       logger.debug('Wallet cached', { playerId: wallet.playerId });
     } catch (error) {
@@ -136,7 +160,7 @@ export class WalletCacheService {
     const key = this.getWalletKey(playerId);
     
     try {
-      await this.kv.delete(key);
+      await this.withTimeout(this.kv.delete(key));
       logger.debug('Wallet cache invalidated', { playerId });
     } catch (error) {
       logger.error('Error invalidating wallet cache', error as Error, { playerId });
@@ -230,19 +254,21 @@ export class WalletCacheService {
    */
   async cacheTransactionHistory(
     playerId: string, 
-    transactions: any[], 
+    transactions: WalletTransaction[], 
     cursor?: string
   ): Promise<void> {
     const key = this.getTransactionKey(playerId, cursor);
     
     try {
-      await this.kv.put(key, JSON.stringify({
-        transactions,
-        timestamp: Date.now(),
-        cursor
-      }), {
-        expirationTtl: this.config.ttlSeconds
-      });
+      await this.withTimeout(
+        this.kv.put(key, JSON.stringify({
+          transactions,
+          timestamp: Date.now(),
+          cursor
+        }), {
+          expirationTtl: this.config.ttlSeconds
+        })
+      );
     } catch (error) {
       logger.error('Error caching transaction history', error as Error, { playerId });
     }
@@ -254,12 +280,22 @@ export class WalletCacheService {
   async getCachedTransactionHistory(
     playerId: string, 
     cursor?: string
-  ): Promise<{ transactions: any[]; nextCursor?: string } | null> {
+  ): Promise<{ transactions: WalletTransaction[]; nextCursor?: string } | null> {
     const key = this.getTransactionKey(playerId, cursor);
     
     try {
-      const cached = await this.kv.get(key, { type: 'json' }) as any;
-      return cached || null;
+      const cached = await this.withTimeout(
+        this.kv.get(key, { type: 'json' })
+      ) as CachedTransactionHistory | null;
+      
+      if (!cached) {
+        return null;
+      }
+      
+      return {
+        transactions: cached.transactions,
+        nextCursor: cached.cursor
+      };
     } catch (error) {
       logger.error('Error reading transaction cache', error as Error, { playerId });
       return null;

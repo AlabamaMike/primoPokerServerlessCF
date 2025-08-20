@@ -151,7 +151,7 @@ const TableList: React.FC<TableListProps> = ({
             No tables match your filters
           </div>
         ) : (
-          height > 0 && width > 0 && (
+          height > 0 && width > 0 && sortedTables.length > 0 && (
             <List
               height={height}
               itemCount={sortedTables.length}

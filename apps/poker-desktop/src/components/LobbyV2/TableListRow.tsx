@@ -30,7 +30,7 @@ const TableListRow: React.FC<TableListRowProps> = ({
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry.isIntersecting && rowRef.current) {
           setIsVisible(true);
           observer.disconnect();
         }

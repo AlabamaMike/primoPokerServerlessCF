@@ -22,6 +22,7 @@ import {
   GameRuleError,
   InvalidActionError,
   InsufficientFundsError,
+  assertNever,
 } from '@primo-poker/shared';
 import { CryptoHelpers } from '@primo-poker/security';
 import { Hand, HandEvaluation } from './hand-evaluator';
@@ -436,6 +437,10 @@ export class SecurePokerGame implements ISecurePokerGame {
         this.currentBets.set(playerId, (this.currentBets.get(playerId) || 0) + allInAmount);
         this.gameState.pot += allInAmount;
         break;
+        
+      default:
+        // TypeScript will error if any PlayerAction is not handled above
+        assertNever(action);
     }
 
     return {

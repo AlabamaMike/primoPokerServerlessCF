@@ -9,6 +9,7 @@ export class MessageCache {
   private cache: Map<string, CachedMessage> = new Map();
   private maxSize: number;
   private ttl: number; // Time to live in milliseconds
+  private cleanupIntervalId: NodeJS.Timeout | null = null;
 
   constructor(maxSize = 1000, ttlMinutes = 30) {
     this.maxSize = maxSize;
@@ -81,12 +82,39 @@ export class MessageCache {
   size(): number {
     return this.cache.size;
   }
+
+  /**
+   * Start periodic cleanup
+   */
+  startCleanupInterval(intervalMinutes = 5): void {
+    this.stopCleanupInterval(); // Clear any existing interval
+    this.cleanupIntervalId = setInterval(() => {
+      this.cleanup();
+    }, intervalMinutes * 60 * 1000);
+  }
+
+  /**
+   * Stop periodic cleanup
+   */
+  stopCleanupInterval(): void {
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+    }
+  }
+
+  /**
+   * Destroy the cache and clean up resources
+   */
+  destroy(): void {
+    this.stopCleanupInterval();
+    this.clear();
+  }
 }
 
-// Singleton instance
-export const messageCache = new MessageCache();
-
-// Set up periodic cleanup
-setInterval(() => {
-  messageCache.cleanup();
-}, 5 * 60 * 1000); // Clean up every 5 minutes
+// Export a factory function instead of a singleton
+export const createMessageCache = (maxSize = 1000, ttlMinutes = 30): MessageCache => {
+  const cache = new MessageCache(maxSize, ttlMinutes);
+  cache.startCleanupInterval();
+  return cache;
+};

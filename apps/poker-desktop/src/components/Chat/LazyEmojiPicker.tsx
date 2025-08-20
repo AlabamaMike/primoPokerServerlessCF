@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { EmojiPickerProps } from './types';
-import { useIntersectionObserver } from '../../hooks/common';
 
 // Split emojis into chunks for lazy loading
 const EMOJI_CATEGORIES = {
@@ -78,7 +77,9 @@ const LazyEmojiPicker: React.FC<EmojiPickerProps> = ({
     if (stored) {
       try {
         setRecentEmojis(JSON.parse(stored));
-      } catch {}
+      } catch (err) {
+        console.error('Failed to parse recent emojis from localStorage:', err);
+      }
     }
   }, []);
 

@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { MessageListProps, ChatMessage } from './types';
-import { useIntersectionObserver } from '../../hooks/common';
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -10,7 +9,7 @@ interface MessageItemProps {
   style?: React.CSSProperties;
 }
 
-const MESSAGE_HEIGHT = 40; // Estimated height per message
+const DEFAULT_MESSAGE_HEIGHT = 40; // Default estimated height per message
 const OVERSCAN = 5; // Number of items to render outside visible area
 
 const MessageItem: React.FC<MessageItemProps> = React.memo(({
@@ -66,11 +65,16 @@ const MessageItem: React.FC<MessageItemProps> = React.memo(({
 
 MessageItem.displayName = 'MessageItem';
 
-const VirtualMessageList: React.FC<MessageListProps> = ({
+interface VirtualMessageListExtendedProps extends MessageListProps {
+  messageHeight?: number;
+}
+
+const VirtualMessageList: React.FC<VirtualMessageListExtendedProps> = ({
   messages,
   currentUserId,
   moderationState,
-  onPlayerAction
+  onPlayerAction,
+  messageHeight = DEFAULT_MESSAGE_HEIGHT
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -90,21 +94,21 @@ const VirtualMessageList: React.FC<MessageListProps> = ({
 
   // Calculate visible range
   const visibleRange = useMemo(() => {
-    const startIndex = Math.max(0, Math.floor(scrollTop / MESSAGE_HEIGHT) - OVERSCAN);
+    const startIndex = Math.max(0, Math.floor(scrollTop / messageHeight) - OVERSCAN);
     const endIndex = Math.min(
       filteredMessages.length,
-      Math.ceil((scrollTop + containerHeight) / MESSAGE_HEIGHT) + OVERSCAN
+      Math.ceil((scrollTop + containerHeight) / messageHeight) + OVERSCAN
     );
     
     return { startIndex, endIndex };
-  }, [scrollTop, containerHeight, filteredMessages.length]);
+  }, [scrollTop, containerHeight, filteredMessages.length, messageHeight]);
 
   // Get visible messages
   const visibleMessages = useMemo(() => {
     return filteredMessages.slice(visibleRange.startIndex, visibleRange.endIndex);
   }, [filteredMessages, visibleRange]);
 
-  const totalHeight = filteredMessages.length * MESSAGE_HEIGHT;
+  const totalHeight = filteredMessages.length * messageHeight;
 
   // Handle resize
   useEffect(() => {
@@ -191,7 +195,7 @@ const VirtualMessageList: React.FC<MessageListProps> = ({
           <div style={{ height: totalHeight, position: 'relative' }}>
             {visibleMessages.map((message, index) => {
               const actualIndex = visibleRange.startIndex + index;
-              const top = actualIndex * MESSAGE_HEIGHT;
+              const top = actualIndex * messageHeight;
               
               return (
                 <MessageItem

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, KeyboardEvent, useCallback } from '
 import { MessageInputProps } from './types';
 import { getCommandSuggestions } from './utils/chatCommands';
 import { validateMessage } from './utils/sanitize';
-import { defaultRateLimiter } from './utils/rateLimiter';
+import { createRateLimiter } from './utils/rateLimiter';
 import LazyEmojiPicker from './LazyEmojiPicker';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -27,6 +27,7 @@ const EnhancedMessageInput: React.FC<EnhancedMessageInputProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const rateLimiterRef = useRef(createRateLimiter());
   
   // Debounced typing indicator
   const debouncedTypingStop = useDebounce(() => {
@@ -71,8 +72,9 @@ const EnhancedMessageInput: React.FC<EnhancedMessageInputProps> = ({
     debouncedTypingStop.cancel();
     
     // Check rate limiting
-    if (!defaultRateLimiter.canSendMessage()) {
-      const waitTime = Math.ceil(defaultRateLimiter.getTimeUntilNextMessage() / 1000);
+    const rateLimiter = rateLimiterRef.current;
+    if (!rateLimiter.canSendMessage()) {
+      const waitTime = Math.ceil(rateLimiter.getTimeUntilNextMessage() / 1000);
       setRateLimitWarning(`Please wait ${waitTime} seconds before sending another message`);
       return;
     }
@@ -83,7 +85,7 @@ const EnhancedMessageInput: React.FC<EnhancedMessageInputProps> = ({
     }
     
     // Record message for rate limiting
-    defaultRateLimiter.recordMessage();
+    rateLimiter.recordMessage();
     setRateLimitWarning(null);
     
     onSendMessage(validation.sanitized);
@@ -152,10 +154,14 @@ const EnhancedMessageInput: React.FC<EnhancedMessageInputProps> = ({
 
   // Cleanup on unmount
   useEffect(() => {
+    const currentIsTyping = isTyping;
+    const currentOnTypingStop = onTypingStop;
+    const currentDebouncedTypingStop = debouncedTypingStop;
+    
     return () => {
-      debouncedTypingStop.cancel();
-      if (isTyping) {
-        onTypingStop?.();
+      currentDebouncedTypingStop.cancel();
+      if (currentIsTyping) {
+        currentOnTypingStop?.();
       }
     };
   }, [isTyping, onTypingStop, debouncedTypingStop]);

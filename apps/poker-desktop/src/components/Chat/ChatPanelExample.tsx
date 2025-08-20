@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { EnhancedChatPanel } from './index';
+import { EnhancedChatPanel } from './EnhancedChatPanel';
 import { ChatMessage } from './types';
 
 export const ChatPanelExample: React.FC = () => {

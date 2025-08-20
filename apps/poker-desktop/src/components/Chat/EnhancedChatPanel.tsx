@@ -5,7 +5,7 @@ import MessageInput from './MessageInput';
 import UnreadIndicator from './UnreadIndicator';
 import { parseCommand, formatCommandHelp } from './utils/chatCommands';
 import { saveChatMessages, loadChatMessages } from './utils/persistence';
-import { messageCache } from '../../utils/message-cache';
+import { createMessageCache } from '../../utils/message-cache';
 import { sanitizeMessage } from './utils/sanitize';
 import { MessageBatcher } from '../../utils/message-batcher';
 
@@ -81,6 +81,7 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
   onTypingStart?: () => void;
   onTypingStop?: () => void;
   typingUsers?: string[];
+  onLoadPersistedMessages?: (messages: ChatMessage[]) => void;
 }> = ({
   messages,
   onSendMessage,
@@ -93,7 +94,8 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
   tableId,
   onTypingStart,
   onTypingStop,
-  typingUsers = []
+  typingUsers = [],
+  onLoadPersistedMessages
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -105,6 +107,7 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
   });
   const lastMessageCountRef = useRef(messages.length);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const messageCacheRef = useRef(createMessageCache());
   
   // Message batcher for rapid messages
   const messageBatcher = useMemo(() => new MessageBatcher(
@@ -119,10 +122,11 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
   useEffect(() => {
     if (tableId) {
       const persisted = loadChatMessages(tableId);
-      // Note: In a real implementation, you'd merge these with current messages
-      // through a parent component or state management
+      if (persisted && persisted.length > 0 && typeof onLoadPersistedMessages === 'function') {
+        onLoadPersistedMessages(persisted);
+      }
     }
-  }, [tableId]);
+  }, [tableId, onLoadPersistedMessages]);
 
   // Save messages when they change
   useEffect(() => {
@@ -131,13 +135,16 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
     }
   }, [messages, tableId]);
 
-  // Pre-cache sanitized messages
-  useEffect(() => {
-    messages.forEach(message => {
-      if (!messageCache.get(message.id)) {
-        const sanitized = sanitizeMessage(message.message);
+  // Pre-cache sanitized messages with memoization
+  const sanitizedMessages = useMemo(() => {
+    const messageCache = messageCacheRef.current;
+    return messages.map(message => {
+      let sanitized = messageCache.get(message.id);
+      if (!sanitized) {
+        sanitized = sanitizeMessage(message.message);
         messageCache.set(message.id, sanitized);
       }
+      return { ...message, message: sanitized };
     });
   }, [messages]);
 
@@ -159,14 +166,14 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
 
   // Filter messages based on search
   const filteredMessages = useMemo(() => {
-    if (!searchQuery) return messages;
+    if (!searchQuery) return sanitizedMessages;
     
     const query = searchQuery.toLowerCase();
-    return messages.filter(msg => 
+    return sanitizedMessages.filter(msg => 
       msg.message.toLowerCase().includes(query) ||
       msg.username.toLowerCase().includes(query)
     );
-  }, [messages, searchQuery]);
+  }, [sanitizedMessages, searchQuery]);
 
   // Handle typing indicators
   const handleTypingStart = useCallback(() => {
@@ -195,7 +202,13 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
     
     if (command) {
       if (command.command === 'help') {
-        onSendMessage(`/help`);
+        // Display help content locally instead of sending as a chat message
+        const helpText = formatCommandHelp();
+        onCommand?.({
+          command: 'system',
+          args: [],
+          message: helpText,
+        });
       } else if (command.command === 'mute' || command.command === 'unmute') {
         const playerName = command.args?.[0];
         if (playerName) {
@@ -258,6 +271,7 @@ const EnhancedChatPanel: React.FC<ChatPanelProps & {
         clearTimeout(typingTimeoutRef.current);
       }
       messageBatcher.flush();
+      messageCacheRef.current.destroy();
     };
   }, [messageBatcher]);
 

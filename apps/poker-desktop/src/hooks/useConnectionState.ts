@@ -42,7 +42,7 @@ export function useConnectionState(
 
   const wasOnlineRef = useRef(navigator.onLine);
   const wasConnectedRef = useRef(false);
-  const checkIntervalRef = useRef<NodeJS.Timeout>();
+  const checkIntervalRef = useRef<number>();
 
   // Check connection to backend
   const checkConnection = useCallback(async () => {

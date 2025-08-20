@@ -87,16 +87,24 @@ function App() {
       onOnline: () => showSuccess('Back online!'),
       onReconnect: () => {
         showSuccess('Reconnected to server');
-        // Process any queued actions
+        // TODO: Implement action handler for offline queue processing
+        // For now, just notify the user if there are queued actions
         if (offlineQueue.getQueueSize() > 0) {
-          offlineQueue.processQueue(async (action, payload) => {
-            // Handle queued actions based on type
-            console.log('Processing queued action:', action, payload);
-            // This would be implemented based on your app's needs
-            throw new Error('Action handler not implemented');
-          }).catch(err => {
-            showError('Failed to sync some offline actions');
-          });
+          showError(`${offlineQueue.getQueueSize()} offline actions pending. Manual sync may be required.`);
+          // Future implementation would process the queue like this:
+          // offlineQueue.processQueue(async (action, payload) => {
+          //   // Handle different action types
+          //   switch (action) {
+          //     case 'join_table':
+          //       return await joinTable(payload);
+          //     case 'place_bet':
+          //       return await placeBet(payload);
+          //     default:
+          //       throw new Error(`Unknown action: ${action}`);
+          //   }
+          // }).catch(err => {
+          //   showError('Failed to sync some offline actions');
+          // });
         }
       }
     }

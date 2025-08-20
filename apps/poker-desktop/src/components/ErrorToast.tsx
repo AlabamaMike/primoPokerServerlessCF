@@ -136,7 +136,7 @@ export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = (toast: Omit<Toast, 'id'>) => {
-    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     setToasts(prev => [...prev, { ...toast, id }]);
   };
 

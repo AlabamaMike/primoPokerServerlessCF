@@ -23,7 +23,7 @@ export class OfflineQueue {
   private processing = false;
   private config: Required<OfflineQueueConfig>;
   private listeners: ((queue: QueuedAction[]) => void)[] = [];
-  private retryTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private retryTimeouts: Map<string, number> = new Map();
 
   constructor(config: OfflineQueueConfig = {}) {
     this.config = {
@@ -52,7 +52,7 @@ export class OfflineQueue {
       maxRetries?: number;
     } = {}
   ): string {
-    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     
     const queuedAction: QueuedAction = {
       id,
@@ -251,6 +251,11 @@ export class OfflineQueue {
       }
     } catch (error) {
       console.error('Failed to load offline queue from storage:', error);
+      // If there's a quota error or corruption, clear the storage
+      if (error instanceof DOMException && error.code === 22) {
+        console.warn('Storage quota exceeded, clearing offline queue');
+        this.removeFromStorage();
+      }
     }
   }
 
@@ -268,9 +273,40 @@ export class OfflineQueue {
         retryCount,
         maxRetries
       }));
-      localStorage.setItem(this.config.storageKey, JSON.stringify(toStore));
+      
+      const data = JSON.stringify(toStore);
+      
+      // Check if we're approaching storage limits
+      if (data.length > 1024 * 1024) { // 1MB threshold
+        console.warn('Offline queue is large, consider processing or clearing old items');
+        // Keep only the most recent 25 items if we're getting too large
+        const trimmed = toStore.slice(-25);
+        localStorage.setItem(this.config.storageKey, JSON.stringify(trimmed));
+      } else {
+        localStorage.setItem(this.config.storageKey, data);
+      }
     } catch (error) {
       console.error('Failed to save offline queue to storage:', error);
+      
+      // Handle quota exceeded errors
+      if (error instanceof DOMException && (error.code === 22 || error.name === 'QuotaExceededError')) {
+        console.warn('Storage quota exceeded, trimming queue');
+        // Try to save only the most recent 10 items
+        try {
+          const minimal = this.queue.slice(-10).map(({ id, action, payload, timestamp, retryCount, maxRetries }) => ({
+            id,
+            action,
+            payload,
+            timestamp,
+            retryCount,
+            maxRetries
+          }));
+          localStorage.setItem(this.config.storageKey, JSON.stringify(minimal));
+        } catch (retryError) {
+          console.error('Failed to save even minimal queue, clearing storage', retryError);
+          this.removeFromStorage();
+        }
+      }
     }
   }
 
@@ -282,6 +318,7 @@ export class OfflineQueue {
       localStorage.removeItem(this.config.storageKey);
     } catch (error) {
       console.error('Failed to remove offline queue from storage:', error);
+      // Even if removal fails, we should continue
     }
   }
 }

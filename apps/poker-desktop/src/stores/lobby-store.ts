@@ -22,6 +22,10 @@ interface LobbyState {
   favoriteTables: string[];
   favoriteTableIds: Set<string>;
   
+  // Performance tracking
+  lastUpdateTimestamp: number;
+  updateCount: number;
+  
   // Actions
   setFilters: (filters: Filters) => void;
   selectTable: (tableId: string | null) => void;
@@ -99,6 +103,8 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
   },
   favoriteTables: JSON.parse(localStorage.getItem('favoriteTables') || '[]'),
   favoriteTableIds: new Set(JSON.parse(localStorage.getItem('favoriteTables') || '[]')),
+  lastUpdateTimestamp: 0,
+  updateCount: 0,
 
   // Actions
   setFilters: (filters) => {
@@ -174,7 +180,9 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
       
       set({ 
         tables: filteredTables,
-        isLoadingTables: false 
+        isLoadingTables: false,
+        lastUpdateTimestamp: Date.now(),
+        updateCount: get().updateCount + 1
       });
       
       // Update selected table if it exists in new data
@@ -197,7 +205,11 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
     try {
       const service = new LobbyService(apiUrl);
       const stats = await service.getLobbyStats();
-      set({ stats });
+      set({ 
+        stats,
+        lastUpdateTimestamp: Date.now(),
+        updateCount: get().updateCount + 1
+      });
     } catch (error) {
       console.error('Failed to fetch lobby stats:', error);
     }

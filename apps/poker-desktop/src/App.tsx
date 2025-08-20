@@ -11,6 +11,11 @@ import LobbyMockup from "./components/LobbyV2/LobbyMockup";
 import PrimoLobbyMockup from "./components/LobbyV2/PrimoLobbyMockup";
 import UpdateManager from "./components/UpdateManager";
 import { useAuthStore } from "./stores/auth-store";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ErrorToast, useToasts } from "./components/ErrorToast";
+import { OfflineIndicator } from "./components/OfflineIndicator";
+import { useConnectionState } from "./hooks/useConnectionState";
+import { offlineQueue } from "./services/offline-queue";
 import "./App.css";
 
 interface BackendStatus {
@@ -30,6 +35,7 @@ function App() {
   const [showLobbyMockup, setShowLobbyMockup] = useState(false);
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
   const { user, isAuthenticated, checkAuth } = useAuthStore();
+  const { toasts, removeToast, showError, showSuccess } = useToasts();
 
   useEffect(() => {
     // Check connection and auth on mount
@@ -52,33 +58,85 @@ function App() {
           latency_ms: 100
         });
         setLoading(false);
-        return;
+        return true;
       }
 
       const status = await testSafeInvoke<BackendStatus>("check_backend_connection", {
         apiUrl: BACKEND_URL
       });
       setConnectionStatus(status);
+      return status.connected;
     } catch (error) {
       console.error("Failed to check backend connection:", error);
       setConnectionStatus({
         connected: false,
         backend_url: BACKEND_URL
       });
+      return false;
     } finally {
       setLoading(false);
     }
   }
 
+  // Use connection state hook for advanced features
+  const connectionState = useConnectionState(
+    checkConnection,
+    {
+      checkInterval: 30000,
+      onOffline: () => showError('Lost internet connection. Your actions will be saved offline.'),
+      onOnline: () => showSuccess('Back online!'),
+      onReconnect: () => {
+        showSuccess('Reconnected to server');
+        // TODO: Implement action handler for offline queue processing
+        // For now, just notify the user if there are queued actions
+        if (offlineQueue.getQueueSize() > 0) {
+          showError(`${offlineQueue.getQueueSize()} offline actions pending. Manual sync may be required.`);
+          // Future implementation would process the queue like this:
+          // offlineQueue.processQueue(async (action, payload) => {
+          //   // Handle different action types
+          //   switch (action) {
+          //     case 'join_table':
+          //       return await joinTable(payload);
+          //     case 'place_bet':
+          //       return await placeBet(payload);
+          //     default:
+          //       throw new Error(`Unknown action: ${action}`);
+          //   }
+          // }).catch(err => {
+          //   showError('Failed to sync some offline actions');
+          // });
+        }
+      }
+    }
+  );
+
   return (
-    <div className="container">
-      <h1 className="text-4xl font-bold text-white mb-8">🃏 Primo Poker Desktop</h1>
-      
-      <ConnectionStatus 
-        status={connectionStatus} 
-        loading={loading} 
-        onRetry={checkConnection}
-      />
+    <ErrorBoundary 
+      level="app"
+      onError={(error) => {
+        console.error('App-level error:', error);
+        showError(`Application error: ${error.message}`);
+      }}
+    >
+      <div className="container">
+        <OfflineIndicator 
+          checkConnectionFn={checkConnection}
+          position="top"
+        />
+        
+        <ErrorToast 
+          toasts={toasts}
+          onDismiss={removeToast}
+          position="top-right"
+        />
+        
+        <h1 className="text-4xl font-bold text-white mb-8">🃏 Primo Poker Desktop</h1>
+        
+        <ConnectionStatus 
+          status={connectionStatus} 
+          loading={loading} 
+          onRetry={checkConnection}
+        />
 
       {connectionStatus?.connected && (
         <div className="mt-8">
@@ -91,15 +149,27 @@ function App() {
               }}
             />
           ) : showLobbyMockup ? (
-            <div className="fixed inset-0 z-50">
-              <button
-                onClick={() => setShowLobbyMockup(false)}
-                className="absolute top-4 right-4 z-10 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
-              >
-                Close Mockup
-              </button>
-              <PrimoLobbyMockup />
-            </div>
+            <ErrorBoundary level="page" fallback={
+              <div className="text-center p-8">
+                <p className="text-red-500">Failed to load lobby mockup</p>
+                <button
+                  onClick={() => setShowLobbyMockup(false)}
+                  className="mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded"
+                >
+                  Go Back
+                </button>
+              </div>
+            }>
+              <div className="fixed inset-0 z-50">
+                <button
+                  onClick={() => setShowLobbyMockup(false)}
+                  className="absolute top-4 right-4 z-10 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
+                >
+                  Close Mockup
+                </button>
+                <PrimoLobbyMockup />
+              </div>
+            </ErrorBoundary>
           ) : showDemo ? (
             <div>
               <div className="mb-4">
@@ -113,29 +183,40 @@ function App() {
               <GameTableDemo />
             </div>
           ) : currentTableId ? (
-            <GamePage 
-              tableId={currentTableId}
-              onLeaveTable={() => {
+            <ErrorBoundary 
+              level="page"
+              onError={(error) => {
+                showError('Game error occurred. Please rejoin the table.');
                 setCurrentTableId(null);
                 setShowLobby(true);
               }}
-            />
-          ) : showLobby ? (
-            <div className="fixed inset-0 z-40">
-              <LobbyV2 
-                apiUrl={BACKEND_URL} 
-                onJoinTable={(tableId) => {
-                  setCurrentTableId(tableId);
-                  setShowLobby(false);
+            >
+              <GamePage 
+                tableId={currentTableId}
+                onLeaveTable={() => {
+                  setCurrentTableId(null);
+                  setShowLobby(true);
                 }}
               />
-              <button
-                onClick={() => setShowLobby(false)}
-                className="absolute top-4 right-20 z-50 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-              >
-                Exit Lobby
-              </button>
-            </div>
+            </ErrorBoundary>
+          ) : showLobby ? (
+            <ErrorBoundary level="page">
+              <div className="fixed inset-0 z-40">
+                <LobbyV2 
+                  apiUrl={BACKEND_URL} 
+                  onJoinTable={(tableId) => {
+                    setCurrentTableId(tableId);
+                    setShowLobby(false);
+                  }}
+                />
+                <button
+                  onClick={() => setShowLobby(false)}
+                  className="absolute top-4 right-20 z-50 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
+                  Exit Lobby
+                </button>
+              </div>
+            </ErrorBoundary>
           ) : (
             <div className="authenticated-content" data-testid="authenticated-content">
               <div className="bg-black/50 border border-gray-600 rounded p-6">
@@ -194,6 +275,7 @@ function App() {
       {/* Update Manager - Always rendered to check for updates */}
       <UpdateManager />
     </div>
+    </ErrorBoundary>
   );
 }
 

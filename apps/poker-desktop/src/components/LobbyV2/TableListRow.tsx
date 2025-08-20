@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Table } from './types';
 import { useLobbyStore } from '../../stores/lobby-store';
 
@@ -21,8 +21,32 @@ const TableListRow: React.FC<TableListRowProps> = ({
 }) => {
   const { joinTable, joinWaitlist } = useLobbyStore();
   const [isJoining, setIsJoining] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
   const isFull = table.players >= table.maxPlayers;
   const hasWaitlist = table.waitlist > 0;
+  
+  // Lazy loading with Intersection Observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && rowRef.current) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: '50px', // Start loading 50px before visible
+        threshold: 0.01
+      }
+    );
+
+    if (rowRef.current) {
+      observer.observe(rowRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
   
   const getGameTypeDisplay = (gameType: string): string => {
     const gameTypes: Record<string, string> = {
@@ -55,8 +79,10 @@ const TableListRow: React.FC<TableListRowProps> = ({
   `;
 
   return (
-    <div className={rowClassName} onClick={onSelect} data-testid={`table-row-${table.id}`}>
+    <div ref={rowRef} className={rowClassName} onClick={onSelect} data-testid={`table-row-${table.id}`}>
       {/* Table Name */}
+      {isVisible ? (
+        <>
       <div className="col-span-3 font-medium flex items-center space-x-2">
         <span className={table.features.includes('featured') ? 'text-amber-400' : 'text-purple-400'}>
           {getTableIcon()}
@@ -174,8 +200,22 @@ const TableListRow: React.FC<TableListRowProps> = ({
           {isFavorite ? <span data-testid="favorite-star">⭐</span> : '☆'}
         </button>
       </div>
+        </>
+      ) : (
+        // Placeholder for lazy loading
+        <div className="col-span-12 h-full bg-slate-800/20 animate-pulse rounded" />
+      )}
     </div>
   );
 };
 
-export default TableListRow;
+export default React.memo(TableListRow, (prevProps, nextProps) => {
+  return (
+    prevProps.table.id === nextProps.table.id &&
+    prevProps.table.players === nextProps.table.players &&
+    prevProps.table.waitlist === nextProps.table.waitlist &&
+    prevProps.table.avgPot === nextProps.table.avgPot &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isFavorite === nextProps.isFavorite
+  );
+});

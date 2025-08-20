@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { useLobbyStore } from '../../stores/lobby-store';
 import TableListHeader from './TableListHeader';
@@ -14,7 +14,35 @@ type SortColumn = 'name' | 'stakes' | 'players' | 'avgPot' | 'speed' | 'waitlist
 type SortDirection = 'asc' | 'desc';
 
 const ITEM_HEIGHT = 56; // Height of each table row
-const LIST_HEIGHT = 600; // Height of the scrollable area
+
+// Custom hook for responsive container sizing
+const useContainerSize = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateDimensions = () => {
+      setDimensions({
+        width: container.clientWidth,
+        height: container.clientHeight
+      });
+    };
+
+    // Initial measurement
+    updateDimensions();
+
+    // ResizeObserver for responsive updates
+    const resizeObserver = new ResizeObserver(updateDimensions);
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  return { containerRef, ...dimensions };
+};
 
 const TableList: React.FC<TableListProps> = ({ 
   apiUrl, 
@@ -24,6 +52,7 @@ const TableList: React.FC<TableListProps> = ({
   const { tables, isLoadingTables, tablesError, toggleFavorite, favoriteTableIds } = useLobbyStore();
   const [sortColumn, setSortColumn] = useState<SortColumn>('stakes');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const { containerRef, width, height } = useContainerSize();
 
   const handleSort = useCallback((column: SortColumn) => {
     if (column === sortColumn) {
@@ -116,22 +145,25 @@ const TableList: React.FC<TableListProps> = ({
         onSort={handleSort}
       />
       
-      <div className="flex-1 bg-slate-900/50">
+      <div className="flex-1 bg-slate-900/50" ref={containerRef}>
         {sortedTables.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-400">
             No tables match your filters
           </div>
         ) : (
-          <List
-            height={LIST_HEIGHT}
-            itemCount={sortedTables.length}
-            itemSize={ITEM_HEIGHT}
-            width="100%"
-            className="scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
-            data-testid="virtual-list"
-          >
-            {Row}
-          </List>
+          height > 0 && width > 0 && sortedTables.length > 0 && (
+            <List
+              height={height}
+              itemCount={sortedTables.length}
+              itemSize={ITEM_HEIGHT}
+              width={width}
+              className="scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
+              data-testid="virtual-list"
+              overscanCount={3}
+            >
+              {Row}
+            </List>
+          )
         )}
       </div>
     </div>

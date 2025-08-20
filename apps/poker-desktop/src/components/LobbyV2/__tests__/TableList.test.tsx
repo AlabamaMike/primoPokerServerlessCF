@@ -334,4 +334,255 @@ describe('TableList', () => {
       expect(toggleFavorite).toHaveBeenCalledWith('table-1');
     });
   });
+
+  describe('ResizeObserver Behavior', () => {
+    let mockResizeObserver: jest.Mock;
+    let resizeCallback: ResizeObserverCallback;
+
+    beforeEach(() => {
+      mockResizeObserver = jest.fn().mockImplementation((callback) => {
+        resizeCallback = callback;
+        return {
+          observe: jest.fn(),
+          disconnect: jest.fn(),
+          unobserve: jest.fn()
+        };
+      });
+      global.ResizeObserver = mockResizeObserver;
+    });
+
+    afterEach(() => {
+      // @ts-ignore
+      delete global.ResizeObserver;
+    });
+
+    it('should update dimensions when container resizes', async () => {
+      const { rerender } = render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      // Verify ResizeObserver was created
+      expect(mockResizeObserver).toHaveBeenCalled();
+
+      // Simulate resize
+      const mockEntry: ResizeObserverEntry = {
+        target: document.createElement('div'),
+        contentRect: { width: 800, height: 600 } as DOMRectReadOnly,
+        borderBoxSize: [],
+        contentBoxSize: [],
+        devicePixelContentBoxSize: []
+      };
+
+      // Trigger resize callback
+      resizeCallback([mockEntry], {} as ResizeObserver);
+
+      // Wait for state update
+      await waitFor(() => {
+        const virtualList = screen.getByTestId('virtual-list');
+        expect(virtualList).toHaveStyle({ height: '600px' });
+      });
+    });
+
+    it('should handle zero-height container gracefully', () => {
+      // Mock container with zero height
+      const mockElement = document.createElement('div');
+      Object.defineProperty(mockElement, 'clientHeight', { value: 0 });
+      Object.defineProperty(mockElement, 'clientWidth', { value: 800 });
+      
+      jest.spyOn(React, 'useRef').mockReturnValueOnce({ current: mockElement });
+
+      render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      // Should not render virtual list with zero height
+      expect(screen.queryByTestId('virtual-list')).not.toBeInTheDocument();
+      expect(screen.getByText('No tables match your filters')).toBeInTheDocument();
+    });
+
+    it('should cleanup ResizeObserver on unmount', () => {
+      const disconnectSpy = jest.fn();
+      mockResizeObserver.mockImplementation((callback) => ({
+        observe: jest.fn(),
+        disconnect: disconnectSpy,
+        unobserve: jest.fn()
+      }));
+
+      const { unmount } = render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      unmount();
+      expect(disconnectSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('Virtual Scrolling Edge Cases', () => {
+    it('should handle empty table list without rendering virtual list', () => {
+      mockUseLobbyStore.mockReturnValue({
+        ...mockUseLobbyStore(),
+        tables: []
+      });
+
+      render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      // Should show empty state, not virtual list
+      expect(screen.queryByTestId('virtual-list')).not.toBeInTheDocument();
+      expect(screen.getByText('No tables match your filters')).toBeInTheDocument();
+    });
+
+    it('should handle very rapid scrolling without performance issues', async () => {
+      const manyTables = Array.from({ length: 1000 }, (_, i) => ({
+        ...mockTables[0],
+        id: `table-${i}`,
+        name: `Table ${i}`
+      }));
+
+      mockUseLobbyStore.mockReturnValue({
+        ...mockUseLobbyStore(),
+        tables: manyTables
+      });
+
+      render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      const virtualList = screen.getByTestId('virtual-list');
+      
+      // Simulate rapid scrolling
+      for (let i = 0; i < 10; i++) {
+        fireEvent.scroll(virtualList, { target: { scrollTop: i * 1000 } });
+      }
+      
+      // Should still be rendered and functional
+      await waitFor(() => {
+        expect(virtualList).toBeInTheDocument();
+      });
+    });
+
+    it('should maintain scroll position when tables update', async () => {
+      const initialTables = Array.from({ length: 100 }, (_, i) => ({
+        ...mockTables[0],
+        id: `table-${i}`,
+        name: `Table ${i}`
+      }));
+
+      const { rerender } = render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      const virtualList = screen.getByTestId('virtual-list');
+      
+      // Scroll to middle
+      fireEvent.scroll(virtualList, { target: { scrollTop: 500 } });
+      
+      // Update tables (e.g., player count changes)
+      const updatedTables = initialTables.map(table => ({
+        ...table,
+        players: Math.min(table.players + 1, table.maxPlayers)
+      }));
+
+      mockUseLobbyStore.mockReturnValue({
+        ...mockUseLobbyStore(),
+        tables: updatedTables
+      });
+
+      rerender(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      // Virtual list should still be present
+      expect(screen.getByTestId('virtual-list')).toBeInTheDocument();
+    });
+
+    it('should handle container resize during scroll', async () => {
+      const manyTables = Array.from({ length: 100 }, (_, i) => ({
+        ...mockTables[0],
+        id: `table-${i}`,
+        name: `Table ${i}`
+      }));
+
+      mockUseLobbyStore.mockReturnValue({
+        ...mockUseLobbyStore(),
+        tables: manyTables
+      });
+
+      render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      // Get ResizeObserver callback
+      const resizeCallback = (global.ResizeObserver as jest.Mock).mock.calls[0][0];
+
+      // Simulate resize during scroll
+      const mockEntry: ResizeObserverEntry = {
+        target: document.createElement('div'),
+        contentRect: { width: 1200, height: 800 } as DOMRectReadOnly,
+        borderBoxSize: [],
+        contentBoxSize: [],
+        devicePixelContentBoxSize: []
+      };
+
+      resizeCallback([mockEntry], {} as ResizeObserver);
+
+      await waitFor(() => {
+        const virtualList = screen.getByTestId('virtual-list');
+        expect(virtualList).toHaveStyle({ height: '800px' });
+      });
+    });
+
+    it('should gracefully handle negative or invalid dimensions', () => {
+      // Mock container with invalid dimensions
+      const mockElement = document.createElement('div');
+      Object.defineProperty(mockElement, 'clientHeight', { value: -100 });
+      Object.defineProperty(mockElement, 'clientWidth', { value: -100 });
+      
+      jest.spyOn(React, 'useRef').mockReturnValueOnce({ current: mockElement });
+
+      render(
+        <TableList 
+          apiUrl="http://test.com" 
+          selectedTableId={null} 
+          onTableSelect={jest.fn()} 
+        />
+      );
+
+      // Should not crash, should show empty state
+      expect(screen.queryByTestId('virtual-list')).not.toBeInTheDocument();
+    });
+  });
 });

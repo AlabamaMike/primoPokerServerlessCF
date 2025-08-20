@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatPanelProps, ChatMessage, PlayerModerationState } from './types';
 import MessageList from './MessageList';
+import VirtualMessageList from './VirtualMessageList';
 import MessageInput from './MessageInput';
+import EnhancedMessageInput from './EnhancedMessageInput';
 import UnreadIndicator from './UnreadIndicator';
 import { parseCommand, formatCommandHelp } from './utils/chatCommands';
 
-const ChatPanel: React.FC<ChatPanelProps> = ({
+const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean }> = ({
   messages,
   onSendMessage,
   onCommand,
@@ -13,7 +15,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onBlockPlayer,
   currentUserId,
   isConnected,
-  className = ''
+  className = '',
+  useVirtualScrolling = false
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -154,12 +157,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         <>
           {/* Messages area */}
           <div className="flex-1 min-h-[200px] max-h-[400px]">
-            <MessageList
-              messages={messages}
-              currentUserId={currentUserId}
-              moderationState={moderationState}
-              onPlayerAction={handlePlayerAction}
-            />
+            {useVirtualScrolling ? (
+              <VirtualMessageList
+                messages={messages}
+                currentUserId={currentUserId}
+                moderationState={moderationState}
+                onPlayerAction={handlePlayerAction}
+              />
+            ) : (
+              <MessageList
+                messages={messages}
+                currentUserId={currentUserId}
+                moderationState={moderationState}
+                onPlayerAction={handlePlayerAction}
+              />
+            )}
           </div>
 
           {/* Input area */}

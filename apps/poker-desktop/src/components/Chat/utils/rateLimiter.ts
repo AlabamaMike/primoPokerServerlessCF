@@ -73,8 +73,13 @@ export class RateLimiter {
   }
 }
 
-// Default rate limiter instance
-export const defaultRateLimiter = new RateLimiter({
-  maxMessages: 10,  // 10 messages
-  windowMs: 60000   // per minute
-});
+// Factory function to create rate limiter instances
+export const createRateLimiter = (config?: Partial<RateLimiterConfig>): RateLimiter => {
+  return new RateLimiter({
+    maxMessages: config?.maxMessages ?? 10,  // 10 messages
+    windowMs: config?.windowMs ?? 60000      // per minute
+  });
+};
+
+// Default rate limiter instance for backward compatibility
+export const defaultRateLimiter = createRateLimiter();

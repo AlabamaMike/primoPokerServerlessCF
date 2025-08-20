@@ -1,0 +1,267 @@
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { MessageListProps, ChatMessage } from './types';
+
+interface MessageItemProps {
+  message: ChatMessage;
+  isCurrentUser: boolean;
+  isMuted: boolean;
+  onPlayerClick?: (e: React.MouseEvent, playerId: string, username: string) => void;
+  style?: React.CSSProperties;
+}
+
+const DEFAULT_MESSAGE_HEIGHT = 40; // Default estimated height per message
+const OVERSCAN = 5; // Number of items to render outside visible area
+
+const MessageItem: React.FC<MessageItemProps> = React.memo(({
+  message,
+  isCurrentUser,
+  isMuted,
+  onPlayerClick,
+  style
+}) => {
+  const formatTime = (date: Date) => {
+    return new Date(date).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  const content = isMuted ? <span className="italic text-gray-500">[muted]</span> : message.message;
+
+  return (
+    <div 
+      className={`
+        mb-2 text-sm
+        ${message.isSystem ? 'text-yellow-400 italic text-center' : ''}
+        ${message.isCommand ? 'text-green-400' : ''}
+      `}
+      style={style}
+      data-testid="chat-message"
+    >
+      <span className="text-gray-400 text-xs mr-2">
+        {formatTime(message.timestamp)}
+      </span>
+      {message.isSystem ? (
+        <span>{content}</span>
+      ) : (
+        <>
+          <button
+            className={`
+              font-semibold hover:underline cursor-pointer
+              ${isCurrentUser ? 'text-blue-400' : 'text-blue-300'}
+            `}
+            onClick={(e) => onPlayerClick?.(e, message.userId, message.username)}
+            data-testid="message-username"
+          >
+            {message.username}
+          </button>
+          <span className="text-white">:</span>
+          <span className="ml-1 text-white">{content}</span>
+        </>
+      )}
+    </div>
+  );
+});
+
+MessageItem.displayName = 'MessageItem';
+
+interface VirtualMessageListExtendedProps extends MessageListProps {
+  messageHeight?: number;
+}
+
+const VirtualMessageList: React.FC<VirtualMessageListExtendedProps> = ({
+  messages,
+  currentUserId,
+  moderationState,
+  onPlayerAction,
+  messageHeight = DEFAULT_MESSAGE_HEIGHT
+}) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{
+    playerId: string;
+    username: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Filter out blocked messages
+  const filteredMessages = useMemo(() => {
+    return messages.filter(message => !moderationState.blockedPlayers.has(message.userId));
+  }, [messages, moderationState.blockedPlayers]);
+
+  // Calculate visible range
+  const visibleRange = useMemo(() => {
+    const startIndex = Math.max(0, Math.floor(scrollTop / messageHeight) - OVERSCAN);
+    const endIndex = Math.min(
+      filteredMessages.length,
+      Math.ceil((scrollTop + containerHeight) / messageHeight) + OVERSCAN
+    );
+    
+    return { startIndex, endIndex };
+  }, [scrollTop, containerHeight, filteredMessages.length, messageHeight]);
+
+  // Get visible messages
+  const visibleMessages = useMemo(() => {
+    return filteredMessages.slice(visibleRange.startIndex, visibleRange.endIndex);
+  }, [filteredMessages, visibleRange]);
+
+  const totalHeight = filteredMessages.length * messageHeight;
+
+  // Handle resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (scrollContainerRef.current) {
+        setContainerHeight(scrollContainerRef.current.clientHeight);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (autoScroll && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = totalHeight;
+    }
+  }, [filteredMessages.length, autoScroll, totalHeight]);
+
+  // Handle scroll
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+    
+    const { scrollTop: currentScrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    setScrollTop(currentScrollTop);
+    
+    const isAtBottom = currentScrollTop + clientHeight >= scrollHeight - 50;
+    setAutoScroll(isAtBottom);
+  }, []);
+
+  const handlePlayerClick = (e: React.MouseEvent, playerId: string, username: string) => {
+    e.preventDefault();
+    
+    if (playerId === currentUserId) {
+      return; // Don't show actions for self
+    }
+
+    setContextMenu({
+      playerId,
+      username,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  const handleContextMenuAction = (action: 'mute' | 'block' | 'report') => {
+    if (contextMenu) {
+      onPlayerAction?.(contextMenu.playerId, action);
+      setContextMenu(null);
+    }
+  };
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    if (contextMenu) {
+      const handleClickOutside = () => setContextMenu(null);
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
+
+  const scrollToBottom = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = totalHeight;
+      setAutoScroll(true);
+    }
+  }, [totalHeight]);
+
+  return (
+    <div className="relative h-full">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="overflow-y-auto h-full scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+        data-testid="message-list"
+      >
+        {filteredMessages.length === 0 ? (
+          <div className="text-gray-400 text-sm text-center py-8">
+            No messages yet. Say hello to the table!
+          </div>
+        ) : (
+          <div style={{ height: totalHeight, position: 'relative' }}>
+            {visibleMessages.map((message, index) => {
+              const actualIndex = visibleRange.startIndex + index;
+              const top = actualIndex * messageHeight;
+              
+              return (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  isCurrentUser={message.userId === currentUserId}
+                  isMuted={moderationState.mutedPlayers.has(message.userId)}
+                  onPlayerClick={handlePlayerClick}
+                  style={{
+                    position: 'absolute',
+                    top,
+                    left: 0,
+                    right: 0,
+                    paddingLeft: '12px',
+                    paddingRight: '12px'
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Scroll to bottom button */}
+      {!autoScroll && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-2 right-2 p-2 bg-gray-700 text-white rounded-full shadow-lg hover:bg-gray-600 transition-colors"
+          aria-label="Scroll to bottom"
+          data-testid="scroll-to-bottom"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-gray-800 border border-gray-600 rounded shadow-lg py-1 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          data-testid="player-context-menu"
+        >
+          <button
+            onClick={() => handleContextMenuAction('mute')}
+            className="block w-full px-4 py-2 text-sm text-white hover:bg-gray-700 text-left"
+          >
+            {moderationState.mutedPlayers.has(contextMenu.playerId) ? 'Unmute' : 'Mute'} {contextMenu.username}
+          </button>
+          <button
+            onClick={() => handleContextMenuAction('block')}
+            className="block w-full px-4 py-2 text-sm text-white hover:bg-gray-700 text-left"
+          >
+            {moderationState.blockedPlayers.has(contextMenu.playerId) ? 'Unblock' : 'Block'} {contextMenu.username}
+          </button>
+          <button
+            onClick={() => handleContextMenuAction('report')}
+            className="block w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 text-left"
+          >
+            Report {contextMenu.username}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default VirtualMessageList;

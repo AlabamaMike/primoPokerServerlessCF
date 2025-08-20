@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Table } from './types';
 import { useLobbyStore } from '../../stores/lobby-store';
+import { useAsync, useIntersectionObserver } from '../../hooks/common';
+import { AsyncButton } from '../shared';
 
 interface TableListRowProps {
   table: Table;
@@ -20,33 +22,13 @@ const TableListRow: React.FC<TableListRowProps> = ({
   onToggleFavorite
 }) => {
   const { joinTable, joinWaitlist } = useLobbyStore();
-  const [isJoining, setIsJoining] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
-  const rowRef = useRef<HTMLDivElement>(null);
+  const [rowRef, isVisible] = useIntersectionObserver({ 
+    freezeOnceVisible: true,
+    rootMargin: '50px',
+    threshold: 0.01
+  });
   const isFull = table.players >= table.maxPlayers;
   const hasWaitlist = table.waitlist > 0;
-  
-  // Lazy loading with Intersection Observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && rowRef.current) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      {
-        rootMargin: '50px', // Start loading 50px before visible
-        threshold: 0.01
-      }
-    );
-
-    if (rowRef.current) {
-      observer.observe(rowRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
   
   const getGameTypeDisplay = (gameType: string): string => {
     const gameTypes: Record<string, string> = {
@@ -79,7 +61,7 @@ const TableListRow: React.FC<TableListRowProps> = ({
   `;
 
   return (
-    <div ref={rowRef} className={rowClassName} onClick={onSelect} data-testid={`table-row-${table.id}`}>
+    <div ref={rowRef as React.RefObject<HTMLDivElement>} className={rowClassName} onClick={onSelect} data-testid={`table-row-${table.id}`}>
       {/* Table Name */}
       {isVisible ? (
         <>
@@ -154,38 +136,37 @@ const TableListRow: React.FC<TableListRowProps> = ({
             FULL
           </button>
         ) : isFull && hasWaitlist ? (
-          <button 
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg font-medium transition-all transform hover:scale-105"
+          <AsyncButton
+            size="sm"
+            variant="secondary"
+            className="bg-amber-600 hover:bg-amber-500"
             onClick={async () => {
-              setIsJoining(true);
               const position = await joinWaitlist(apiUrl, table.id);
-              setIsJoining(false);
               if (position !== null) {
                 // Show waitlist position feedback
                 console.log(`Added to waitlist at position ${position}`);
               }
             }}
-            disabled={isJoining}
+            loadingText="JOINING..."
           >
-            {isJoining ? 'JOINING...' : 'WAITLIST'}
-          </button>
+            WAITLIST
+          </AsyncButton>
         ) : (
-          <button 
-            className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white text-xs rounded-lg font-medium transition-all transform hover:scale-105 shadow-lg shadow-purple-500/20"
+          <AsyncButton
+            size="sm"
             onClick={async () => {
-              setIsJoining(true);
               const buyIn = table.stakes.big * 100; // Default 100BB buy-in
               const success = await joinTable(apiUrl, table.id, buyIn);
-              setIsJoining(false);
               if (success) {
                 // Table join will be handled by parent component
                 console.log('Successfully joined table');
               }
             }}
-            disabled={isJoining}
+            loadingText="JOINING..."
+            className="shadow-lg shadow-purple-500/20"
           >
-            {isJoining ? 'JOINING...' : 'JOIN'}
-          </button>
+            JOIN
+          </AsyncButton>
         )}
         <button 
           onClick={(e) => {

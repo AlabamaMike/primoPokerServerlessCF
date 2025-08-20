@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLobbyStore } from '../../stores/lobby-store';
+import { useToggle } from '../../hooks/common';
+import { AsyncButton } from '../shared';
 
 interface WaitlistEntry {
   tableId: string;
@@ -16,7 +18,7 @@ interface WaitlistPanelProps {
 
 const WaitlistPanel: React.FC<WaitlistPanelProps> = ({ apiUrl, onJoinTable }) => {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, { toggle, setFalse: close }] = useToggle(false);
   const { tables } = useLobbyStore();
 
   // Mock waitlist data for demonstration
@@ -70,13 +72,14 @@ const WaitlistPanel: React.FC<WaitlistPanelProps> = ({ apiUrl, onJoinTable }) =>
     <div className="fixed bottom-20 right-4 z-40">
       {/* Collapsed View */}
       {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="bg-amber-600 hover:bg-amber-500 text-white rounded-lg px-4 py-2 shadow-lg flex items-center space-x-2 transition-all transform hover:scale-105"
+        <AsyncButton
+          onClick={toggle}
+          variant="secondary"
+          className="bg-amber-600 hover:bg-amber-500 shadow-lg"
         >
           <span className="animate-pulse">⏳</span>
           <span className="font-semibold">Waitlist ({waitlistEntries.length})</span>
-        </button>
+        </AsyncButton>
       )}
 
       {/* Expanded View */}
@@ -88,7 +91,7 @@ const WaitlistPanel: React.FC<WaitlistPanelProps> = ({ apiUrl, onJoinTable }) =>
               <span>Your Waitlists</span>
             </h3>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={close}
               className="text-white/80 hover:text-white transition-colors"
             >
               ✕

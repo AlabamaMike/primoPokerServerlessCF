@@ -3,6 +3,8 @@ import { FixedSizeList as List } from 'react-window';
 import { useLobbyStore } from '../../stores/lobby-store';
 import TableListHeader from './TableListHeader';
 import TableListRow from './TableListRow';
+import { useContainerSize } from '../../hooks/common';
+import { LoadingSpinner, ErrorMessage, EmptyState } from '../shared';
 
 interface TableListProps {
   apiUrl: string;
@@ -14,35 +16,6 @@ type SortColumn = 'name' | 'stakes' | 'players' | 'avgPot' | 'speed' | 'waitlist
 type SortDirection = 'asc' | 'desc';
 
 const ITEM_HEIGHT = 56; // Height of each table row
-
-// Custom hook for responsive container sizing
-const useContainerSize = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const updateDimensions = () => {
-      setDimensions({
-        width: container.clientWidth,
-        height: container.clientHeight
-      });
-    };
-
-    // Initial measurement
-    updateDimensions();
-
-    // ResizeObserver for responsive updates
-    const resizeObserver = new ResizeObserver(updateDimensions);
-    resizeObserver.observe(container);
-
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  return { containerRef, ...dimensions };
-};
 
 const TableList: React.FC<TableListProps> = ({ 
   apiUrl, 
@@ -124,7 +97,7 @@ const TableList: React.FC<TableListProps> = ({
   if (isLoadingTables) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-slate-400">Loading tables...</div>
+        <LoadingSpinner size="lg" label="Loading tables..." />
       </div>
     );
   }
@@ -132,7 +105,7 @@ const TableList: React.FC<TableListProps> = ({
   if (tablesError) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-red-400">{tablesError}</div>
+        <ErrorMessage error={tablesError} />
       </div>
     );
   }
@@ -147,8 +120,16 @@ const TableList: React.FC<TableListProps> = ({
       
       <div className="flex-1 bg-slate-900/50" ref={containerRef}>
         {sortedTables.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-slate-400">
-            No tables match your filters
+          <div className="flex items-center justify-center h-full">
+            <EmptyState
+              title="No tables found"
+              description="No tables match your current filters. Try adjusting your preferences."
+              icon={
+                <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              }
+            />
           </div>
         ) : (
           height > 0 && width > 0 && sortedTables.length > 0 && (

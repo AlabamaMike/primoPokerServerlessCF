@@ -1,54 +1,135 @@
 import React, { Component, ReactNode, ErrorInfo } from 'react';
 
+interface ErrorReport {
+  error: {
+    message: string;
+    stack?: string;
+    name: string;
+  };
+  errorInfo: ErrorInfo;
+  timestamp: Date;
+  userAgent: string;
+  url: string;
+  componentStack?: string;
+}
+
 interface Props {
   children: ReactNode;
   fallback?: (error: Error, errorInfo: ErrorInfo) => ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  level?: 'page' | 'component' | 'app';
+  enableReporting?: boolean;
 }
 
 interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  errorCount: number;
+  lastErrorTime: Date | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private retryCount = 0;
+  private readonly MAX_RETRIES = 3;
+  private readonly ERROR_RESET_TIME = 30000; // 30 seconds
+
   constructor(props: Props) {
     super(props);
     this.state = {
       hasError: false,
       error: null,
-      errorInfo: null
+      errorInfo: null,
+      errorCount: 0,
+      lastErrorTime: null
     };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return {
       hasError: true,
       error,
-      errorInfo: null
+      errorInfo: null,
+      lastErrorTime: new Date()
     };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    const { onError, enableReporting = true, level = 'component' } = this.props;
+    
+    console.error(`[ErrorBoundary-${level}] caught an error:`, error, errorInfo);
     
     this.setState({
       error,
-      errorInfo
+      errorInfo,
+      errorCount: this.state.errorCount + 1
     });
     
-    if (this.props.onError) {
-      this.props.onError(error, errorInfo);
+    // Call custom error handler if provided
+    onError?.(error, errorInfo);
+    
+    // Report error to service if enabled
+    if (enableReporting) {
+      this.reportError(error, errorInfo);
+    }
+    
+    // Check if we should reset error count
+    if (this.state.lastErrorTime) {
+      const timeSinceLastError = Date.now() - this.state.lastErrorTime.getTime();
+      if (timeSinceLastError > this.ERROR_RESET_TIME) {
+        this.retryCount = 0;
+      }
+    }
+  }
+
+  private reportError(error: Error, errorInfo: ErrorInfo) {
+    const errorReport: ErrorReport = {
+      error: {
+        message: error.message,
+        stack: error.stack || '',
+        name: error.name
+      },
+      errorInfo,
+      timestamp: new Date(),
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+      componentStack: errorInfo.componentStack
+    };
+
+    // Log to console in development
+    if (import.meta.env.DEV) {
+      console.log('Error Report:', errorReport);
+    }
+
+    // Store in localStorage for offline capability
+    try {
+      const errorKey = `error-report-${Date.now()}`;
+      localStorage.setItem(errorKey, JSON.stringify(errorReport));
+      
+      // Clean up old errors (keep last 10)
+      const errorKeys = Object.keys(localStorage)
+        .filter(key => key.startsWith('error-report-'))
+        .sort();
+      
+      if (errorKeys.length > 10) {
+        errorKeys.slice(0, -10).forEach(key => localStorage.removeItem(key));
+      }
+    } catch (e) {
+      console.error('Failed to store error report:', e);
     }
   }
 
   resetError = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null
-    });
+    this.retryCount++;
+    if (this.retryCount <= this.MAX_RETRIES) {
+      this.setState({
+        hasError: false,
+        error: null,
+        errorInfo: null
+      });
+    } else {
+      console.error('Max retry attempts reached');
+    }
   };
 
   render() {
@@ -83,7 +164,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 We encountered an unexpected error. Please try refreshing the page.
               </p>
               
-              {process.env.NODE_ENV === 'development' && (
+              {import.meta.env.DEV && (
                 <details className="text-left mb-4">
                   <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
                     Error details (development only)
@@ -95,12 +176,25 @@ export class ErrorBoundary extends Component<Props, State> {
                 </details>
               )}
               
-              <button
-                onClick={this.resetError}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded transition-colors"
-              >
-                Try Again
-              </button>
+              {this.retryCount < this.MAX_RETRIES ? (
+                <>
+                  <button
+                    onClick={this.resetError}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded transition-colors"
+                  >
+                    Try Again
+                  </button>
+                  {this.retryCount > 0 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Retry attempt {this.retryCount} of {this.MAX_RETRIES}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-500 mt-4">
+                  Please refresh the page to continue
+                </p>
+              )}
             </div>
           </div>
         </div>

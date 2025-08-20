@@ -5,5 +5,6 @@ export * from './statistics-manager';
 export * from './statistics-aggregator';
 export * from './achievement-manager';
 export * from './profile-cache';
+export * from './lazy-profile-cache';
 export * from './profile-errors';
 export * from './profile-versioning';

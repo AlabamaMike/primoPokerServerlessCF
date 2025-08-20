@@ -21,6 +21,7 @@ export interface WorkerEnvironment {
   GAME_TABLE_DO: DurableObjectNamespace;
   LOBBY_COORDINATOR: DurableObjectNamespace;
   PROFILE_DO: DurableObjectNamespace;
+  CACHE_DO: DurableObjectNamespace;
   
   // Queues
   TOURNAMENT_QUEUE: Queue;

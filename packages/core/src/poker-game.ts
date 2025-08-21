@@ -16,6 +16,7 @@ import {
   GameRuleError,
   InvalidActionError,
   InsufficientFundsError,
+  assertNever,
 } from '@primo-poker/shared';
 import { Hand, HandEvaluation } from './hand-evaluator';
 
@@ -309,6 +310,10 @@ export class PokerGame implements IPokerGame {
         this.currentBets.set(playerId, (this.currentBets.get(playerId) || 0) + allInAmount);
         this.gameState.pot += allInAmount;
         break;
+        
+      default:
+        // TypeScript will error if any PlayerAction is not handled above
+        assertNever(action);
     }
 
     return {
@@ -377,6 +382,13 @@ export class PokerGame implements IPokerGame {
       case GamePhase.RIVER:
         this.gameState.phase = GamePhase.SHOWDOWN;
         break;
+      case GamePhase.WAITING:
+      case GamePhase.SHOWDOWN:
+      case GamePhase.FINISHED:
+        // These phases should not trigger dealing of community cards
+        throw new GameRuleError(`Cannot deal community cards in ${this.gameState.phase} phase`);
+      default:
+        assertNever(this.gameState.phase);
     }
 
     // Reset betting for new round

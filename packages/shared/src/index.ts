@@ -4,6 +4,7 @@ export * from './error-handling';
 export * from './websocket-utils';
 export * from './chat-moderation';
 export * from './types/statistics';
+export * from './utils/exhaustive-check';
 
 // Re-export commonly used items for convenience
 export {

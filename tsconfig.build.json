@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/types" },
     { "path": "./packages/shared" },
     { "path": "./packages/security" },
     { "path": "./packages/core" },

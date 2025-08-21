@@ -6,12 +6,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Building packages in dependency order..."
 
+# Generate types from Zod schemas first
+echo "Generating types from Zod schemas..."
+cd "$ROOT_DIR" && node scripts/generate-types-from-zod.ts
+
 # Clean any stale dist directories
 echo "Cleaning stale dist directories..."
 find "$ROOT_DIR/packages" -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
 find "$ROOT_DIR/packages" -name "tsconfig.tsbuildinfo" -type f -exec rm {} + 2>/dev/null || true
 
-# Build shared first
+# Build types first (no dependencies)
+echo "Building @primo-poker/types..."
+(cd "$ROOT_DIR/packages/types" && npx tsc)
+
+# Build shared (depends on types)
 echo "Building @primo-poker/shared..."
 (cd "$ROOT_DIR/packages/shared" && npx tsc)
 

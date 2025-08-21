@@ -6,3 +6,4 @@ export * from './idempotency';
 export * from './performance-monitor';
 export * from './rate-limiter';
 export * from './request-coalescer';
+export * from './response-validator';

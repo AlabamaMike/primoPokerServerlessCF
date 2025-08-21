@@ -32,6 +32,7 @@ import {
 } from './validation/wallet-schemas';
 import { walletRateLimiter } from './middleware/rate-limiter';
 import { IdempotencyManager } from './middleware/idempotency';
+import { openAPIRoute } from './routes/openapi';
 
 // Extended request interface with authentication
 interface AuthenticatedRequest extends IRequest {
@@ -116,6 +117,11 @@ export class PokerAPIRoutes {
     // Performance metrics routes
     const metricsRoutes = createMetricsRoutes();
     this.router.all('/api/metrics/*', metricsRoutes.handle);
+
+    // OpenAPI documentation routes
+    this.router.get('/api/openapi.json', openAPIRoute.handleGetOpenAPIJson.bind(openAPIRoute));
+    this.router.get('/api/docs', openAPIRoute.handleGetSwaggerUI.bind(openAPIRoute));
+    this.router.get('/api/redoc', openAPIRoute.handleGetReDoc.bind(openAPIRoute));
 
     // CORS preflight handler - more specific patterns first
     this.router.options('/api/*', this.handleOptionsRequest.bind(this));

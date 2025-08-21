@@ -58,3 +58,8 @@ export type { CoalescingOptions } from './middleware/request-coalescer';
 // Enhanced Idempotency exports  
 export { idempotencyManager, createIdempotencyManager, withIdempotency } from './middleware/idempotency';
 export type { IdempotencyOptions } from './middleware/idempotency';
+
+// OpenAPI Documentation exports
+export * from './openapi';
+export { OpenAPIGenerator, generateOpenAPISpec, createApiResponseSchema, createPaginatedResponseSchema } from './openapi';
+export type { OpenAPIV3 } from './openapi';

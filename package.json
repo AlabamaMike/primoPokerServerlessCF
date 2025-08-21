@@ -40,6 +40,7 @@
     "ci:build": "npm run build",
     "ci:test": "npm run test:ci && npm run test:e2e:ci",
     "ci:deploy": "npm run deploy:all",
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
     "prepare": "husky install"
   },
   "devDependencies": {

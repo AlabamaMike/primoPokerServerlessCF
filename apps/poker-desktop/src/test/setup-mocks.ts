@@ -27,6 +27,7 @@ class TestPerformanceMonitor {
   private testStartTime: number = 0;
   private apiCallCount: number = 0;
   private wsMessageCount: number = 0;
+  private maxMetricsSize: number = 100;
 
   startTest(testName: string) {
     this.currentTest = testName;
@@ -56,6 +57,12 @@ class TestPerformanceMonitor {
       webSocketMessages: this.wsMessageCount,
       memoryUsed
     });
+
+    // Prevent memory leaks by limiting metrics size
+    if (this.metrics.size > this.maxMetricsSize) {
+      const oldestKey = Array.from(this.metrics.keys())[0];
+      this.metrics.delete(oldestKey);
+    }
 
     this.currentTest = null;
   }
@@ -280,6 +287,7 @@ export const testUtils = {
         return (event: MessageEvent) => {
           const data = JSON.parse(event.data);
           messages.push(data);
+          testPerformanceMonitor.recordWebSocketMessage();
           handler(data);
         };
       },
@@ -316,12 +324,13 @@ export const testUtils = {
     operations: (() => Promise<T>)[],
     maxConcurrent: number = 10
   ): Promise<T[]> {
-    const results: T[] = [];
+    const results: (T | undefined)[] = new Array(operations.length);
     const executing: Promise<void>[] = [];
 
-    for (const operation of operations) {
-      const promise = operation().then(result => {
-        results.push(result);
+    for (let i = 0; i < operations.length; i++) {
+      const index = i;
+      const promise = operations[index]().then(result => {
+        results[index] = result;
       });
 
       executing.push(promise);
@@ -333,7 +342,7 @@ export const testUtils = {
     }
 
     await Promise.all(executing);
-    return results;
+    return results.filter((r): r is T => r !== undefined);
   }
 };
 

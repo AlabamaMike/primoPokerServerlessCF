@@ -853,4 +853,178 @@ describe('Lobby WebSocket Integration', () => {
       expect(waitlistStates.get('table-2')).toBe(5);
     });
   });
+
+  describe('Error Recovery Scenarios', () => {
+    it('should handle WebSocket disconnection gracefully', async () => {
+      const messages: any[] = [];
+      const reconnectAttempts: number[] = [];
+      let connectionCount = 0;
+
+      // Track connection attempts
+      const originalConnect = client.connect;
+      client.connect = function(...args: any[]) {
+        connectionCount++;
+        if (connectionCount > 1) {
+          reconnectAttempts.push(Date.now());
+        }
+        return originalConnect.apply(client, args);
+      };
+
+      await client.connect();
+      
+      client.onmessage((event) => {
+        messages.push(JSON.parse(event.data));
+      });
+
+      // Send initial data
+      server.broadcast({
+        type: 'table_update',
+        payload: { tableId: 'table-1', players: 5 }
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(messages).toHaveLength(1);
+
+      // Simulate disconnect
+      server.simulateDisconnect(client.id);
+      
+      // Wait for reconnection attempt
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Verify reconnection was attempted
+      expect(reconnectAttempts.length).toBeGreaterThan(0);
+      
+      // Send data after reconnect
+      server.broadcast({
+        type: 'table_update',
+        payload: { tableId: 'table-2', players: 3 }
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Should receive new messages after reconnection
+      const postReconnectMessages = messages.filter(m => 
+        m.payload?.tableId === 'table-2'
+      );
+      expect(postReconnectMessages).toHaveLength(1);
+    });
+
+    it('should recover from partial message corruption', async () => {
+      const messages: any[] = [];
+      const errors: any[] = [];
+
+      client.onmessage((event) => {
+        try {
+          const message = JSON.parse(event.data);
+          messages.push(message);
+        } catch (error) {
+          errors.push(error);
+        }
+      });
+
+      await client.connect();
+
+      // Send valid message
+      server.send(client.id, JSON.stringify({
+        type: 'table_update',
+        payload: { tableId: 'table-1', players: 4 }
+      }));
+
+      // Send corrupted message (invalid JSON)
+      server.send(client.id, '{"type":"table_update","payload":{corrupted');
+
+      // Send another valid message
+      server.send(client.id, JSON.stringify({
+        type: 'table_update',
+        payload: { tableId: 'table-2', players: 6 }
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should have received 2 valid messages
+      expect(messages).toHaveLength(2);
+      expect(messages[0].payload.tableId).toBe('table-1');
+      expect(messages[1].payload.tableId).toBe('table-2');
+      
+      // Should have captured 1 error
+      expect(errors).toHaveLength(1);
+    });
+
+    it('should handle rapid disconnection/reconnection cycles', async () => {
+      const connectionStates: string[] = [];
+      
+      client.onopen(() => connectionStates.push('connected'));
+      client.onclose(() => connectionStates.push('disconnected'));
+
+      await client.connect();
+      
+      // Rapid disconnect/reconnect cycles
+      for (let i = 0; i < 3; i++) {
+        server.simulateDisconnect(client.id);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        await client.connect();
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Verify connection state transitions
+      const connectedCount = connectionStates.filter(s => s === 'connected').length;
+      const disconnectedCount = connectionStates.filter(s => s === 'disconnected').length;
+      
+      expect(connectedCount).toBeGreaterThanOrEqual(3);
+      expect(disconnectedCount).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should queue messages during disconnection', async () => {
+      const messages: any[] = [];
+      const queuedMessages: any[] = [];
+
+      // Override send to track queued messages
+      const originalSend = client.send;
+      client.send = function(data: string) {
+        if (this.readyState !== WebSocket.OPEN) {
+          queuedMessages.push(data);
+          return;
+        }
+        return originalSend.call(this, data);
+      };
+
+      client.onmessage((event) => {
+        messages.push(JSON.parse(event.data));
+      });
+
+      await client.connect();
+
+      // Simulate disconnect
+      server.simulateDisconnect(client.id);
+
+      // Try to send messages while disconnected
+      client.send(JSON.stringify({ type: 'chat', message: 'Hello' }));
+      client.send(JSON.stringify({ type: 'action', action: 'fold' }));
+
+      expect(queuedMessages).toHaveLength(2);
+
+      // Reconnect
+      await client.connect();
+
+      // Verify queued messages can be sent after reconnection
+      queuedMessages.forEach(msg => {
+        client.send(msg);
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Server should acknowledge receipt
+      server.broadcast({
+        type: 'messages_received',
+        count: 2
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      const ackMessage = messages.find(m => m.type === 'messages_received');
+      expect(ackMessage).toBeDefined();
+      expect(ackMessage.count).toBe(2);
+    });
+  });
 });

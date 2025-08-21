@@ -36,6 +36,7 @@
       "@primo-poker/api": ["./packages/api/src"],
       "@primo-poker/persistence": ["./packages/persistence/src"],
       "@primo-poker/security": ["./packages/security/src"],
+      "@primo-poker/security-middleware": ["./packages/security-middleware/src"],
       "@primo-poker/shared": ["./packages/shared/src"],
       "@primo-poker/logging": ["./packages/logging/src"]
     }
@@ -55,6 +56,7 @@
     { "path": "./packages/logging" },
     { "path": "./packages/core" },
     { "path": "./packages/security" },
+    { "path": "./packages/security-middleware" },
     { "path": "./packages/persistence" },
     { "path": "./packages/api" },
     { "path": "./apps/poker-server" }

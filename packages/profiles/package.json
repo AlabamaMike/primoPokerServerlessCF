@@ -10,8 +10,8 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@primo-poker/shared": "workspace:*",
-    "@primo-poker/core": "workspace:*"
+    "@primo-poker/shared": "^1.0.0",
+    "@primo-poker/core": "^1.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",

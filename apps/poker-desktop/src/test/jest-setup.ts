@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
+import './setup-phase2-mocks';
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {

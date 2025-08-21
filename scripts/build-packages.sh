@@ -15,7 +15,11 @@ echo "Cleaning stale dist directories..."
 find "$ROOT_DIR/packages" -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
 find "$ROOT_DIR/packages" -name "tsconfig.tsbuildinfo" -type f -exec rm {} + 2>/dev/null || true
 
-# Build shared first
+# Build types first (no dependencies)
+echo "Building @primo-poker/types..."
+(cd "$ROOT_DIR/packages/types" && npx tsc)
+
+# Build shared (depends on types)
 echo "Building @primo-poker/shared..."
 (cd "$ROOT_DIR/packages/shared" && npx tsc)
 

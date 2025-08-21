@@ -9,6 +9,7 @@
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "src/websocket-unified.ts"],
   "references": [
+    { "path": "../types" },
     { "path": "../shared" },
     { "path": "../core" },
     { "path": "../security" },

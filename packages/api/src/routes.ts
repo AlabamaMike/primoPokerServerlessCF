@@ -86,10 +86,9 @@ export class PokerAPIRoutes {
     this.router.get('/api/games/:gameId', this.authenticateRequest.bind(this), this.handleGetGame.bind(this));
     this.router.get('/api/games/:gameId/history', this.authenticateRequest.bind(this), this.handleGetGameHistory.bind(this));
 
-    // Tournament routes
-    this.router.get('/api/tournaments', this.handleGetTournaments.bind(this));
-    this.router.post('/api/tournaments', this.authenticateRequest.bind(this), this.handleCreateTournament.bind(this));
-    this.router.post('/api/tournaments/:tournamentId/register', this.authenticateRequest.bind(this), this.handleRegisterTournament.bind(this));
+    // Tournament routes - mount the sub-router
+    const { tournamentRoutes } = await import('./routes/tournaments');
+    this.router.all('/api/tournaments/*', tournamentRoutes.getRouter().handle);
 
     // Lobby routes
     this.router.get('/api/lobby/tables', this.handleGetLobbyTables.bind(this));
@@ -740,30 +739,6 @@ export class PokerAPIRoutes {
     return this.successResponse({ gameId, history: [] });
   }
 
-  // Tournament handlers
-  private async handleGetTournaments(request: AuthenticatedRequest): Promise<Response> {
-    // Implementation would fetch tournaments from database
-    return this.successResponse([]);
-  }
-
-  private async handleCreateTournament(request: AuthenticatedRequest): Promise<Response> {
-    if (!request.user) {
-      return this.errorResponse('Not authenticated', 401);
-    }
-
-    // Implementation would create tournament
-    return this.successResponse({ message: 'Tournament creation not implemented' });
-  }
-
-  private async handleRegisterTournament(request: AuthenticatedRequest): Promise<Response> {
-    const tournamentId = request.params?.tournamentId;
-    if (!tournamentId || !request.user) {
-      return this.errorResponse('Tournament ID and authentication required', 400);
-    }
-
-    // Implementation would register player for tournament
-    return this.successResponse({ message: 'Tournament registration not implemented' });
-  }
 
   // Lobby handlers
   private async handleGetLobbyTables(request: AuthenticatedRequest): Promise<Response> {

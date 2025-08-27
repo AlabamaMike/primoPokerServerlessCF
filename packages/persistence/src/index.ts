@@ -129,3 +129,12 @@ export { DeltaUpdateGenerator } from './delta-update-generator';
 export type { JsonPatchOperation } from './delta-update-generator';
 export { LobbyBroadcastManager } from './lobby-broadcast-manager';
 export type { BroadcastConfig, LobbyUpdateMessage } from './lobby-broadcast-manager';
+
+// Tournament coordinator exports
+export { TournamentCoordinator } from './durable-objects/tournament-coordinator';
+export type {
+  TournamentConfig,
+  TableInfo,
+  TournamentPlayer,
+  TournamentData
+} from './durable-objects/tournament-coordinator';

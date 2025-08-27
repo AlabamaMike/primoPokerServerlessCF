@@ -63,3 +63,23 @@ export type { LogContext, LogEntry } from './utils/logger';
 // Error reporting
 export { ErrorReporter, errorReporter } from './utils/error-reporter';
 export type { ErrorReport, ErrorReporterOptions } from './utils/error-reporter';
+
+// Table balancing
+export { TableBalancer, BalancingStrategy } from './table-balancer';
+export type {
+  TableState,
+  PlayerInfo,
+  PlayerMove,
+  ConsolidationResult,
+  FinalTableCheckResult,
+  FinalTableSeat
+} from './table-balancer';
+
+// Tournament management
+export { TournamentManager } from './tournament-manager';
+export type {
+  TournamentCreateConfig,
+  BlindStructure,
+  PayoutStructure,
+  TournamentResult
+} from './tournament-manager';

@@ -9,7 +9,8 @@ export const DepositRequestSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
   method: z.enum(['credit_card', 'bank'], {
     errorMap: () => ({ message: 'Invalid payment method. Must be credit_card or bank' })
-  })
+  }),
+  idempotencyKey: z.string().min(1).max(128).optional()
 });
 
 // Withdraw request schema
@@ -17,13 +18,29 @@ export const WithdrawRequestSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
   method: z.enum(['bank', 'check'], {
     errorMap: () => ({ message: 'Invalid withdrawal method. Must be bank or check' })
-  })
+  }),
+  idempotencyKey: z.string().min(1).max(128).optional()
 });
 
 // Transfer request schema
 export const TransferRequestSchema = z.object({
   to_table_id: z.string().min(1, 'Table ID is required'),
-  amount: z.number().positive('Amount must be positive')
+  amount: z.number().positive('Amount must be positive'),
+  idempotencyKey: z.string().min(1).max(128).optional()
+});
+
+// Buy-in request schema
+export const BuyInRequestSchema = z.object({
+  tableId: z.string().min(1, 'Table ID is required'),
+  amount: z.number().positive('Amount must be positive'),
+  idempotencyKey: z.string().min(1).max(128).optional()
+});
+
+// Cash-out request schema
+export const CashOutRequestSchema = z.object({
+  tableId: z.string().min(1, 'Table ID is required'),
+  chipAmount: z.number().positive('Chip amount must be positive'),
+  idempotencyKey: z.string().min(1).max(128).optional()
 });
 
 // Transaction query params schema

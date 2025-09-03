@@ -49,11 +49,21 @@ export const TransactionQuerySchema = z.object({
   cursor: z.string().optional()
 });
 
+// Audit log query params schema
+export const AuditLogQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).default(100).optional(),
+  page: z.coerce.number().min(1).default(1).optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  daysBack: z.coerce.number().min(1).max(90).default(30).optional()
+});
+
 // Type exports
 export type DepositRequest = z.infer<typeof DepositRequestSchema>;
 export type WithdrawRequest = z.infer<typeof WithdrawRequestSchema>;
 export type TransferRequest = z.infer<typeof TransferRequestSchema>;
 export type TransactionQuery = z.infer<typeof TransactionQuerySchema>;
+export type AuditLogQuery = z.infer<typeof AuditLogQuerySchema>;
 
 /**
  * Helper to validate request body with Zod schema

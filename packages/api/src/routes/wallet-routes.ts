@@ -30,6 +30,7 @@ import {
   BuyInRequestSchema,
   CashOutRequestSchema,
   TransactionQuerySchema,
+  AuditLogQuerySchema,
   validateRequestBody,
   validateQueryParams
 } from '../validation/wallet-schemas';
@@ -958,7 +959,7 @@ export class WalletRoutes {
   }
 
   /**
-   * Get audit logs for the authenticated user
+   * Get audit logs for the authenticated user with time restrictions and pagination
    */
   private async handleGetAuditLogs(request: AuthenticatedRequest): Promise<Response> {
     try {
@@ -973,13 +974,67 @@ export class WalletRoutes {
       }
 
       const url = new URL(request.url);
-      const limit = parseInt(url.searchParams.get('limit') || '100');
+      const validation = validateQueryParams(AuditLogQuerySchema, url.searchParams);
+      
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
 
-      const logs = await this.auditLogger.queryByUser(request.user.userId, limit);
+      const { limit = 100, page = 1, startDate, endDate, daysBack = 30 } = validation.data;
+
+      // Calculate date range
+      let queryStartDate: Date;
+      let queryEndDate: Date = new Date();
+
+      if (startDate && endDate) {
+        // If both dates provided, validate the range
+        queryStartDate = new Date(startDate);
+        queryEndDate = new Date(endDate);
+        
+        // Enforce maximum 90-day range
+        const rangeInDays = (queryEndDate.getTime() - queryStartDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (rangeInDays > 90) {
+          return this.errorResponse('Date range cannot exceed 90 days', 400);
+        }
+      } else if (startDate) {
+        // If only start date provided, use it with max 90 days forward
+        queryStartDate = new Date(startDate);
+        const maxEndDate = new Date(queryStartDate);
+        maxEndDate.setDate(maxEndDate.getDate() + 90);
+        queryEndDate = new Date() < maxEndDate ? new Date() : maxEndDate;
+      } else {
+        // Default: use daysBack parameter (default 30 days)
+        queryStartDate = new Date();
+        queryStartDate.setDate(queryStartDate.getDate() - daysBack);
+      }
+
+      // Ensure start date is not more than 90 days ago
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      if (queryStartDate < ninetyDaysAgo) {
+        queryStartDate = ninetyDaysAgo;
+      }
+
+      const result = await this.auditLogger.queryByUser(request.user.userId, {
+        limit,
+        page,
+        startDate: queryStartDate,
+        endDate: queryEndDate
+      });
 
       return this.successResponse({
-        logs,
-        count: logs.length
+        logs: result.logs,
+        pagination: {
+          page,
+          limit,
+          totalCount: result.totalCount,
+          totalPages: Math.ceil(result.totalCount / limit),
+          hasMore: result.hasMore
+        },
+        dateRange: {
+          startDate: queryStartDate.toISOString(),
+          endDate: queryEndDate.toISOString()
+        }
       }, request.rateLimitInfo);
     } catch (error) {
       logger.error('Get audit logs error', error as Error);

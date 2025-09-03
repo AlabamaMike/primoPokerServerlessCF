@@ -85,38 +85,82 @@ export class AuditLogger {
   }
 
   /**
-   * Query audit logs by user ID
+   * Query audit logs by user ID with pagination and date filtering
    */
-  async queryByUser(userId: string, limit: number = 100): Promise<AuditLogEntry[]> {
+  async queryByUser(
+    userId: string, 
+    options: {
+      limit?: number;
+      page?: number;
+      startDate?: Date;
+      endDate?: Date;
+    } = {}
+  ): Promise<{ logs: AuditLogEntry[]; totalCount: number; hasMore: boolean }> {
     if (!this.kv) {
-      return [];
+      return { logs: [], totalCount: 0, hasMore: false };
     }
 
+    const { 
+      limit = 100, 
+      page = 1,
+      startDate,
+      endDate = new Date()
+    } = options;
+
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
     try {
-      // List all audit keys (this is simplified - in production you'd want pagination)
+      // List all audit keys
       const list = await this.kv.list({ prefix: 'audit:wallet:' });
-      const entries: AuditLogEntry[] = [];
+      const allUserEntries: AuditLogEntry[] = [];
 
       // Fetch and filter logs
       for (const key of list.keys) {
-        const data = await this.kv.get(key.name, { type: 'json' }) as AuditLogEntry[];
-        if (data) {
-          const userLogs = data.filter(log => log.userId === userId);
-          entries.push(...userLogs);
+        // Extract timestamp from key
+        const keyTimestamp = parseInt(key.name.split(':')[2]);
+        
+        // Skip if outside date range
+        if (startDate && keyTimestamp < startDate.getTime()) {
+          continue;
+        }
+        if (endDate && keyTimestamp > endDate.getTime()) {
+          continue;
         }
 
-        if (entries.length >= limit) {
-          break;
+        const data = await this.kv.get(key.name, { type: 'json' }) as AuditLogEntry[];
+        if (data) {
+          const userLogs = data.filter(log => {
+            // Filter by user ID
+            if (log.userId !== userId) return false;
+            
+            // Additional date filtering on individual entries
+            if (startDate && log.timestamp < startDate.getTime()) return false;
+            if (endDate && log.timestamp > endDate.getTime()) return false;
+            
+            return true;
+          });
+          allUserEntries.push(...userLogs);
         }
       }
 
-      // Sort by timestamp descending and limit
-      return entries
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, limit);
+      // Sort by timestamp descending
+      allUserEntries.sort((a, b) => b.timestamp - a.timestamp);
+
+      // Calculate total count before pagination
+      const totalCount = allUserEntries.length;
+
+      // Apply pagination
+      const paginatedEntries = allUserEntries.slice(offset, offset + limit);
+
+      return {
+        logs: paginatedEntries,
+        totalCount,
+        hasMore: (offset + limit) < totalCount
+      };
     } catch (error) {
       logger.error('Failed to query audit logs', error as Error);
-      return [];
+      return { logs: [], totalCount: 0, hasMore: false };
     }
   }
 

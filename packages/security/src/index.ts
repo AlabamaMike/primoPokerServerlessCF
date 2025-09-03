@@ -43,6 +43,7 @@ export * from './middleware/rate-limiter';
 export * from './middleware/csrf';
 export * from './middleware/request-signing';
 export * from './middleware/security-headers';
+export * from './middleware/performance-wrapper';
 
 // Audit logging exports
 export * from './audit/logger';

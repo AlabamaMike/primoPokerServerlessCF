@@ -32,13 +32,13 @@ describe('CSRF Protection', () => {
       const { token } = await csrf.generateToken();
       
       // Valid token
-      expect(await csrf.validateToken(token, undefined, token)).toBe(true);
+      expect(await csrf.validateToken(token, undefined, token, undefined)).toBe(true);
       
       // Invalid token
-      expect(await csrf.validateToken('invalid-token', undefined, token)).toBe(false);
+      expect(await csrf.validateToken('invalid-token', undefined, token, undefined)).toBe(false);
       
       // Missing token
-      expect(await csrf.validateToken('', undefined, token)).toBe(false);
+      expect(await csrf.validateToken('', undefined, token, undefined)).toBe(false);
     });
 
     describe('middleware', () => {

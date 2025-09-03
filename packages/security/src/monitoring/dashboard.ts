@@ -1,6 +1,7 @@
 import { Context } from '@cloudflare/workers-types';
 import { SecurityAuditLogger, AuditEventType, AuditSeverity } from '../audit/logger';
 import { TokenBucketRateLimiter } from '../middleware/rate-limiter';
+import { PerformanceCollector, PerformanceSummaryAggregator } from '../middleware/performance-wrapper';
 
 /**
  * Security Monitoring Dashboard
@@ -14,7 +15,7 @@ export interface SecurityMetrics {
     failedLogins: number;
     registrations: number;
     passwordResets: number;
-    activeSeions: number;
+    activeSessions: number;
   };
   rateLimiting: {
     totalRequests: number;
@@ -121,7 +122,7 @@ export class SecurityMonitoringDashboard {
         failedLogins: 0,
         registrations: 0,
         passwordResets: 0,
-        activeSeions: 0
+        activeSessions: 0
       },
       rateLimiting: {
         totalRequests: 0,
@@ -480,6 +481,202 @@ export class SecurityMonitoringDashboard {
   }
 
   /**
+   * Get authentication-specific metrics
+   */
+  async getAuthenticationMetrics(): Promise<Response> {
+    const metrics = await this.collectMetrics();
+    
+    return new Response(JSON.stringify({
+      metrics: metrics.authentication,
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Get threat-specific metrics
+   */
+  async getThreatMetrics(): Promise<Response> {
+    const metrics = await this.collectMetrics();
+    const alerts = await this.getActiveAlerts();
+    
+    return new Response(JSON.stringify({
+      metrics: metrics.threats,
+      activeAlerts: alerts.length,
+      alertsByType: this.groupAlertsByType(alerts),
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Get rate limiting metrics
+   */
+  async getRateLimitMetrics(): Promise<Response> {
+    const metrics = await this.collectMetrics();
+    
+    return new Response(JSON.stringify({
+      metrics: metrics.rateLimiting,
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Get financial transaction metrics
+   */
+  async getFinancialMetrics(): Promise<Response> {
+    const metrics = await this.collectMetrics();
+    
+    return new Response(JSON.stringify({
+      metrics: metrics.financial,
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Get performance metrics from collector
+   */
+  async getPerformanceMetrics(collector: PerformanceCollector): Promise<Response> {
+    const aggregator = new PerformanceSummaryAggregator(collector);
+    const summary = await aggregator.getPerformanceSummary();
+    
+    return new Response(JSON.stringify({
+      performance: summary,
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Get all alerts as JSON
+   */
+  async getAlertsJson(): Promise<Response> {
+    const alertsList = await this.config.kvNamespace.list({
+      prefix: 'alert:',
+      limit: 1000
+    });
+
+    const alerts: ThreatAlert[] = [];
+    
+    for (const key of alertsList.keys) {
+      const alert = await this.config.kvNamespace.get(key.name, 'json') as ThreatAlert | null;
+      if (alert) {
+        alerts.push(alert);
+      }
+    }
+
+    return new Response(JSON.stringify({
+      alerts: alerts.sort((a, b) => b.timestamp - a.timestamp),
+      total: alerts.length,
+      active: alerts.filter(a => a.status === 'active').length,
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Get active alerts as JSON
+   */
+  async getActiveAlertsJson(): Promise<Response> {
+    const alerts = await this.getActiveAlerts();
+    
+    return new Response(JSON.stringify({
+      alerts,
+      total: alerts.length,
+      byType: this.groupAlertsByType(alerts),
+      timestamp: Date.now()
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  /**
+   * Resolve an alert
+   */
+  async resolveAlert(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { alertId: string; resolution?: string };
+      
+      if (!body.alertId) {
+        return new Response('Alert ID required', { status: 400 });
+      }
+
+      const alertKey = `alert:active:${body.alertId}`;
+      const alert = await this.config.kvNamespace.get(alertKey, 'json') as ThreatAlert | null;
+      
+      if (!alert) {
+        return new Response('Alert not found', { status: 404 });
+      }
+
+      // Update alert status
+      alert.status = 'resolved';
+      alert.metadata.resolution = body.resolution || 'Manually resolved';
+      alert.metadata.resolvedAt = Date.now();
+
+      // Move to resolved alerts
+      await this.config.kvNamespace.put(
+        `alert:resolved:${alert.id}`,
+        JSON.stringify(alert),
+        { expirationTtl: 604800 } // 7 days
+      );
+
+      // Remove from active alerts
+      await this.config.kvNamespace.delete(alertKey);
+      this.activeAlerts.delete(alert.id);
+
+      // Log resolution
+      await this.config.auditLogger.log(
+        AuditEventType.SUSPICIOUS_ACTIVITY,
+        AuditSeverity.INFO,
+        {
+          action: 'alert_resolved',
+          alertId: alert.id,
+          alertType: alert.type,
+          resolution: body.resolution
+        }
+      );
+
+      return new Response(JSON.stringify({
+        success: true,
+        alert
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response('Invalid request', { status: 400 });
+    }
+  }
+
+  /**
    * WebSocket handler for real-time updates
    */
   async handleWebSocket(request: Request): Promise<Response> {
@@ -530,6 +727,22 @@ export class SecurityMonitoringDashboard {
       status: 101,
       webSocket: client
     });
+  }
+
+  /**
+   * Group alerts by type
+   */
+  private groupAlertsByType(alerts: ThreatAlert[]): Record<string, number> {
+    const grouped: Record<string, number> = {};
+    
+    for (const alert of alerts) {
+      if (!grouped[alert.type]) {
+        grouped[alert.type] = 0;
+      }
+      grouped[alert.type]++;
+    }
+    
+    return grouped;
   }
 
   /**
@@ -627,6 +840,7 @@ export function createSecurityDashboardRouter(
   options?: {
     basePath?: string;
     requireAuth?: (request: Request) => Promise<boolean>;
+    performanceCollector?: PerformanceCollector;
   }
 ) {
   const basePath = options?.basePath || '/security';
@@ -656,6 +870,36 @@ export function createSecurityDashboardRouter(
       
       case '/api/metrics':
         return dashboard.getMetricsJson();
+      
+      case '/api/metrics/authentication':
+        return dashboard.getAuthenticationMetrics();
+      
+      case '/api/metrics/threats':
+        return dashboard.getThreatMetrics();
+      
+      case '/api/metrics/rate-limiting':
+        return dashboard.getRateLimitMetrics();
+      
+      case '/api/metrics/financial':
+        return dashboard.getFinancialMetrics();
+      
+      case '/api/metrics/performance':
+        if (options?.performanceCollector) {
+          return dashboard.getPerformanceMetrics(options.performanceCollector);
+        }
+        return new Response('Performance collector not configured', { status: 501 });
+      
+      case '/api/alerts':
+        return dashboard.getAlertsJson();
+      
+      case '/api/alerts/active':
+        return dashboard.getActiveAlertsJson();
+      
+      case '/api/alerts/resolve':
+        if (request.method === 'POST') {
+          return dashboard.resolveAlert(request);
+        }
+        return new Response('Method not allowed', { status: 405 });
       
       case '/ws':
         return dashboard.handleWebSocket(request);

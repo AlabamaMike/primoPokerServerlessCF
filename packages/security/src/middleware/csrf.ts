@@ -41,13 +41,13 @@ export class CsrfProtection {
   /**
    * Generate a new CSRF token
    */
-  async generateToken(sessionId?: string): Promise<CsrfToken> {
+  async generateToken(sessionId?: string, kv?: KVNamespace): Promise<CsrfToken> {
     const expiresAt = Date.now() + (this.config.tokenLifetime * 1000);
     let token: string;
 
     switch (this.config.strategy) {
       case CsrfStrategy.SYNCHRONIZER_TOKEN:
-        token = await this.generateSynchronizerToken(sessionId || this.generateSessionId());
+        token = await this.generateSynchronizerToken(sessionId || this.generateSessionId(), kv);
         break;
       
       case CsrfStrategy.DOUBLE_SUBMIT:
@@ -71,13 +71,14 @@ export class CsrfProtection {
   async validateToken(
     token: string,
     sessionId?: string,
-    cookieToken?: string
+    cookieToken?: string,
+    kv?: KVNamespace
   ): Promise<boolean> {
     if (!token) return false;
 
     switch (this.config.strategy) {
       case CsrfStrategy.SYNCHRONIZER_TOKEN:
-        return await this.validateSynchronizerToken(token, sessionId || '');
+        return await this.validateSynchronizerToken(token, sessionId || '', kv);
       
       case CsrfStrategy.DOUBLE_SUBMIT:
         return token === cookieToken;
@@ -121,21 +122,17 @@ export class CsrfProtection {
       const cookies = this.parseCookies(request.headers.get('Cookie') || '');
       const cookieToken = cookies[this.config.cookieName];
 
-      // Validate token
+      // For synchronizer tokens, pass KV namespace to validation
       const isValid = await this.validateToken(
         headerToken || '',
         ctx.sessionId,
-        cookieToken
+        cookieToken,
+        options?.kv
       );
 
       if (!isValid) {
         const errorResponse = options?.onError || this.defaultErrorResponse;
         return errorResponse('CSRF token validation failed');
-      }
-
-      // For synchronizer tokens, store the token if using KV
-      if (this.config.strategy === CsrfStrategy.SYNCHRONIZER_TOKEN && options?.kv) {
-        // Implementation would store/retrieve tokens from KV
       }
 
       return next();
@@ -147,9 +144,10 @@ export class CsrfProtection {
    */
   async addTokenToResponse(
     response: Response,
-    sessionId?: string
+    sessionId?: string,
+    kv?: KVNamespace
   ): Promise<Response> {
-    const { token, expiresAt } = await this.generateToken(sessionId);
+    const { token, expiresAt } = await this.generateToken(sessionId, kv);
     const newResponse = new Response(response.body, response);
 
     // Add token to response header
@@ -167,11 +165,25 @@ export class CsrfProtection {
   /**
    * Private helper methods
    */
-  private async generateSynchronizerToken(sessionId: string): Promise<string> {
+  private async generateSynchronizerToken(sessionId: string, kv?: KVNamespace): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(`${sessionId}:${Date.now()}:${Math.random()}`);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return this.bufferToHex(hashBuffer);
+    const token = this.bufferToHex(hashBuffer);
+    
+    // Store token in KV if available
+    if (kv) {
+      await kv.put(
+        `csrf:${sessionId}:${token}`,
+        JSON.stringify({ 
+          expiresAt: Date.now() + (this.config.tokenLifetime * 1000),
+          sessionId 
+        }),
+        { expirationTtl: this.config.tokenLifetime }
+      );
+    }
+    
+    return token;
   }
 
   private async generateRandomToken(): Promise<string> {
@@ -226,11 +238,40 @@ export class CsrfProtection {
 
   private async validateSynchronizerToken(
     token: string,
-    sessionId: string
+    sessionId: string,
+    kv?: KVNamespace
   ): Promise<boolean> {
-    // In a real implementation, this would check against stored tokens
-    // For now, we'll just validate the format
-    return /^[a-f0-9]{64}$/.test(token);
+    // Validate token format
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+      return false;
+    }
+
+    // If no KV namespace provided, only validate format
+    if (!kv) {
+      return true;
+    }
+
+    // Check if token exists and is valid in KV
+    try {
+      const storedData = await kv.get(`csrf:${sessionId}:${token}`, 'json') as { expiresAt: number; sessionId: string } | null;
+      
+      if (!storedData) {
+        return false;
+      }
+
+      // Check if token is expired
+      if (storedData.expiresAt < Date.now()) {
+        // Clean up expired token
+        await kv.delete(`csrf:${sessionId}:${token}`);
+        return false;
+      }
+
+      // Validate session ID matches
+      return storedData.sessionId === sessionId;
+    } catch (error) {
+      console.error('Error validating CSRF token:', error);
+      return false;
+    }
   }
 
   private async validateEncryptedToken(token: string): Promise<boolean> {

@@ -591,10 +591,8 @@ export class WalletRoutes {
       
       // Check cache first
       if (this.cacheService) {
-        const cachedWallets = await this.cacheService.getBatchWallets(body.playerIds);
+        const cachedWallets = await this.cacheService.getBatchWallets(playerIds);
         
-        // Update body.playerIds to use sanitized playerIds
-        body.playerIds = playerIds;
         
         for (const [playerId, wallet] of cachedWallets) {
           if (wallet) {
@@ -607,7 +605,7 @@ export class WalletRoutes {
           }
         }
       } else {
-        uncachedIds.push(...body.playerIds);
+        uncachedIds.push(...playerIds);
       }
       
       // Fetch uncached wallets
@@ -633,7 +631,7 @@ export class WalletRoutes {
       return this.successResponse({
         wallets: results,
         cached: uncachedIds.length === 0,
-        total: body.playerIds.length
+        total: playerIds.length
       }, request.rateLimitInfo);
     } catch (error) {
       logger.error('Batch get balances error', error as Error);

@@ -19,6 +19,7 @@ import { WalletManager } from '@primo-poker/persistence';
 import { AuthenticationManager } from '@primo-poker/security';
 import { WalletCacheService } from '../services/wallet-cache';
 import { AuditLogger, AuditLogEntry } from '../services/audit-logger';
+import { IdempotencyService } from '../services/idempotency-service';
 import { enhancedWalletRateLimiter } from '../middleware/wallet-rate-limit';
 import { requireAdmin } from '../middleware/role-auth';
 import { requestSizeLimiter, safeJsonParse } from '../middleware/request-size-limit';
@@ -26,6 +27,8 @@ import {
   DepositRequestSchema,
   WithdrawRequestSchema,
   TransferRequestSchema,
+  BuyInRequestSchema,
+  CashOutRequestSchema,
   TransactionQuerySchema,
   validateRequestBody,
   validateQueryParams
@@ -53,6 +56,7 @@ export class WalletRoutes {
   private walletManager: WalletManager;
   private cacheService?: WalletCacheService;
   private auditLogger?: AuditLogger;
+  private idempotencyService?: IdempotencyService;
   private subscriptions: Map<string, Set<WebSocket>> = new Map();
   
   // Constants
@@ -111,6 +115,13 @@ export class WalletRoutes {
       
       if (!this.auditLogger) {
         this.auditLogger = new AuditLogger(env.KV);
+      }
+      
+      if (!this.idempotencyService) {
+        this.idempotencyService = new IdempotencyService(env.KV, {
+          ttlSeconds: 86400, // 24 hours
+          enableHashValidation: true
+        });
       }
     }
   }
@@ -212,7 +223,7 @@ export class WalletRoutes {
   }
 
   /**
-   * Handle deposit with optimistic updates
+   * Handle deposit with optimistic updates and idempotency
    */
   private async handleDeposit(request: AuthenticatedRequest): Promise<Response> {
     try {
@@ -228,6 +239,43 @@ export class WalletRoutes {
       }
 
       this.initializeServices(request.env!);
+
+      // Check idempotency if key provided
+      if (validation.data.idempotencyKey && this.idempotencyService) {
+        const idempotencyCheck = await this.idempotencyService.checkIdempotency(
+          validation.data.idempotencyKey,
+          request.user.userId,
+          'deposit',
+          validation.data
+        );
+
+        if (idempotencyCheck.exists && idempotencyCheck.record) {
+          logger.info('Idempotent request detected for deposit', {
+            userId: request.user.userId,
+            key: validation.data.idempotencyKey,
+            status: idempotencyCheck.record.status
+          });
+
+          // Return cached response
+          if (idempotencyCheck.record.status === 'completed') {
+            return this.successResponse(idempotencyCheck.record.response, request.rateLimitInfo);
+          } else if (idempotencyCheck.record.status === 'failed') {
+            return this.errorResponse(
+              idempotencyCheck.record.response?.error || 'Deposit failed',
+              400
+            );
+          }
+          // If pending, allow retry (could be a previous timeout)
+        }
+
+        // Store pending request
+        await this.idempotencyService.storePendingRequest(
+          validation.data.idempotencyKey,
+          request.user.userId,
+          'deposit',
+          validation.data
+        );
+      }
 
       // Record audit log
       await this.recordAuditLog(request, 'deposit', validation.data.amount, 'pending');
@@ -277,24 +325,58 @@ export class WalletRoutes {
 
       if (!result.success) {
         await this.recordAuditLog(request, 'deposit', validation.data.amount, 'failed');
+        
+        // Store failed response for idempotency
+        if (validation.data.idempotencyKey && this.idempotencyService) {
+          await this.idempotencyService.storeCompletedResponse(
+            validation.data.idempotencyKey,
+            request.user.userId,
+            { error: result.error || 'Deposit failed' },
+            'failed'
+          );
+        }
+        
         return this.errorResponse(result.error || 'Deposit failed', 400);
       }
 
       await this.recordAuditLog(request, 'deposit', validation.data.amount, 'success');
 
-      return this.successResponse({
+      const response = {
         success: true,
         newBalance: result.newBalance,
         transactionId: result.transactionId
-      }, request.rateLimitInfo);
+      };
+
+      // Store successful response for idempotency
+      if (validation.data.idempotencyKey && this.idempotencyService) {
+        await this.idempotencyService.storeCompletedResponse(
+          validation.data.idempotencyKey,
+          request.user.userId,
+          response,
+          'completed'
+        );
+      }
+
+      return this.successResponse(response, request.rateLimitInfo);
     } catch (error) {
       logger.error('Deposit error', error as Error);
+      
+      // Store error response for idempotency
+      if (validation.data?.idempotencyKey && this.idempotencyService) {
+        await this.idempotencyService.storeCompletedResponse(
+          validation.data.idempotencyKey,
+          request.user!.userId,
+          { error: 'Failed to process deposit' },
+          'failed'
+        );
+      }
+      
       return this.errorResponse('Failed to process deposit', 500);
     }
   }
 
   /**
-   * Handle withdrawal with security checks
+   * Handle withdrawal with security checks and idempotency
    */
   private async handleWithdraw(request: AuthenticatedRequest): Promise<Response> {
     try {
@@ -309,36 +391,50 @@ export class WalletRoutes {
         return this.errorResponse(validation.error, 400);
       }
 
+      this.initializeServices(request.env!);
+
       // Record audit log
       await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'pending');
 
-      const result = await this.walletManager.withdraw(
+      return await this.executeWithIdempotency(
+        validation.data.idempotencyKey,
         request.user.userId,
-        validation.data.amount,
-        validation.data.method
+        'withdraw',
+        validation.data,
+        request.rateLimitInfo,
+        async () => {
+          const result = await this.walletManager.withdraw(
+            request.user.userId,
+            validation.data.amount,
+            validation.data.method
+          );
+
+          if (!result.success) {
+            await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'failed');
+            return { success: false, error: result.error };
+          }
+
+          // Invalidate cache after withdrawal
+          if (this.cacheService) {
+            await this.cacheService.invalidateWallet(request.user.userId);
+          }
+
+          // Broadcast update
+          const wallet = await this.walletManager.getWallet(request.user.userId);
+          await this.broadcastWalletUpdate(request.user.userId, wallet);
+
+          await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'success');
+
+          return {
+            success: true,
+            data: {
+              success: true,
+              newBalance: result.newBalance,
+              transactionId: result.transactionId
+            }
+          };
+        }
       );
-
-      if (!result.success) {
-        await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'failed');
-        return this.errorResponse(result.error || 'Withdrawal failed', 400);
-      }
-
-      // Invalidate cache after withdrawal
-      if (this.cacheService) {
-        await this.cacheService.invalidateWallet(request.user.userId);
-      }
-
-      // Broadcast update
-      const wallet = await this.walletManager.getWallet(request.user.userId);
-      await this.broadcastWalletUpdate(request.user.userId, wallet);
-
-      await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'success');
-
-      return this.successResponse({
-        success: true,
-        newBalance: result.newBalance,
-        transactionId: result.transactionId
-      }, request.rateLimitInfo);
     } catch (error) {
       logger.error('Withdraw error', error as Error);
       return this.errorResponse('Failed to process withdrawal', 500);
@@ -346,7 +442,7 @@ export class WalletRoutes {
   }
 
   /**
-   * Handle transfers between wallets
+   * Handle transfers between wallets with idempotency
    */
   private async handleTransfer(request: AuthenticatedRequest): Promise<Response> {
     try {
@@ -361,32 +457,46 @@ export class WalletRoutes {
         return this.errorResponse(validation.error, 400);
       }
 
+      this.initializeServices(request.env!);
+
       await this.recordAuditLog(request, 'transfer', validation.data.amount, 'pending');
 
-      const result = await this.walletManager.transfer(
+      return await this.executeWithIdempotency(
+        validation.data.idempotencyKey,
         request.user.userId,
-        validation.data.to_table_id,
-        validation.data.amount
+        'transfer',
+        validation.data,
+        request.rateLimitInfo,
+        async () => {
+          const result = await this.walletManager.transfer(
+            request.user.userId,
+            validation.data.to_table_id,
+            validation.data.amount
+          );
+
+          if (!result.success) {
+            await this.recordAuditLog(request, 'transfer', validation.data.amount, 'failed');
+            return { success: false, error: result.error };
+          }
+
+          // Invalidate cache for sender
+          if (this.cacheService) {
+            await this.cacheService.invalidateWallet(request.user.userId);
+          }
+
+          await this.recordAuditLog(request, 'transfer', validation.data.amount, 'success');
+
+          return {
+            success: true,
+            data: {
+              success: true,
+              newBalance: result.newBalance,
+              transferredAmount: result.transferredAmount,
+              transactionId: result.transactionId
+            }
+          };
+        }
       );
-
-      if (!result.success) {
-        await this.recordAuditLog(request, 'transfer', validation.data.amount, 'failed');
-        return this.errorResponse(result.error || 'Transfer failed', 400);
-      }
-
-      // Invalidate cache for sender
-      if (this.cacheService) {
-        await this.cacheService.invalidateWallet(request.user.userId);
-      }
-
-      await this.recordAuditLog(request, 'transfer', validation.data.amount, 'success');
-
-      return this.successResponse({
-        success: true,
-        newBalance: result.newBalance,
-        transferredAmount: result.transferredAmount,
-        transactionId: result.transactionId
-      }, request.rateLimitInfo);
     } catch (error) {
       logger.error('Transfer error', error as Error);
       return this.errorResponse('Failed to process transfer', 500);
@@ -394,7 +504,7 @@ export class WalletRoutes {
   }
 
   /**
-   * Handle buy-in with caching
+   * Handle buy-in with caching and idempotency
    */
   private async handleBuyIn(request: AuthenticatedRequest): Promise<Response> {
     try {
@@ -402,43 +512,47 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const rawBody = await safeJsonParse(request);
+      const body = await safeJsonParse(request);
+      const validation = createSanitizedValidator(BuyInRequestSchema)(body);
       
-      // Sanitize buy-in request parameters
-      let buyInRequest: BuyInRequest;
-      try {
-        const sanitized = sanitizeWalletParams(rawBody);
-        
-        if (!sanitized.tableId || !sanitized.amount || sanitized.amount <= 0) {
-          return this.errorResponse('Invalid buy-in request', 400);
-        }
-        
-        buyInRequest = {
-          tableId: sanitized.tableId,
-          amount: sanitized.amount,
-          playerId: request.user.userId
-        };
-      } catch (error) {
-        return this.errorResponse(error instanceof Error ? error.message : 'Invalid buy-in parameters', 400);
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
       }
+
+      this.initializeServices(request.env!);
+      
+      const buyInRequest: BuyInRequest = {
+        tableId: validation.data.tableId,
+        amount: validation.data.amount,
+        playerId: request.user.userId
+      };
       
       await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'pending');
       
-      const result = await this.walletManager.processBuyIn(buyInRequest);
-      
-      if (!result.success) {
-        await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'failed');
-        return this.errorResponse(result.error || 'Buy-in failed', 400);
-      }
+      return await this.executeWithIdempotency(
+        validation.data.idempotencyKey,
+        request.user.userId,
+        'buyin',
+        validation.data,
+        request.rateLimitInfo,
+        async () => {
+          const result = await this.walletManager.processBuyIn(buyInRequest);
+          
+          if (!result.success) {
+            await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'failed');
+            return { success: false, error: result.error };
+          }
 
-      // Invalidate cache after buy-in
-      if (this.cacheService) {
-        await this.cacheService.invalidateWallet(request.user.userId);
-      }
+          // Invalidate cache after buy-in
+          if (this.cacheService) {
+            await this.cacheService.invalidateWallet(request.user.userId);
+          }
 
-      await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'success');
-      
-      return this.successResponse(result, request.rateLimitInfo);
+          await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'success');
+          
+          return { success: true, data: result };
+        }
+      );
     } catch (error) {
       logger.error('Buy-in error', error as Error);
       return this.errorResponse('Failed to process buy-in', 500);
@@ -446,7 +560,7 @@ export class WalletRoutes {
   }
 
   /**
-   * Handle cash-out
+   * Handle cash-out with idempotency
    */
   private async handleCashOut(request: AuthenticatedRequest): Promise<Response> {
     try {
@@ -454,43 +568,51 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const rawBody = await safeJsonParse(request);
+      const body = await safeJsonParse(request);
+      const validation = createSanitizedValidator(CashOutRequestSchema)(body);
       
-      // Sanitize cash-out request parameters
-      let body: { tableId: string; chipAmount: number };
-      try {
-        const tableId = sanitizeTableId(rawBody.tableId);
-        const chipAmount = sanitizeAmount(rawBody.chipAmount);
-        
-        if (!tableId || !chipAmount || chipAmount <= 0) {
-          return this.errorResponse('Invalid cash-out request', 400);
+      if (!validation.success) {
+        return this.errorResponse(validation.error, 400);
+      }
+
+      this.initializeServices(request.env!);
+
+      await this.recordAuditLog(request, 'cashout', validation.data.chipAmount, 'pending');
+
+      return await this.executeWithIdempotency(
+        validation.data.idempotencyKey,
+        request.user.userId,
+        'cashout',
+        validation.data,
+        request.rateLimitInfo,
+        async () => {
+          await this.walletManager.processCashOut(
+            request.user.userId, 
+            validation.data.tableId, 
+            validation.data.chipAmount
+          );
+          const wallet = await this.walletManager.getWallet(request.user.userId);
+          
+          // Update cache
+          if (this.cacheService) {
+            await this.cacheService.setCachedWallet(wallet);
+          }
+
+          // Broadcast update
+          await this.broadcastWalletUpdate(request.user.userId, wallet);
+
+          await this.recordAuditLog(request, 'cashout', validation.data.chipAmount, 'success');
+          
+          return {
+            success: true,
+            data: {
+              success: true,
+              newBalance: wallet.balance,
+              cashedOut: validation.data.chipAmount
+            }
+          };
         }
-        
-        body = { tableId, chipAmount };
-      } catch (error) {
-        return this.errorResponse(error instanceof Error ? error.message : 'Invalid cash-out parameters', 400);
-      }
-
-      await this.recordAuditLog(request, 'cashout', body.chipAmount, 'pending');
-
-      await this.walletManager.processCashOut(request.user.userId, body.tableId, body.chipAmount);
-      const wallet = await this.walletManager.getWallet(request.user.userId);
-      
-      // Update cache
-      if (this.cacheService) {
-        await this.cacheService.setCachedWallet(wallet);
-      }
-
-      // Broadcast update
-      await this.broadcastWalletUpdate(request.user.userId, wallet);
-
-      await this.recordAuditLog(request, 'cashout', body.chipAmount, 'success');
-      
-      return this.successResponse({
-        success: true,
-        newBalance: wallet.balance,
-        cashedOut: body.chipAmount
-      }, request.rateLimitInfo);
+      );
     } catch (error) {
       logger.error('Cash-out error', error as Error);
       return this.errorResponse('Failed to process cash-out', 500);
@@ -914,6 +1036,99 @@ export class WalletRoutes {
     }
 
     return new Response(JSON.stringify(response), { headers });
+  }
+
+  /**
+   * Helper to execute request with idempotency support
+   */
+  private async executeWithIdempotency<T>(
+    idempotencyKey: string | undefined,
+    userId: string,
+    action: string,
+    requestData: any,
+    rateLimitInfo: any,
+    execute: () => Promise<{ success: boolean; data?: T; error?: string }>
+  ): Promise<Response> {
+    // Check idempotency if key provided
+    if (idempotencyKey && this.idempotencyService) {
+      const idempotencyCheck = await this.idempotencyService.checkIdempotency(
+        idempotencyKey,
+        userId,
+        action,
+        requestData
+      );
+
+      if (idempotencyCheck.exists && idempotencyCheck.record) {
+        logger.info(`Idempotent request detected for ${action}`, {
+          userId,
+          key: idempotencyKey,
+          status: idempotencyCheck.record.status
+        });
+
+        // Return cached response
+        if (idempotencyCheck.record.status === 'completed') {
+          return this.successResponse(idempotencyCheck.record.response, rateLimitInfo);
+        } else if (idempotencyCheck.record.status === 'failed') {
+          return this.errorResponse(
+            idempotencyCheck.record.response?.error || `${action} failed`,
+            400
+          );
+        }
+        // If pending, allow retry (could be a previous timeout)
+      }
+
+      // Store pending request
+      await this.idempotencyService.storePendingRequest(
+        idempotencyKey,
+        userId,
+        action,
+        requestData
+      );
+    }
+
+    try {
+      const result = await execute();
+
+      if (!result.success) {
+        // Store failed response for idempotency
+        if (idempotencyKey && this.idempotencyService) {
+          await this.idempotencyService.storeCompletedResponse(
+            idempotencyKey,
+            userId,
+            { error: result.error || `${action} failed` },
+            'failed'
+          );
+        }
+        
+        return this.errorResponse(result.error || `${action} failed`, 400);
+      }
+
+      // Store successful response for idempotency
+      if (idempotencyKey && this.idempotencyService) {
+        await this.idempotencyService.storeCompletedResponse(
+          idempotencyKey,
+          userId,
+          result.data,
+          'completed'
+        );
+      }
+
+      return this.successResponse(result.data, rateLimitInfo);
+    } catch (error) {
+      logger.error(`${action} error`, error as Error);
+      
+      // Store error response for idempotency
+      if (idempotencyKey && this.idempotencyService) {
+        await this.idempotencyService.storeCompletedResponse(
+          idempotencyKey,
+          userId,
+          { error: `Failed to process ${action}` },
+          'failed'
+        );
+      }
+      
+      throw error;
+    }
   }
 
   private errorResponse(message: string, status: number = 500): Response {

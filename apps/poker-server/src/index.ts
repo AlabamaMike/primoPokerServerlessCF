@@ -1,5 +1,5 @@
-// Version: 1.0.2 - Security fixes applied with full audit logging
-import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware, CacheableRequest } from '@primo-poker/api';
+// Version: 1.0.3 - Request size limits and input sanitization
+import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware, CacheableRequest, requestSizeLimiter } from '@primo-poker/api';
 import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, CacheDO } from '@primo-poker/persistence';
 import { ProfileDurableObject, StatisticsAggregator } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
@@ -81,6 +81,35 @@ export default {
 
       // Handle API routes
       if (url.pathname.startsWith('/api/')) {
+        // Apply global request size limit for POST/PUT/PATCH requests
+        if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+          const contentLength = request.headers.get('content-length');
+          if (contentLength) {
+            const size = parseInt(contentLength, 10);
+            const maxSize = 1048576; // 1MB global limit
+            if (size > maxSize) {
+              logger.warn('Request size limit exceeded at worker level', {
+                size,
+                limit: maxSize,
+                path: url.pathname,
+                method: request.method
+              });
+              
+              return new Response(JSON.stringify({
+                success: false,
+                error: {
+                  code: '413',
+                  message: 'Request payload too large'
+                },
+                timestamp: new Date().toISOString()
+              }), {
+                status: 413,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+        }
+        
         // Check if it's an RNG API route
         for (const [path, operation] of Object.entries(RNG_API_ROUTES)) {
           if (url.pathname === path) {

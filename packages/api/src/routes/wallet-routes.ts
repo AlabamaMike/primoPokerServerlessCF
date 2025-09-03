@@ -21,6 +21,7 @@ import { WalletCacheService } from '../services/wallet-cache';
 import { AuditLogger, AuditLogEntry } from '../services/audit-logger';
 import { enhancedWalletRateLimiter } from '../middleware/wallet-rate-limit';
 import { requireAdmin } from '../middleware/role-auth';
+import { requestSizeLimiter, safeJsonParse } from '../middleware/request-size-limit';
 import {
   DepositRequestSchema,
   WithdrawRequestSchema,
@@ -29,6 +30,13 @@ import {
   validateRequestBody,
   validateQueryParams
 } from '../validation/wallet-schemas';
+import { 
+  sanitizeWalletParams, 
+  createSanitizedValidator,
+  sanitizeAmount,
+  sanitizeTableId,
+  sanitizePlayerId
+} from '../utils/input-sanitizer';
 
 interface AuthenticatedRequest extends IRequest {
   user?: { userId: string; username: string };
@@ -57,31 +65,34 @@ export class WalletRoutes {
   }
 
   private setupRoutes(): void {
+    // Apply request size limit middleware to all POST routes
+    const sizeLimitMiddleware = requestSizeLimiter.middleware();
+    
     // Wallet information endpoints
     this.router.get('/', enhancedWalletRateLimiter.middleware(), this.handleGetWallet.bind(this));
     this.router.get('/balance', enhancedWalletRateLimiter.middleware(), this.handleGetBalance.bind(this));
     
-    // Transaction endpoints
-    this.router.post('/deposit', enhancedWalletRateLimiter.middleware(), this.handleDeposit.bind(this));
-    this.router.post('/withdraw', enhancedWalletRateLimiter.middleware(), this.handleWithdraw.bind(this));
-    this.router.post('/transfer', enhancedWalletRateLimiter.middleware(), this.handleTransfer.bind(this));
+    // Transaction endpoints with size limits
+    this.router.post('/deposit', sizeLimitMiddleware, enhancedWalletRateLimiter.middleware(), this.handleDeposit.bind(this));
+    this.router.post('/withdraw', sizeLimitMiddleware, enhancedWalletRateLimiter.middleware(), this.handleWithdraw.bind(this));
+    this.router.post('/transfer', sizeLimitMiddleware, enhancedWalletRateLimiter.middleware(), this.handleTransfer.bind(this));
     
-    // Table operations
-    this.router.post('/buyin', enhancedWalletRateLimiter.middleware(), this.handleBuyIn.bind(this));
-    this.router.post('/cashout', enhancedWalletRateLimiter.middleware(), this.handleCashOut.bind(this));
+    // Table operations with size limits
+    this.router.post('/buyin', sizeLimitMiddleware, enhancedWalletRateLimiter.middleware(), this.handleBuyIn.bind(this));
+    this.router.post('/cashout', sizeLimitMiddleware, enhancedWalletRateLimiter.middleware(), this.handleCashOut.bind(this));
     
     // Transaction history
     this.router.get('/transactions', enhancedWalletRateLimiter.middleware(), this.handleGetTransactions.bind(this));
     
-    // Batch operations
-    this.router.post('/batch/balances', enhancedWalletRateLimiter.middleware(), this.handleBatchGetBalances.bind(this));
+    // Batch operations with size limits
+    this.router.post('/batch/balances', sizeLimitMiddleware, enhancedWalletRateLimiter.middleware(), this.handleBatchGetBalances.bind(this));
     
     // WebSocket endpoint for real-time updates
     this.router.get('/subscribe', this.handleWebSocketUpgrade.bind(this));
     
-    // Admin endpoints
+    // Admin endpoints with size limits
     this.router.get('/stats', requireAdmin, this.handleGetStats.bind(this));
-    this.router.post('/warm-cache', requireAdmin, this.handleWarmCache.bind(this));
+    this.router.post('/warm-cache', sizeLimitMiddleware, requireAdmin, this.handleWarmCache.bind(this));
     this.router.get('/audit', enhancedWalletRateLimiter.middleware(), this.handleGetAuditLogs.bind(this));
   }
 
@@ -209,8 +220,8 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json();
-      const validation = validateRequestBody(DepositRequestSchema, body);
+      const body = await safeJsonParse(request);
+      const validation = createSanitizedValidator(DepositRequestSchema)(body);
       
       if (!validation.success) {
         return this.errorResponse(validation.error, 400);
@@ -291,8 +302,8 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json();
-      const validation = validateRequestBody(WithdrawRequestSchema, body);
+      const body = await safeJsonParse(request);
+      const validation = createSanitizedValidator(WithdrawRequestSchema)(body);
       
       if (!validation.success) {
         return this.errorResponse(validation.error, 400);
@@ -343,8 +354,8 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json();
-      const validation = validateRequestBody(TransferRequestSchema, body);
+      const body = await safeJsonParse(request);
+      const validation = createSanitizedValidator(TransferRequestSchema)(body);
       
       if (!validation.success) {
         return this.errorResponse(validation.error, 400);
@@ -391,13 +402,25 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const buyInRequest: BuyInRequest = await request.json();
+      const rawBody = await safeJsonParse(request);
       
-      if (!buyInRequest.tableId || !buyInRequest.amount || buyInRequest.amount <= 0) {
-        return this.errorResponse('Invalid buy-in request', 400);
+      // Sanitize buy-in request parameters
+      let buyInRequest: BuyInRequest;
+      try {
+        const sanitized = sanitizeWalletParams(rawBody);
+        
+        if (!sanitized.tableId || !sanitized.amount || sanitized.amount <= 0) {
+          return this.errorResponse('Invalid buy-in request', 400);
+        }
+        
+        buyInRequest = {
+          tableId: sanitized.tableId,
+          amount: sanitized.amount,
+          playerId: request.user.userId
+        };
+      } catch (error) {
+        return this.errorResponse(error instanceof Error ? error.message : 'Invalid buy-in parameters', 400);
       }
-
-      buyInRequest.playerId = request.user.userId;
       
       await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'pending');
       
@@ -431,10 +454,21 @@ export class WalletRoutes {
         return this.errorResponse('User not authenticated', 401);
       }
 
-      const body = await request.json() as { tableId: string; chipAmount: number };
+      const rawBody = await safeJsonParse(request);
       
-      if (!body.tableId || !body.chipAmount || body.chipAmount <= 0) {
-        return this.errorResponse('Invalid cash-out request', 400);
+      // Sanitize cash-out request parameters
+      let body: { tableId: string; chipAmount: number };
+      try {
+        const tableId = sanitizeTableId(rawBody.tableId);
+        const chipAmount = sanitizeAmount(rawBody.chipAmount);
+        
+        if (!tableId || !chipAmount || chipAmount <= 0) {
+          return this.errorResponse('Invalid cash-out request', 400);
+        }
+        
+        body = { tableId, chipAmount };
+      } catch (error) {
+        return this.errorResponse(error instanceof Error ? error.message : 'Invalid cash-out parameters', 400);
       }
 
       await this.recordAuditLog(request, 'cashout', body.chipAmount, 'pending');
@@ -531,14 +565,23 @@ export class WalletRoutes {
    */
   private async handleBatchGetBalances(request: AuthenticatedRequest): Promise<Response> {
     try {
-      const body = await request.json() as { playerIds: string[] };
+      const rawBody = await safeJsonParse(request);
       
-      if (!Array.isArray(body.playerIds) || body.playerIds.length === 0) {
-        return this.errorResponse('Invalid player IDs', 400);
-      }
-
-      if (body.playerIds.length > this.MAX_BATCH_SIZE) {
-        return this.errorResponse(`Maximum ${this.MAX_BATCH_SIZE} players per batch request`, 400);
+      // Sanitize player IDs
+      let playerIds: string[];
+      try {
+        if (!Array.isArray(rawBody.playerIds) || rawBody.playerIds.length === 0) {
+          return this.errorResponse('Invalid player IDs', 400);
+        }
+        
+        if (rawBody.playerIds.length > this.MAX_BATCH_SIZE) {
+          return this.errorResponse(`Maximum ${this.MAX_BATCH_SIZE} players per batch request`, 400);
+        }
+        
+        // Sanitize each player ID
+        playerIds = rawBody.playerIds.map(id => sanitizePlayerId(id));
+      } catch (error) {
+        return this.errorResponse(error instanceof Error ? error.message : 'Invalid player ID format', 400);
       }
 
       this.initializeServices(request.env!);
@@ -549,6 +592,9 @@ export class WalletRoutes {
       // Check cache first
       if (this.cacheService) {
         const cachedWallets = await this.cacheService.getBatchWallets(body.playerIds);
+        
+        // Update body.playerIds to use sanitized playerIds
+        body.playerIds = playerIds;
         
         for (const [playerId, wallet] of cachedWallets) {
           if (wallet) {
@@ -759,19 +805,31 @@ export class WalletRoutes {
    */
   private async handleWarmCache(request: AuthenticatedRequest): Promise<Response> {
     try {
-      const body = await request.json() as { playerIds: string[] };
+      const rawBody = await safeJsonParse(request);
       
       if (!this.cacheService) {
         return this.errorResponse('Cache service not available', 503);
       }
+      
+      // Sanitize player IDs for cache warming
+      let playerIds: string[];
+      try {
+        if (!Array.isArray(rawBody.playerIds) || rawBody.playerIds.length === 0) {
+          return this.errorResponse('Invalid player IDs', 400);
+        }
+        
+        playerIds = rawBody.playerIds.map(id => sanitizePlayerId(id));
+      } catch (error) {
+        return this.errorResponse(error instanceof Error ? error.message : 'Invalid player ID format', 400);
+      }
 
       await this.cacheService.warmCache(
-        body.playerIds,
+        playerIds,
         (playerId) => this.walletManager.getWallet(playerId)
       );
 
       return this.successResponse({
-        warmed: body.playerIds.length
+        warmed: playerIds.length
       });
     } catch (error) {
       logger.error('Warm cache error', error as Error);

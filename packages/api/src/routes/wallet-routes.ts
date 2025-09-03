@@ -20,6 +20,7 @@ import { AuthenticationManager } from '@primo-poker/security';
 import { WalletCacheService } from '../services/wallet-cache';
 import { AuditLogger, AuditLogEntry } from '../services/audit-logger';
 import { enhancedWalletRateLimiter } from '../middleware/wallet-rate-limit';
+import { requireAdmin } from '../middleware/role-auth';
 import {
   DepositRequestSchema,
   WithdrawRequestSchema,
@@ -79,8 +80,8 @@ export class WalletRoutes {
     this.router.get('/subscribe', this.handleWebSocketUpgrade.bind(this));
     
     // Admin endpoints
-    this.router.get('/stats', this.handleGetStats.bind(this));
-    this.router.post('/warm-cache', this.handleWarmCache.bind(this));
+    this.router.get('/stats', requireAdmin, this.handleGetStats.bind(this));
+    this.router.post('/warm-cache', requireAdmin, this.handleWarmCache.bind(this));
     this.router.get('/audit', enhancedWalletRateLimiter.middleware(), this.handleGetAuditLogs.bind(this));
   }
 

@@ -32,3 +32,20 @@ export type {
   TokenPayload,
   RefreshTokenPayload,
 } from './authentication';
+
+// Security Hardening Exports
+
+// Validation exports
+export * from './validation/schemas';
+
+// Middleware exports
+export * from './middleware/rate-limiter';
+export * from './middleware/csrf';
+export * from './middleware/request-signing';
+export * from './middleware/security-headers';
+
+// Audit logging exports
+export * from './audit/logger';
+
+// Monitoring exports
+export * from './monitoring/dashboard';

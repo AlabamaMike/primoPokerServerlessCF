@@ -1,12 +1,27 @@
 // Version: 1.0.3 - Request size limits and input sanitization
 import { PokerAPIRoutes, WebSocketManager, RNGApiHandler, createRNGApiRouter, RNG_API_ROUTES, CacheHeadersMiddleware, CacheableRequest, requestSizeLimiter } from '@primo-poker/api';
-import { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, CacheDO } from '@primo-poker/persistence';
+import {
+  TableDurableObject,
+  GameTableDurableObject,
+  SecureRNGDurableObject,
+  RateLimitDurableObject,
+  CacheDO,
+  WalletManagerDurableObject
+} from '@primo-poker/persistence';
 import { ProfileDurableObject, StatisticsAggregator } from '@primo-poker/profiles';
 import { logger, LogLevel, errorReporter, ErrorReporter } from '@primo-poker/core';
 import { StatsPeriod } from '@primo-poker/shared';
 
 // Export Durable Objects for Cloudflare Workers
-export { TableDurableObject, GameTableDurableObject, SecureRNGDurableObject, RateLimitDurableObject, ProfileDurableObject, CacheDO };
+export {
+  TableDurableObject,
+  GameTableDurableObject,
+  SecureRNGDurableObject,
+  RateLimitDurableObject,
+  ProfileDurableObject,
+  CacheDO,
+  WalletManagerDurableObject
+};
 
 // Environment interface
 interface Env {
@@ -23,6 +38,7 @@ interface Env {
   GAME_TABLE_DO: DurableObjectNamespace; // For permission checks
   PROFILE_DO: DurableObjectNamespace; // Profile Durable Objects
   CACHE_DO: DurableObjectNamespace; // Distributed Cache Durable Objects
+  WALLET_DO: DurableObjectNamespace; // WalletManagerDurableObject instances
   TOURNAMENT_QUEUE: Queue;
   ANALYTICS: AnalyticsEngineDataset;
   

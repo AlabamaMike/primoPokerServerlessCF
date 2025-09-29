@@ -7,7 +7,7 @@ import EnhancedMessageInput from './EnhancedMessageInput';
 import UnreadIndicator from './UnreadIndicator';
 import { parseCommand, formatCommandHelp } from './utils/chatCommands';
 
-const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean }> = ({
+const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean; onRateLimitError?: (error: any) => void }> = ({
   messages,
   onSendMessage,
   onCommand,
@@ -16,7 +16,8 @@ const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean }> = 
   currentUserId,
   isConnected,
   className = '',
-  useVirtualScrolling = false
+  useVirtualScrolling = false,
+  onRateLimitError
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -24,7 +25,10 @@ const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean }> = 
     mutedPlayers: new Set<string>(),
     blockedPlayers: new Set<string>()
   });
+  const [rateLimitError, setRateLimitError] = useState<string>('');
+  const [rateLimitRetryAfter, setRateLimitRetryAfter] = useState<number>(0);
   const lastMessageCountRef = useRef(messages.length);
+  const rateLimitTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track unread messages when panel is collapsed
   useEffect(() => {
@@ -41,6 +45,39 @@ const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean }> = 
       setUnreadCount(0);
     }
   }, [isCollapsed]);
+
+  // Handle rate limit error
+  const handleRateLimitError = (error: any) => {
+    if (error.rateLimitInfo) {
+      const { retryAfter } = error.rateLimitInfo;
+      setRateLimitError(`Please wait ${retryAfter} seconds before sending another message.`);
+      setRateLimitRetryAfter(retryAfter);
+
+      // Clear any existing timer
+      if (rateLimitTimerRef.current) {
+        clearTimeout(rateLimitTimerRef.current);
+      }
+
+      // Set a timer to clear the error
+      rateLimitTimerRef.current = setTimeout(() => {
+        setRateLimitError('');
+        setRateLimitRetryAfter(0);
+        rateLimitTimerRef.current = null;
+      }, retryAfter * 1000);
+
+      // Also notify parent if handler provided
+      onRateLimitError?.(error);
+    }
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (rateLimitTimerRef.current) {
+        clearTimeout(rateLimitTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSendMessage = (message: string) => {
     // Check if it's a command
@@ -176,11 +213,26 @@ const ChatPanel: React.FC<ChatPanelProps & { useVirtualScrolling?: boolean }> = 
 
           {/* Input area */}
           <div className="p-3 border-t border-gray-600">
+            {/* Rate limit error message */}
+            {rateLimitError && (
+              <div className="mb-2 p-2 bg-red-900/50 border border-red-700 rounded text-sm text-red-200">
+                <div className="flex items-center justify-between">
+                  <span>{rateLimitError}</span>
+                  {rateLimitRetryAfter > 0 && (
+                    <span className="text-xs text-red-400">
+                      Retry in {rateLimitRetryAfter}s
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <MessageInput
               onSendMessage={handleSendMessage}
               isConnected={isConnected}
               placeholder="Type a message or /help for commands..."
               maxLength={500}
+              disabled={!!rateLimitError}
             />
           </div>
         </>

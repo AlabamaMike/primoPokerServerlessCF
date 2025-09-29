@@ -5,11 +5,12 @@ import { validateMessage } from './utils/sanitize';
 import { defaultRateLimiter } from './utils/rateLimiter';
 import EmojiPicker from './EmojiPicker';
 
-const MessageInput: React.FC<MessageInputProps> = ({
+const MessageInput: React.FC<MessageInputProps & { disabled?: boolean }> = ({
   onSendMessage,
   isConnected,
   placeholder = "Type a message...",
-  maxLength = 500
+  maxLength = 500,
+  disabled = false
 }) => {
   const [message, setMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -143,7 +144,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={isConnected ? placeholder : "Not connected"}
-            disabled={!isConnected}
+            disabled={!isConnected || disabled}
             maxLength={maxLength}
             className="
               w-full px-3 py-2 pr-10
@@ -194,7 +195,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         {/* Send button */}
         <button
           type="submit"
-          disabled={!isConnected || !message.trim() || message.length > maxLength}
+          disabled={!isConnected || disabled || !message.trim() || message.length > maxLength}
           className="
             px-4 py-2
             bg-blue-600 text-white text-sm rounded

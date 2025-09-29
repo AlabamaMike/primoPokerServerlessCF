@@ -66,6 +66,7 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
     // Load persisted messages for this table
     return loadChatMessages(tableId);
   });
+  const [rateLimitError, setRateLimitError] = useState<any | null>(null);
 
   const apiUrl = 'https://primo-poker-server.alabamamike.workers.dev';
 
@@ -190,6 +191,17 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
     }
   };
 
+  // Handle rate limit errors from WebSocket
+  const handleRateLimitError = (error: any) => {
+    setRateLimitError(error);
+    // Clear error after retry period
+    if (error.rateLimitInfo?.retryAfter) {
+      setTimeout(() => {
+        setRateLimitError(null);
+      }, error.rateLimitInfo.retryAfter * 1000);
+    }
+  };
+
   // Handle WebSocket messages
   const handleWebSocketMessage = (message: IncomingMessage) => {
     // Process WebSocket message
@@ -224,7 +236,13 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
         
       case 'error':
         console.error('WebSocket error:', message.payload.message);
-        setError(message.payload.message);
+        // Check for rate limit error
+        if (message.payload.rateLimitInfo) {
+          // Pass rate limit error to ChatPanel via a callback
+          handleRateLimitError(message.payload);
+        } else {
+          setError(message.payload.message);
+        }
         break;
         
       default:
@@ -460,6 +478,7 @@ const GamePage: React.FC<GamePageProps> = ({ tableId, onLeaveTable }) => {
             currentUserId={user?.id}
             isConnected={wsState.isConnected}
             className="h-full"
+            onRateLimitError={handleRateLimitError}
           />
         </div>
       </div>

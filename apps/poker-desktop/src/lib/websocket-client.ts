@@ -57,6 +57,14 @@ export interface ErrorMessage extends WebSocketMessage {
   payload: {
     message: string;
     code?: string;
+    error?: string;
+    rateLimitInfo?: {
+      limit: number;
+      remaining: number;
+      resetAt: number;
+      retryAfter: number;
+    };
+    originalMessage?: any;
   };
 }
 

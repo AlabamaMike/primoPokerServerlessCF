@@ -92,6 +92,7 @@ export interface ChatWebSocketConnection {
   connectedAt: number
   lastActivity: number
   isAdmin: boolean
+  roles?: string[]
 }
 
 export interface MessageFilter {
@@ -103,6 +104,14 @@ export interface MessageFilter {
   limit?: number
 }
 
+export interface RateLimitResult {
+  allowed: boolean
+  remaining: number
+  limit: number
+  resetAt: number
+  retryAfter?: number
+}
+
 export class ChatModeratorDurableObject {
   private state: ChatModeratorState
   private durableObjectState: DurableObjectState
@@ -111,6 +120,7 @@ export class ChatModeratorDurableObject {
   private connections: Map<string, ChatWebSocketConnection> = new Map()
   private rateLimiter: Map<string, number[]> = new Map() // playerId -> timestamps
   private metrics?: MetricsCollector
+  private rateLimitConfig: { maxMessages: number; windowMs: number }
 
   // Constants
   private static readonly MAX_MESSAGE_LENGTH = 500
@@ -131,7 +141,10 @@ export class ChatModeratorDurableObject {
   constructor(state: DurableObjectState, env: any) {
     this.durableObjectState = state
     this.env = env
-    
+
+    // Initialize rate limit config
+    this.rateLimitConfig = this.getRateLimitConfig()
+
     // Initialize state
     this.state = {
       messages: new Map(),
@@ -160,6 +173,20 @@ export class ChatModeratorDurableObject {
 
     // Start cleanup interval
     this.startCleanupInterval()
+  }
+
+  /**
+   * Get rate limit configuration from environment
+   */
+  private getRateLimitConfig(): { maxMessages: number; windowMs: number } {
+    return {
+      maxMessages: this.env.CHAT_RATE_LIMIT_MESSAGES
+        ? parseInt(this.env.CHAT_RATE_LIMIT_MESSAGES, 10)
+        : 10,
+      windowMs: this.env.CHAT_RATE_LIMIT_WINDOW
+        ? parseInt(this.env.CHAT_RATE_LIMIT_WINDOW, 10)
+        : 60000
+    }
   }
 
   /**
@@ -299,6 +326,8 @@ export class ChatModeratorDurableObject {
       const playerId = request.headers.get('X-Player-ID') || crypto.randomUUID()
       const username = request.headers.get('X-Username') || `User_${playerId.substring(0, 8)}`
       const isAdmin = request.headers.get('X-Is-Admin') === 'true'
+      const rolesHeader = request.headers.get('X-Roles')
+      const roles = rolesHeader ? rolesHeader.split(',').map(r => r.trim()) : []
 
       // Store connection
       const connection: ChatWebSocketConnection = {
@@ -308,7 +337,8 @@ export class ChatModeratorDurableObject {
         channels: new Set(),
         connectedAt: Date.now(),
         lastActivity: Date.now(),
-        isAdmin
+        isAdmin,
+        roles
       }
       this.connections.set(playerId, connection)
 
@@ -421,16 +451,23 @@ export class ChatModeratorDurableObject {
       playerId: string
       username: string
       message: string
+      roles?: string[]
     }
 
     const result = await this.processMessage(body)
 
     if (!result.success) {
-      return new Response(JSON.stringify({
+      const response = {
         success: false,
-        error: result.error
-      }), {
-        status: 400,
+        error: result.error,
+        ...(result.rateLimitInfo && { rateLimitInfo: result.rateLimitInfo })
+      }
+
+      // Use 429 status for rate limit errors
+      const status = result.rateLimitInfo ? 429 : 400
+
+      return new Response(JSON.stringify(response), {
+        status,
         headers: { 'Content-Type': 'application/json' }
       })
     }
@@ -870,15 +907,29 @@ export class ChatModeratorDurableObject {
    * Handle WebSocket message send
    */
   private async handleWebSocketMessage(connection: ChatWebSocketConnection, payload: any): Promise<void> {
+    // Use roles from connection (from headers) or payload
+    const roles = connection.roles || payload.roles
+
     const result = await this.processMessage({
       channelId: payload.channelId,
       playerId: connection.playerId,
       username: connection.username,
-      message: payload.message
+      message: payload.message,
+      roles
     })
 
     if (!result.success) {
-      this.sendError(connection.websocket, result.error!)
+      // Send detailed error with rate limit info if available
+      if (result.rateLimitInfo) {
+        this.sendMessage(connection.websocket, createWebSocketMessage('error', {
+          error: result.error,
+          rateLimitInfo: result.rateLimitInfo,
+          originalMessage: payload,
+          timestamp: Date.now()
+        }))
+      } else {
+        this.sendError(connection.websocket, result.error!)
+      }
     }
   }
 
@@ -942,15 +993,27 @@ export class ChatModeratorDurableObject {
     playerId: string
     username: string
     message: string
-  }): Promise<{ success: boolean; error?: string; messageId?: string; timestamp?: number }> {
+    roles?: string[]
+  }): Promise<{ success: boolean; error?: string; rateLimitInfo?: any; messageId?: string; timestamp?: number }> {
     // Check if user is muted
     if (this.isUserMuted(data.playerId, data.channelId)) {
       return { success: false, error: 'You are muted' }
     }
 
-    // Check rate limit
-    if (!this.checkRateLimit(data.playerId)) {
-      return { success: false, error: 'Rate limit exceeded. Please slow down.' }
+    // Check rate limit with roles
+    const rateLimitResult = this.checkRateLimit(data.playerId, data.roles)
+
+    if (!rateLimitResult.allowed) {
+      return {
+        success: false,
+        error: `Rate limit exceeded. You can send another message in ${rateLimitResult.retryAfter} seconds.`,
+        rateLimitInfo: {
+          limit: rateLimitResult.limit,
+          remaining: rateLimitResult.remaining,
+          resetAt: rateLimitResult.resetAt,
+          retryAfter: rateLimitResult.retryAfter
+        }
+      }
     }
 
     // Validate message length
@@ -1106,21 +1169,46 @@ export class ChatModeratorDurableObject {
   /**
    * Check rate limit
    */
-  private checkRateLimit(playerId: string): boolean {
+  private checkRateLimit(playerId: string, roles?: string[]): RateLimitResult {
+    // Check for moderator bypass
+    if (roles && (roles.includes('moderator') || roles.includes('admin'))) {
+      return {
+        allowed: true,
+        remaining: Number.MAX_SAFE_INTEGER,
+        limit: Number.MAX_SAFE_INTEGER,
+        resetAt: 0
+      }
+    }
+
     const now = Date.now()
     let timestamps = this.rateLimiter.get(playerId) || []
-    
+
     // Remove old timestamps
-    timestamps = timestamps.filter(t => now - t < ChatModeratorDurableObject.RATE_LIMIT_WINDOW)
-    
-    if (timestamps.length >= ChatModeratorDurableObject.RATE_LIMIT_MESSAGES) {
-      return false
+    timestamps = timestamps.filter(t => now - t < this.rateLimitConfig.windowMs)
+
+    const remaining = Math.max(0, this.rateLimitConfig.maxMessages - timestamps.length)
+    const oldestTimestamp = timestamps[0]
+    const resetAt = oldestTimestamp ? oldestTimestamp + this.rateLimitConfig.windowMs : now + this.rateLimitConfig.windowMs
+
+    if (timestamps.length >= this.rateLimitConfig.maxMessages) {
+      return {
+        allowed: false,
+        remaining: 0,
+        limit: this.rateLimitConfig.maxMessages,
+        resetAt,
+        retryAfter: Math.ceil((resetAt - now) / 1000)
+      }
     }
 
     timestamps.push(now)
     this.rateLimiter.set(playerId, timestamps)
-    
-    return true
+
+    return {
+      allowed: true,
+      remaining: remaining - 1,
+      limit: this.rateLimitConfig.maxMessages,
+      resetAt
+    }
   }
 
   /**

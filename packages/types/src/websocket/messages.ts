@@ -37,6 +37,7 @@ export interface ChatMessage extends WebSocketMessage {
     username: string;
     message: string;
     isSystem: boolean;
+    roles?: string[];
   };
 }
 

@@ -6,6 +6,7 @@
  */
 
 import { IRequest, Router } from 'itty-router';
+import type { DurableObjectStub } from '@cloudflare/workers-types';
 import { 
   ApiResponse, 
   PlayerWallet,
@@ -15,7 +16,7 @@ import {
   RandomUtils
 } from '@primo-poker/shared';
 import { logger } from '@primo-poker/core';
-import { WalletManager } from '@primo-poker/persistence';
+// WalletManager now accessed via Durable Object
 import { AuthenticationManager } from '@primo-poker/security';
 import { WalletCacheService } from '../services/wallet-cache';
 import { AuditLogger, AuditLogEntry } from '../services/audit-logger';
@@ -54,19 +55,26 @@ interface AuthenticatedRequest extends IRequest {
 
 export class WalletRoutes {
   private router: ReturnType<typeof Router>;
-  private walletManager: WalletManager;
   private cacheService?: WalletCacheService;
   private auditLogger?: AuditLogger;
   private idempotencyService?: IdempotencyService;
   private subscriptions: Map<string, Set<WebSocket>> = new Map();
-  
+
   // Constants
   private readonly MAX_BATCH_SIZE = 100;
 
   constructor() {
     this.router = Router();
-    this.walletManager = new WalletManager();
     this.setupRoutes();
+  }
+
+  /**
+   * Get singleton WalletManagerDurableObject instance
+   */
+  private getWalletDO(env: any): DurableObjectStub {
+    // Use singleton pattern like cache/rate-limit DOs
+    const walletId = env.WALLET_DO.idFromName('global-wallet');
+    return env.WALLET_DO.get(walletId);
   }
 
   private setupRoutes(): void {
@@ -158,9 +166,22 @@ export class WalletRoutes {
         }
       }
 
-      // Fetch from source
-      wallet = await this.walletManager.getWallet(request.user.userId);
-      
+      // Fetch from source via Durable Object
+      const walletDO = this.getWalletDO(request.env!);
+      const doRequest = new Request(
+        `http://wallet/wallet?playerId=${encodeURIComponent(request.user.userId)}`,
+        { method: 'GET' }
+      );
+      const response = await walletDO.fetch(doRequest);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to fetch wallet');
+      }
+
+      const doResponse = await response.json() as any;
+      wallet = doResponse.data?.wallet || doResponse;
+
       // Cache for future requests
       if (this.cacheService) {
         await this.cacheService.setCachedWallet(wallet);
@@ -206,8 +227,21 @@ export class WalletRoutes {
         }
       }
 
-      wallet = await this.walletManager.getWallet(request.user.userId);
-      
+      const walletDO = this.getWalletDO(request.env!);
+      const doRequest = new Request(
+        `http://wallet/wallet?playerId=${encodeURIComponent(request.user.userId)}`,
+        { method: 'GET' }
+      );
+      const response = await walletDO.fetch(doRequest);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to fetch wallet');
+      }
+
+      const doResponse = await response.json() as any;
+      wallet = doResponse.data?.wallet || doResponse;
+
       if (this.cacheService) {
         await this.cacheService.setCachedWallet(wallet);
       }
@@ -281,47 +315,48 @@ export class WalletRoutes {
       // Record audit log
       await this.recordAuditLog(request, 'deposit', validation.data.amount, 'pending');
 
-      let result;
-      
+      // Make deposit via DO
+      const walletDO = this.getWalletDO(request.env!);
+      const doRequest = new Request(
+        'http://wallet/wallet/deposit',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            playerId: request.user.userId,
+            amount: validation.data.amount,
+            method: validation.data.method,
+            idempotencyKey: validation.data.idempotencyKey
+          })
+        }
+      );
+
+      const response = await walletDO.fetch(doRequest);
+      const doResponse = await response.json() as any;
+
+      if (!response.ok || !doResponse.success) {
+        throw new Error(doResponse.error || 'Deposit failed');
+      }
+
+      const result = {
+        success: true,
+        newBalance: doResponse.data?.newBalance || doResponse.newBalance,
+        transactionId: doResponse.data?.transactionId || doResponse.transactionId || RandomUtils.generateUUID()
+      };
+
+      // Update cache after successful deposit
       if (this.cacheService) {
-        // Optimistic update
-        const { wallet, rollback } = await this.cacheService.optimisticUpdate(
-          request.user.userId,
-          (wallet) => ({
-            ...wallet,
-            balance: wallet.balance + validation.data.amount,
-            lastUpdated: new Date()
-          }),
-          async () => {
-            const depositResult = await this.walletManager.deposit(
-              request.user.userId,
-              validation.data.amount,
-              validation.data.method
-            );
-            
-            if (!depositResult.success) {
-              throw new Error(depositResult.error || 'Deposit failed');
-            }
-            
-            return await this.walletManager.getWallet(request.user.userId);
-          }
+        const walletRequest = new Request(
+          `http://wallet/wallet?playerId=${encodeURIComponent(request.user.userId)}`,
+          { method: 'GET' }
         );
-
-        // Broadcast update to subscribers
-        await this.broadcastWalletUpdate(request.user.userId, wallet);
-
-        result = {
-          success: true,
-          newBalance: wallet.balance,
-          transactionId: RandomUtils.generateUUID()
-        };
-      } else {
-        // Direct update without caching
-        result = await this.walletManager.deposit(
-          request.user.userId,
-          validation.data.amount,
-          validation.data.method
-        );
+        const walletResponse = await walletDO.fetch(walletRequest);
+        if (walletResponse.ok) {
+          const walletData = await walletResponse.json() as any;
+          const wallet = walletData.data?.wallet || walletData;
+          await this.cacheService.setCachedWallet(wallet);
+          await this.broadcastWalletUpdate(request.user.userId, wallet);
+        }
       }
 
       if (!result.success) {
@@ -342,7 +377,7 @@ export class WalletRoutes {
 
       await this.recordAuditLog(request, 'deposit', validation.data.amount, 'success');
 
-      const response = {
+      const responseData = {
         success: true,
         newBalance: result.newBalance,
         transactionId: result.transactionId
@@ -353,12 +388,12 @@ export class WalletRoutes {
         await this.idempotencyService.storeCompletedResponse(
           validation.data.idempotencyKey,
           request.user.userId,
-          response,
+          responseData,
           'completed'
         );
       }
 
-      return this.successResponse(response, request.rateLimitInfo);
+      return this.successResponse(responseData, request.rateLimitInfo);
     } catch (error) {
       logger.error('Deposit error', error as Error);
       
@@ -404,15 +439,27 @@ export class WalletRoutes {
         validation.data,
         request.rateLimitInfo,
         async () => {
-          const result = await this.walletManager.withdraw(
-            request.user.userId,
-            validation.data.amount,
-            validation.data.method
+          const walletDO = this.getWalletDO(request.env!);
+          const doRequest = new Request(
+            'http://wallet/wallet/withdraw',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                playerId: request.user.userId,
+                amount: validation.data.amount,
+                method: validation.data.method,
+                idempotencyKey: validation.data.idempotencyKey
+              })
+            }
           );
 
-          if (!result.success) {
+          const response = await walletDO.fetch(doRequest);
+          const result = await response.json() as any;
+
+          if (!response.ok || !result.success) {
             await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'failed');
-            return { success: false, error: result.error };
+            return { success: false, error: result.error || 'Withdraw failed' };
           }
 
           // Invalidate cache after withdrawal
@@ -420,9 +467,17 @@ export class WalletRoutes {
             await this.cacheService.invalidateWallet(request.user.userId);
           }
 
-          // Broadcast update
-          const wallet = await this.walletManager.getWallet(request.user.userId);
-          await this.broadcastWalletUpdate(request.user.userId, wallet);
+          // Get updated wallet and broadcast
+          const walletRequest = new Request(
+            `http://wallet/wallet?playerId=${encodeURIComponent(request.user.userId)}`,
+            { method: 'GET' }
+          );
+          const walletResponse = await walletDO.fetch(walletRequest);
+          if (walletResponse.ok) {
+            const walletData = await walletResponse.json() as any;
+            const wallet = walletData.data?.wallet || walletData;
+            await this.broadcastWalletUpdate(request.user.userId, wallet);
+          }
 
           await this.recordAuditLog(request, 'withdraw', validation.data.amount, 'success');
 
@@ -430,8 +485,8 @@ export class WalletRoutes {
             success: true,
             data: {
               success: true,
-              newBalance: result.newBalance,
-              transactionId: result.transactionId
+              newBalance: result.data?.newBalance || result.newBalance,
+              transactionId: result.data?.transactionId || result.transactionId
             }
           };
         }
@@ -469,15 +524,27 @@ export class WalletRoutes {
         validation.data,
         request.rateLimitInfo,
         async () => {
-          const result = await this.walletManager.transfer(
-            request.user.userId,
-            validation.data.to_table_id,
-            validation.data.amount
+          const walletDO = this.getWalletDO(request.env!);
+          const doRequest = new Request(
+            'http://wallet/wallet/transfer',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                playerId: request.user.userId,
+                toTableId: validation.data.to_table_id,
+                amount: validation.data.amount,
+                idempotencyKey: validation.data.idempotencyKey
+              })
+            }
           );
 
-          if (!result.success) {
+          const response = await walletDO.fetch(doRequest);
+          const result = await response.json() as any;
+
+          if (!response.ok || !result.success) {
             await this.recordAuditLog(request, 'transfer', validation.data.amount, 'failed');
-            return { success: false, error: result.error };
+            return { success: false, error: result.error || 'Transfer failed' };
           }
 
           // Invalidate cache for sender
@@ -491,9 +558,9 @@ export class WalletRoutes {
             success: true,
             data: {
               success: true,
-              newBalance: result.newBalance,
-              transferredAmount: result.transferredAmount,
-              transactionId: result.transactionId
+              newBalance: result.data?.newBalance || result.newBalance,
+              transferredAmount: result.data?.transferredAmount || validation.data.amount,
+              transactionId: result.data?.transactionId || result.transactionId
             }
           };
         }
@@ -537,11 +604,25 @@ export class WalletRoutes {
         validation.data,
         request.rateLimitInfo,
         async () => {
-          const result = await this.walletManager.processBuyIn(buyInRequest);
-          
-          if (!result.success) {
+          const walletDO = this.getWalletDO(request.env!);
+          const doRequest = new Request(
+            'http://wallet/wallet/buy-in',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...buyInRequest,
+                idempotencyKey: validation.data.idempotencyKey
+              })
+            }
+          );
+
+          const response = await walletDO.fetch(doRequest);
+          const result = await response.json() as any;
+
+          if (!response.ok || !result.success) {
             await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'failed');
-            return { success: false, error: result.error };
+            return { success: false, error: result.error || 'Buy-in failed' };
           }
 
           // Invalidate cache after buy-in
@@ -550,8 +631,8 @@ export class WalletRoutes {
           }
 
           await this.recordAuditLog(request, 'buyin', buyInRequest.amount, 'success');
-          
-          return { success: true, data: result };
+
+          return { success: true, data: result.data || result };
         }
       );
     } catch (error) {
@@ -587,31 +668,61 @@ export class WalletRoutes {
         validation.data,
         request.rateLimitInfo,
         async () => {
-          await this.walletManager.processCashOut(
-            request.user.userId, 
-            validation.data.tableId, 
-            validation.data.chipAmount
+          const walletDO = this.getWalletDO(request.env!);
+          const doRequest = new Request(
+            'http://wallet/wallet/cash-out',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                playerId: request.user.userId,
+                tableId: validation.data.tableId,
+                chipAmount: validation.data.chipAmount,
+                idempotencyKey: validation.data.idempotencyKey
+              })
+            }
           );
-          const wallet = await this.walletManager.getWallet(request.user.userId);
-          
-          // Update cache
-          if (this.cacheService) {
-            await this.cacheService.setCachedWallet(wallet);
+
+          const response = await walletDO.fetch(doRequest);
+          const result = await response.json() as any;
+
+          if (!response.ok || !result.success) {
+            await this.recordAuditLog(request, 'cashout', validation.data.chipAmount, 'failed');
+            throw new Error(result.error || 'Cash-out failed');
           }
 
-          // Broadcast update
-          await this.broadcastWalletUpdate(request.user.userId, wallet);
+          // Get updated wallet for cache and broadcast
+          const walletRequest = new Request(
+            `http://wallet/wallet?playerId=${encodeURIComponent(request.user.userId)}`,
+            { method: 'GET' }
+          );
+          const walletResponse = await walletDO.fetch(walletRequest);
 
-          await this.recordAuditLog(request, 'cashout', validation.data.chipAmount, 'success');
-          
-          return {
-            success: true,
-            data: {
-              success: true,
-              newBalance: wallet.balance,
-              cashedOut: validation.data.chipAmount
+          if (walletResponse.ok) {
+            const walletData = await walletResponse.json() as any;
+            const wallet = walletData.data?.wallet || walletData;
+
+            // Update cache
+            if (this.cacheService) {
+              await this.cacheService.setCachedWallet(wallet);
             }
-          };
+
+            // Broadcast update
+            await this.broadcastWalletUpdate(request.user.userId, wallet);
+
+            await this.recordAuditLog(request, 'cashout', validation.data.chipAmount, 'success');
+
+            return {
+              success: true,
+              data: {
+                success: true,
+                newBalance: wallet.balance,
+                cashedOut: validation.data.chipAmount
+              }
+            };
+          } else {
+            throw new Error('Failed to get updated wallet after cash-out');
+          }
         }
       );
     } catch (error) {
@@ -656,25 +767,33 @@ export class WalletRoutes {
         }
       }
       
-      // Fetch from source
-      const result = await this.walletManager.getTransactionHistory(
-        request.user.userId,
-        limit,
-        cursor
+      // Fetch from source via DO
+      const walletDO = this.getWalletDO(request.env!);
+      const doRequest = new Request(
+        `http://wallet/wallet/transactions?playerId=${encodeURIComponent(request.user.userId)}&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        { method: 'GET' }
       );
-      
+      const response = await walletDO.fetch(doRequest);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to fetch transactions');
+      }
+
+      const result = await response.json() as any;
+
       // Cache the result
-      if (this.cacheService) {
+      if (this.cacheService && result.data?.transactions) {
         await this.cacheService.cacheTransactionHistory(
           request.user.userId,
-          result.transactions,
+          result.data.transactions,
           cursor
         );
       }
       
       return this.successResponse({
-        transactions: result.transactions,
-        next_cursor: result.nextCursor,
+        transactions: result.data?.transactions || result.transactions || [],
+        next_cursor: result.data?.nextCursor || result.nextCursor,
         cached: false
       }, request.rateLimitInfo);
     } catch (error) {
@@ -733,21 +852,38 @@ export class WalletRoutes {
       
       // Fetch uncached wallets
       if (uncachedIds.length > 0) {
+        const walletDO = this.getWalletDO(request.env!);
         const fetchPromises = uncachedIds.map(async (playerId) => {
-          const wallet = await this.walletManager.getWallet(playerId);
-          results[playerId] = {
-            balance: wallet.balance,
-            frozen: wallet.frozen
-          };
-          
-          // Cache for future
-          if (this.cacheService) {
-            await this.cacheService.setCachedWallet(wallet);
+          const doRequest = new Request(
+            `http://wallet/wallet?playerId=${encodeURIComponent(playerId)}`,
+            { method: 'GET' }
+          );
+          const response = await walletDO.fetch(doRequest);
+
+          if (response.ok) {
+            const doResponse = await response.json() as any;
+            const wallet = doResponse.data?.wallet || doResponse;
+            results[playerId] = {
+              balance: wallet.balance,
+              frozen: wallet.frozen
+            };
+
+            // Cache for future
+            if (this.cacheService) {
+              await this.cacheService.setCachedWallet(wallet);
+            }
+
+            return wallet;
+          } else {
+            // If fetching fails, set default values
+            results[playerId] = {
+              balance: 0,
+              frozen: 0
+            };
+            return null;
           }
-          
-          return wallet;
         });
-        
+
         await Promise.all(fetchPromises);
       }
       
@@ -904,14 +1040,26 @@ export class WalletRoutes {
    */
   private async handleGetStats(request: AuthenticatedRequest): Promise<Response> {
     try {
-      const stats = await this.walletManager.getWalletStats();
-      
-      const cacheStats = this.cacheService ? 
-        await this.cacheService.getCacheStats() : 
+      const walletDO = this.getWalletDO(request.env!);
+      const doRequest = new Request(
+        'http://wallet/wallet/stats',
+        { method: 'GET' }
+      );
+      const response = await walletDO.fetch(doRequest);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to fetch stats');
+      }
+
+      const stats = await response.json() as any;
+
+      const cacheStats = this.cacheService ?
+        await this.cacheService.getCacheStats() :
         { pendingUpdates: 0, cacheKeys: [] };
-      
+
       return this.successResponse({
-        ...stats,
+        ...(stats.data || stats),
         cache: cacheStats,
         activeSubscriptions: this.subscriptions.size
       });
@@ -944,9 +1092,21 @@ export class WalletRoutes {
         return this.errorResponse(error instanceof Error ? error.message : 'Invalid player ID format', 400);
       }
 
+      const walletDO = this.getWalletDO(request.env!);
       await this.cacheService.warmCache(
         playerIds,
-        (playerId) => this.walletManager.getWallet(playerId)
+        async (playerId) => {
+          const doRequest = new Request(
+            `http://wallet/wallet?playerId=${encodeURIComponent(playerId)}`,
+            { method: 'GET' }
+          );
+          const response = await walletDO.fetch(doRequest);
+          if (response.ok) {
+            const doResponse = await response.json() as any;
+            return doResponse.data?.wallet || doResponse;
+          }
+          throw new Error('Failed to fetch wallet');
+        }
       );
 
       return this.successResponse({

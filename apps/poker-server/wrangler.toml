@@ -10,6 +10,8 @@ JWT_SECRET = "your-super-secret-jwt-key-for-development-only-change-in-productio
 ALLOWED_ORIGINS = "https://localhost:3000,tauri://localhost"
 MAX_AVATAR_SIZE = "5242880"  # 5MB in bytes
 CDN_BASE_URL = "https://avatars.primo-poker.com"
+CHAT_RATE_LIMIT_MESSAGES = "10"
+CHAT_RATE_LIMIT_WINDOW = "60000"
 
 # D1 Database
 [[d1_databases]]

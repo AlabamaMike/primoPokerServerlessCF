@@ -32,7 +32,8 @@ if (result.success) {
 
 // Example 2: Using generated types in API contracts
 /*
-import { GeneratedDepositRequest, GeneratedWithdrawRequest } from '../generated';
+// Temporarily disabled while fixing type generation
+// import { GeneratedDepositRequest, GeneratedWithdrawRequest } from '../generated';
 
 // These types are automatically generated from DepositRequestSchema and WithdrawRequestSchema
 function handleDeposit(request: GeneratedDepositRequest) {

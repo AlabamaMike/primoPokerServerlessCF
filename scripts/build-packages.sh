@@ -6,9 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Building packages in dependency order..."
 
+# TODO: Re-enable type generation after fixing monorepo import paths
 # Generate types from Zod schemas first
-echo "Generating types from Zod schemas..."
-cd "$ROOT_DIR" && node scripts/generate-types-from-zod.ts
+# echo "Generating types from Zod schemas..."
+# cd "$ROOT_DIR" && node scripts/generate-types-from-zod.ts
 
 # Clean any stale dist directories
 echo "Cleaning stale dist directories..."

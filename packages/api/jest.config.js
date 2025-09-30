@@ -22,6 +22,7 @@ module.exports = {
     },
   },
   moduleNameMapper: {
+    '^@primo-poker/types$': '<rootDir>/../types/src',
     '^@primo-poker/shared$': '<rootDir>/../shared/src',
     '^@primo-poker/core$': '<rootDir>/../core/src',
     '^@primo-poker/security$': '<rootDir>/../security/src',

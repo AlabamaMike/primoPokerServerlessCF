@@ -44,53 +44,139 @@ class MockD1Database implements Partial<D1Database> {
   private async executeQuery(query: string, params: any[]): Promise<D1Result<any>> {
     // Simple mock implementation
     const upperQuery = query.toUpperCase().trim()
-    
+
     if (upperQuery.startsWith('INSERT INTO CHAT_MESSAGES')) {
-      const message = {
-        id: params[0],
-        player_id: params[1],
-        table_id: params[2],
-        tournament_id: params[3],
-        message: params[4],
-        message_type: params[5],
-        is_moderated: params[6],
-        moderation_reason: params[7],
-        created_at: params[8],
-        updated_at: params[9]
-      }
-      
       const messages = this.data.get('chat_messages') || []
-      messages.push(message)
+      let changesCount = 0
+
+      // Handle INSERT with VALUES (literal values in SQL, no placeholders)
+      if (upperQuery.includes('VALUES') && params.length === 0 && !query.includes('?')) {
+        const valuesMatch = query.match(/VALUES\s+(.+)/is)
+        if (valuesMatch) {
+          const valuesStr = valuesMatch[1]
+          // Parse each row (simple parser for values like ('id', 'player', 'table', null, 'msg', 'chat', false, null, 123, 123))
+          const rowMatches = valuesStr.matchAll(/\(([^)]+)\)/g)
+          for (const rowMatch of rowMatches) {
+            const values = rowMatch[1].split(',').map(v => {
+              v = v.trim()
+              if (v === 'null') return null
+              if (v === 'true') return true
+              if (v === 'false') return false
+              if (v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1)
+              return isNaN(Number(v)) ? v : Number(v)
+            })
+
+            const message = {
+              id: values[0],
+              player_id: values[1],
+              table_id: values[2],
+              tournament_id: values[3],
+              message: values[4],
+              message_type: values[5],
+              is_moderated: values[6],
+              moderation_reason: values[7],
+              created_at: values[8],
+              updated_at: values[9]
+            }
+            messages.push(message)
+            changesCount++
+          }
+        }
+      } else {
+        // Handle INSERT with bound parameters (?)
+        const message = {
+          id: params[0],
+          player_id: params[1],
+          table_id: params[2],
+          tournament_id: params[3],
+          message: params[4],
+          message_type: params[5],
+          is_moderated: params[6],
+          moderation_reason: params[7],
+          created_at: params[8],
+          updated_at: params[9]
+        }
+        messages.push(message)
+        changesCount = 1
+      }
+
       this.data.set('chat_messages', messages)
-      
+
       return {
         results: [],
         success: true,
-        meta: { changes: 1, last_row_id: 1, duration: 1 }
+        meta: { changes: changesCount, last_row_id: 1, duration: 1 }
       }
     }
     
     if (upperQuery.startsWith('SELECT') && upperQuery.includes('CHAT_MESSAGES')) {
       const messages = this.data.get('chat_messages') || []
       let filtered = [...messages]
-      
-      // Simple WHERE clause handling
+
+      // Handle COUNT(*) queries
+      if (upperQuery.includes('COUNT(*)') || upperQuery.includes('COUNT(DISTINCT')) {
+        // Simple WHERE clause handling for COUNT
+        if (upperQuery.includes('WHERE')) {
+          let paramIndex = 0
+          if (upperQuery.includes('TABLE_ID')) {
+            const tableId = params[paramIndex++]
+            filtered = filtered.filter(m => m.table_id === tableId)
+          }
+          if (upperQuery.includes('IS_MODERATED = TRUE')) {
+            filtered = filtered.filter(m => m.is_moderated === true)
+          }
+          if (upperQuery.includes('IS_MODERATED = FALSE')) {
+            filtered = filtered.filter(m => m.is_moderated === false)
+          }
+        }
+
+        let count
+        if (upperQuery.includes('COUNT(DISTINCT PLAYER_ID)')) {
+          const uniquePlayers = new Set(filtered.map(m => m.player_id))
+          count = uniquePlayers.size
+        } else {
+          count = filtered.length
+        }
+
+        return {
+          results: [{ count }],
+          success: true,
+          meta: { changes: 0, last_row_id: 0, duration: 1 }
+        }
+      }
+
+      // Simple WHERE clause handling for SELECT *
       if (upperQuery.includes('WHERE')) {
+        let paramIndex = 0
         if (upperQuery.includes('TABLE_ID')) {
-          const tableId = params.find((p, i) => query.includes(`table_id = ?`) && i === 0)
+          const tableId = params[paramIndex++]
           filtered = filtered.filter(m => m.table_id === tableId)
         }
         if (upperQuery.includes('PLAYER_ID')) {
-          const playerId = params.find((p, i) => query.includes(`player_id = ?`))
+          const playerId = params[paramIndex++]
           filtered = filtered.filter(m => m.player_id === playerId)
         }
+        if (upperQuery.includes('CREATED_AT >=')) {
+          const startTime = params[paramIndex++]
+          filtered = filtered.filter(m => m.created_at >= startTime)
+        }
+        if (upperQuery.includes('CREATED_AT <=')) {
+          const endTime = params[paramIndex++]
+          filtered = filtered.filter(m => m.created_at <= endTime)
+        }
+        if (upperQuery.includes('IS_MODERATED = FALSE')) {
+          filtered = filtered.filter(m => m.is_moderated === false)
+        }
+        if (upperQuery.includes('IS_MODERATED = TRUE')) {
+          filtered = filtered.filter(m => m.is_moderated === true)
+        }
       }
-      
+
       // Simple ORDER BY handling
       if (upperQuery.includes('ORDER BY CREATED_AT DESC')) {
         filtered.sort((a, b) => b.created_at - a.created_at)
       }
-      
+
       // Simple LIMIT handling
       if (upperQuery.includes('LIMIT')) {
         const limitMatch = upperQuery.match(/LIMIT (\d+)/)
@@ -99,7 +185,7 @@ class MockD1Database implements Partial<D1Database> {
           filtered = filtered.slice(0, limit)
         }
       }
-      
+
       return {
         results: filtered,
         success: true,

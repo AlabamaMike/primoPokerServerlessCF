@@ -114,7 +114,7 @@ export class ModerationActionsManager {
 
     // Count warnings
     const warningCount = actions.filter(a => a.type === 'WARNING').length
-    if (warningCount >= ModerationActionsManager.WARNING_THRESHOLD) {
+    if (warningCount >= this.config.warningThreshold) {
       return 'MUTE'
     }
 

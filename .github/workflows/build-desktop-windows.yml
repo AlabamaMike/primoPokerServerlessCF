@@ -41,7 +41,6 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -53,20 +52,25 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install root dependencies first
+          # Install from root to handle monorepo correctly
           cd ../..
-          npm install
-          
-          # Install desktop app dependencies
-          cd apps/poker-desktop
-          npm install
+          npm ci --legacy-peer-deps
 
       - name: Run tests
-        run: npm test
+        run: npm run test:ci
         continue-on-error: true # Don't fail build if tests fail for now
 
       - name: Build Tauri app
         run: npm run tauri build
+
+      - name: List build outputs
+        if: always()
+        run: |
+          echo "=== Checking build outputs ==="
+          ls -la src-tauri/target/release/bundle/nsis/ || echo "No NSIS bundle found"
+          ls -la src-tauri/target/release/bundle/msi/ || echo "No MSI bundle found"
+          ls -la src-tauri/target/release/*.exe || echo "No exe found in release"
+          echo "=== Build check complete ==="
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -88,7 +92,9 @@ jobs:
     needs: build-windows
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -106,70 +112,58 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find installer files
+        id: find_files
+        run: |
+          NSIS_FILE=$(find ./installers -name "*.exe" -type f | head -1)
+          echo "nsis_file=$NSIS_FILE" >> $GITHUB_OUTPUT
+          echo "Found NSIS installer: $NSIS_FILE"
+
+          if [ -f "$NSIS_FILE" ]; then
+            NSIS_NAME="Primo-Poker_${{ steps.version.outputs.version }}_x64-setup.exe"
+            echo "nsis_name=$NSIS_NAME" >> $GITHUB_OUTPUT
+            echo "Will upload as: $NSIS_NAME"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: desktop-v${{ steps.version.outputs.version }}
-          release_name: Primo Poker Desktop v${{ steps.version.outputs.version }}
+          name: Primo Poker Desktop v${{ steps.version.outputs.version }}
           body: |
-            ## Primo Poker Desktop v${{ steps.version.outputs.version }}
-            
-            ### What's New
-            - Beautiful new lobby design with purple/gold theme
-            - Quick Seat feature for instant table finding
-            - Advanced waitlist management
-            - Real-time updates via WebSocket
-            - Automatic update system
-            
-            ### Downloads
-            - **Windows Installer (NSIS)**: Recommended for most users
-            - **Windows MSI**: For enterprise deployments
-            
-            ### System Requirements
-            - Windows 10/11 (64-bit)
-            - 4GB RAM minimum
-            - 200MB disk space
-            
+            ## Primo Poker Desktop v${{ steps.version.outputs.version }} - Early Access
+
+            This is the first public release of the Primo Poker desktop client for Windows.
+
             ### Installation
-            1. Download the installer below
-            2. Run the installer and follow the prompts
-            3. Launch Primo Poker from your Start Menu or Desktop
-            
-            The application will automatically check for updates on startup.
+            1. Download `Primo-Poker_${{ steps.version.outputs.version }}_x64-setup.exe` below
+            2. Run the installer
+            3. Windows SmartScreen may warn about unsigned application - click "More info" → "Run anyway"
+            4. Launch "Primo Poker" from Start Menu
+
+            ### Test Credentials
+            For immediate testing:
+            - Username: `e2e_test_1754187899779`
+            - Password: `TestPass123!_1754187899779`
+
+            ### Known Issues
+            - **Player Limit**: Games with 6+ players may experience button rotation issues. Please limit games to 2-5 players.
+            - **Message Parsing**: Occasional WebSocket parsing errors may occur. Refresh the table if game state appears incorrect.
+            - **Windows Only**: macOS and Linux builds coming in future releases.
+            - **Unsigned Build**: Windows will show SmartScreen warnings. This is expected and safe to bypass.
+
+            ### Documentation
+            - [Installation Guide](https://github.com/AlabamaMike/primoPokerServerlessCF/blob/main/apps/poker-desktop/INSTALLATION.md)
+            - [Quick Start Guide](https://github.com/AlabamaMike/primoPokerServerlessCF/blob/main/apps/poker-desktop/QUICK_START.md)
+            - [Changelog](https://github.com/AlabamaMike/primoPokerServerlessCF/blob/main/apps/poker-desktop/CHANGELOG.md)
+
+            ### Backend
+            - Production API: https://primo-poker-server.alabamamike.workers.dev
+            - Backend Status: https://primo-poker-server.alabamamike.workers.dev/api/health
+
+            Please report issues at: https://github.com/AlabamaMike/primoPokerServerlessCF/issues
           draft: true
           prerelease: false
-
-      - name: Upload NSIS installer to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./installers/Primo Poker_${{ steps.version.outputs.version }}_x64-setup.exe
-          asset_name: PrimoPoker-Setup-${{ steps.version.outputs.version }}-Windows-x64.exe
-          asset_content_type: application/octet-stream
-
-      - name: Generate update manifest
-        run: |
-          cat > latest-windows.json << EOF
-          {
-            "version": "${{ steps.version.outputs.version }}",
-            "notes": "See release notes at https://github.com/${{ github.repository }}/releases/tag/desktop-v${{ steps.version.outputs.version }}",
-            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "platforms": {
-              "windows-x86_64": {
-                "signature": "",
-                "url": "https://github.com/${{ github.repository }}/releases/download/desktop-v${{ steps.version.outputs.version }}/PrimoPoker-Setup-${{ steps.version.outputs.version }}-Windows-x64.exe"
-              }
-            }
-          }
-          EOF
-
-      - name: Upload update manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: update-manifest-windows
-          path: latest-windows.json
+          files: |
+            ${{ steps.find_files.outputs.nsis_file }}
+          fail_on_unmatched_files: false

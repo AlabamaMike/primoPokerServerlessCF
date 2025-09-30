@@ -1031,20 +1031,20 @@ private findNextDealerIndex(players: GameTablePlayer[]): number {
 - [x] Version consistency verified across 3 files
 
 ### Phase 2: Build and Publish ✅
-- [ ] Changes committed and pushed to main branch
-- [ ] GitHub Actions workflow completes successfully
-- [ ] Draft release created at `/releases`
-- [ ] Release description added with known issues
-- [ ] Release published publicly
-- [ ] Download link accessible without authentication
-- [ ] Fresh download and install test passes
+- [x] Changes committed and pushed to main branch
+- [ ] GitHub Actions workflow completes successfully (triggered - waiting for completion)
+- [ ] Draft release created at `/releases` (waiting for workflow)
+- [ ] Release description added with known issues (manual step after workflow)
+- [ ] Release published publicly (manual step after workflow)
+- [ ] Download link accessible without authentication (manual step after publish)
+- [ ] Fresh download and install test passes (manual step after publish)
 
 ### Phase 3: User Onboarding ✅
 - [x] INSTALLATION.md created with troubleshooting section
 - [x] QUICK_START.md created with 5-minute tutorial
 - [x] README.md updated with documentation links
 - [x] RELEASE_TEMPLATE.md created for future releases
-- [ ] All documentation committed and pushed
+- [x] All documentation committed and pushed
 - [x] Test credentials documented prominently
 
 ### Phase 4: Post-Testing Improvements ⏸️ (Deferred)

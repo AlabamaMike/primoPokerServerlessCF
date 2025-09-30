@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+# Don't exit on error - allow packages to fail and continue
+# set -e
 
 # Get the root directory
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

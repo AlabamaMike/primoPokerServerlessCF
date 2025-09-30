@@ -38,13 +38,15 @@ function findTypeScriptFiles() {
     }
   }
   
-  // Filter out excluded patterns
-  const excludePatterns = SEARCH_PATTERNS.filter(p => p.startsWith('!')).map(p => p.slice(1));
+  // Filter out excluded patterns - check for node_modules, dist, generated, test files
   return files.filter(file => {
-    return !excludePatterns.some(pattern => {
-      const absolutePattern = path.join(ROOT_DIR, pattern);
-      return file.includes(absolutePattern.replace(/\*\*/g, ''));
-    });
+    const relativePath = path.relative(ROOT_DIR, file);
+    return !relativePath.includes('node_modules') &&
+           !relativePath.includes('/dist/') &&
+           !relativePath.includes('/generated/') &&
+           !file.endsWith('.test.ts') &&
+           !file.endsWith('.spec.ts') &&
+           !file.endsWith('.d.ts');
   });
 }
 

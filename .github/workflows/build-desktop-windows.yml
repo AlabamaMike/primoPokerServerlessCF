@@ -51,7 +51,6 @@ jobs:
           workspaces: './apps/poker-desktop/src-tauri -> target'
 
       - name: Install dependencies
-        working-directory: ${{ github.workspace }}
         run: npm install --legacy-peer-deps
 
       - name: Run tests

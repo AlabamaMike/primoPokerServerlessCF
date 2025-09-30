@@ -38,10 +38,10 @@ export const DateRangeValidationSchema = z.object({
 export interface ValidationResult<T> {
   success: boolean;
   data?: T;
-  errors?: ValidationError[];
+  errors?: ValidationErrorDetail[];
 }
 
-export interface ValidationError {
+export interface ValidationErrorDetail {
   field: string;
   message: string;
   code?: string;
@@ -60,7 +60,7 @@ export function validate<T>(
     return { success: true, data: result };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const errors: ValidationError[] = error.errors.map(err => ({
+      const errors: ValidationErrorDetail[] = error.errors.map(err => ({
         field: err.path.join('.'),
         message: err.message,
         code: err.code,

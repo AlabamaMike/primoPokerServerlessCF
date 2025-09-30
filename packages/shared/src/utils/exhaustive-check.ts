@@ -1,27 +1,5 @@
-/**
- * Utility for exhaustive type checking of discriminated unions
- * 
- * This function ensures that all cases of a discriminated union are handled.
- * TypeScript will give a compile-time error if any case is missed.
- * 
- * @example
- * ```typescript
- * function handleGamePhase(phase: GamePhase) {
- *   switch (phase) {
- *     case GamePhase.WAITING:
- *       return 'waiting';
- *     case GamePhase.PRE_FLOP:
- *       return 'pre-flop';
- *     // ... handle all other cases
- *     default:
- *       return assertNever(phase); // Compile error if any case is missed
- *   }
- * }
- * ```
- */
-export function assertNever(value: never, message?: string): never {
-  throw new Error(message ?? `Unexpected value: ${value}`);
-}
+// Import assertNever from types package to avoid duplication
+import { assertNever } from '@primo-poker/types';
 
 /**
  * Type guard for exhaustive checks that returns a boolean

@@ -24,7 +24,7 @@ export const PaginationParamsSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('asc'),
 });
 
-export const DateRangeSchema = z.object({
+export const DateRangeValidationSchema = z.object({
   startDate: z.date(),
   endDate: z.date(),
 }).refine(data => data.endDate >= data.startDate, {

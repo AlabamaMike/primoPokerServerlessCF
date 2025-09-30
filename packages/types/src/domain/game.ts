@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Card, Player } from './player';
+import { Card, Player, CardSchema } from './player';
 
 /**
  * Game types and enums
@@ -62,10 +62,7 @@ export enum HandRanking {
  * Zod schemas
  */
 
-export const CardSchema = z.object({
-  suit: z.enum(['hearts', 'diamonds', 'clubs', 'spades']),
-  rank: z.enum(['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']),
-});
+// CardSchema is imported from ./player and re-exported from index.ts
 
 export const BetSchema = z.object({
   playerId: z.string().uuid(),

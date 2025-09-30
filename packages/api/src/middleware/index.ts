@@ -3,6 +3,7 @@ export * from './cache';
 export * from './cache-config';
 export * from './cache-headers';
 export * from './idempotency';
+export * from './metrics-collector';
 export * from './performance-monitor';
 export * from './rate-limiter';
 export * from './request-coalescer';

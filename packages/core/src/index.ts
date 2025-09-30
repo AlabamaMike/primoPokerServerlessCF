@@ -63,3 +63,7 @@ export type { LogContext, LogEntry } from './utils/logger';
 // Error reporting
 export { ErrorReporter, errorReporter } from './utils/error-reporter';
 export type { ErrorReport, ErrorReporterOptions } from './utils/error-reporter';
+
+// Statistics collection
+export { StatisticsCollector } from './statistics-collector';
+export type { StatisticsCollectorConfig } from './statistics-collector';

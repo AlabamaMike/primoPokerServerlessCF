@@ -18,11 +18,13 @@ import {
   ErrorCode,
   createErrorHandler,
 } from '@primo-poker/shared';
+import { StatisticsCollector } from './statistics-collector';
 
 export interface GameTableServiceConfig {
   tableConfig: TableConfig;
   onStateChange?: (state: GameState, event: GameEventType) => void;
   onError?: (error: Error) => void;
+  statisticsCollector?: StatisticsCollector;
 }
 
 export interface GameEvent {
@@ -43,6 +45,7 @@ export class GameTableService {
   private stateChangeCallback?: (state: GameState, event: GameEventType) => void;
   private errorHandler: ReturnType<typeof createErrorHandler>;
   private nextHandTimer?: number;
+  private statisticsCollector?: StatisticsCollector;
 
   constructor(config: GameTableServiceConfig) {
     this.tableConfig = config.tableConfig;
@@ -51,12 +54,13 @@ export class GameTableService {
       bigBlind: config.tableConfig.bigBlind,
       maxPlayers: config.tableConfig.maxSeats,
     });
-    
+
     this.bettingEngine = new OptimizedBettingEngine();
     this.syncOptimizer = new GameStateSyncOptimizer();
     this.deckManager = new DeckManager();
     this.handEvaluator = new HandEvaluator();
     this.stateChangeCallback = config.onStateChange;
+    this.statisticsCollector = config.statisticsCollector;
     this.errorHandler = createErrorHandler({
       onError: config.onError,
     });
@@ -84,6 +88,16 @@ export class GameTableService {
         data: { seatNumber, buyIn },
       });
 
+      // Collect statistics for player joining
+      if (this.statisticsCollector) {
+        await this.statisticsCollector.onPlayerJoinTable(
+          playerId,
+          this.tableConfig.id || 'unknown',
+          buyIn,
+          buyIn // startingChips equals buyIn
+        );
+      }
+
       this.notifyStateChange(GameEventType.PLAYER_JOINED);
     } catch (error) {
       await this.errorHandler(error as Error);
@@ -100,6 +114,14 @@ export class GameTableService {
 
       if (this.game.getGameState().phase !== GamePhase.WAITING && !player.folded) {
         player.folded = true;
+      }
+
+      // Collect statistics for player leaving (before removing)
+      if (this.statisticsCollector) {
+        await this.statisticsCollector.onPlayerLeaveTable(
+          playerId,
+          player.chips // cashOutAmount equals current chips
+        );
       }
 
       this.game.removePlayer(playerId);
@@ -402,6 +424,12 @@ export class GameTableService {
       type: GameEventType.HAND_COMPLETED,
       data: { winners },
     });
+
+    // Collect hand statistics
+    if (this.statisticsCollector) {
+      const handId = `hand_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.statisticsCollector.onHandComplete(handId, state, winners);
+    }
 
     this.notifyStateChange(GameEventType.HAND_COMPLETED);
 

@@ -1,10 +1,10 @@
 import { Router, IRequest } from 'itty-router';
 import { z } from 'zod';
-import { 
+import {
   SendFriendRequestSchema
 } from '@primo-poker/shared';
 import { FriendRepository } from '@primo-poker/persistence';
-import { AuthMiddleware } from '../middleware/auth';
+import { authenticateUser } from '../middleware/auth';
 import { withErrorHandling } from '../middleware/error-handler';
 import { validateRequest } from '../middleware/validation';
 import { socialRateLimiter } from '../middleware/rate-limiter';
@@ -15,7 +15,7 @@ const router = Router({ base: '/api/friends' });
 // Send friend request
 router.post(
   '/request',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   socialRateLimiter.middleware(),
   validateRequest(SendFriendRequestSchema),
   withErrorHandling(async (request: IRequest, env: Env) => {
@@ -32,7 +32,7 @@ router.post(
 // Accept friend request
 router.post(
   '/:requestId/accept',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const requestId = parseInt(request.params.requestId);
@@ -51,7 +51,7 @@ router.post(
 // Reject friend request
 router.post(
   '/:requestId/reject',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const requestId = parseInt(request.params.requestId);
@@ -70,7 +70,7 @@ router.post(
 // Get friends list
 router.get(
   '/',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
 
@@ -84,7 +84,7 @@ router.get(
 // Get pending friend requests
 router.get(
   '/requests',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
 
@@ -98,7 +98,7 @@ router.get(
 // Remove friend
 router.delete(
   '/:friendId',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const friendId = request.params.friendId;

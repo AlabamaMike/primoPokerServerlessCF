@@ -1,11 +1,11 @@
 import { Router, IRequest } from 'itty-router';
-import { 
+import {
   CreatePlayerNoteSchema,
   PlayerNoteError,
   SOCIAL_CONSTANTS
 } from '@primo-poker/shared';
 import { PlayerNotesRepository } from '@primo-poker/persistence';
-import { AuthMiddleware } from '../middleware/auth';
+import { authenticateUser } from '../middleware/auth';
 import { withErrorHandling } from '../middleware/error-handler';
 import { validateRequest } from '../middleware/validation';
 import { socialRateLimiter } from '../middleware/rate-limiter';
@@ -16,7 +16,7 @@ const router = Router({ base: '/api/notes' });
 // Create or update a note
 router.post(
   '/',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   socialRateLimiter.middleware(),
   validateRequest(CreatePlayerNoteSchema),
   withErrorHandling(async (request: IRequest, env: Env) => {
@@ -33,7 +33,7 @@ router.post(
 // Search notes - must come before /:subjectId to avoid route conflicts
 router.get(
   '/search',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const url = new URL(request.url);
@@ -58,7 +58,7 @@ router.get(
 // Get a specific note about a player
 router.get(
   '/:subjectId',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const subjectId = request.params.subjectId;
@@ -77,7 +77,7 @@ router.get(
 // Get all notes by the current user
 router.get(
   '/',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const url = new URL(request.url);
@@ -94,7 +94,7 @@ router.get(
 // Delete a note
 router.delete(
   '/:subjectId',
-  AuthMiddleware.requireAuth,
+  authenticateUser,
   withErrorHandling(async (request: IRequest, env: Env) => {
     const userId = request.user!.id;
     const subjectId = request.params.subjectId;

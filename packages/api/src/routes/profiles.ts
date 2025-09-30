@@ -299,6 +299,7 @@ profileRoutes.post('/api/profiles/me/avatar', authenticateRequest, withErrorHand
     );
   }
 
+  try {
     // Forward to profile DO
     const profileDO = request.env.PROFILE_DO.idFromName('profiles');
     const profileObj = request.env.PROFILE_DO.get(profileDO);

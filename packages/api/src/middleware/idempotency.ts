@@ -146,9 +146,15 @@ export function withIdempotency<T extends IRequest>(
       const cached = manager.getCachedResponse(idempotencyKey);
       if (cached) {
         logger.info('Returning cached idempotent response', { idempotencyKey });
-        cached.headers.set('X-Idempotent-Replay', 'true');
-        cached.headers.set('X-Dedupe-Strategy', 'cache');
-        return cached;
+        // Response headers are immutable, so we need to reconstruct the response
+        const headers = new Headers(cached.headers);
+        headers.set('X-Idempotent-Replay', 'true');
+        headers.set('X-Dedupe-Strategy', 'cache');
+        return new Response(cached.body, {
+          status: cached.status,
+          statusText: cached.statusText,
+          headers
+        });
       }
     }
     
@@ -156,8 +162,14 @@ export function withIdempotency<T extends IRequest>(
     if (manager.coalescer && (manager.dedupeStrategy === 'coalesce' || manager.dedupeStrategy === 'both')) {
       try {
         const response = await manager.coalescer.coalesce(idempotencyKey, () => handler(request), request);
-        response.headers.set('X-Dedupe-Strategy', 'coalesce');
-        return response;
+        // Response headers are immutable, so we need to reconstruct the response
+        const headers = new Headers(response.headers);
+        headers.set('X-Dedupe-Strategy', 'coalesce');
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers
+        });
       } catch (error) {
         logger.error('Coalescing failed, falling back to direct execution', { idempotencyKey, error });
       }

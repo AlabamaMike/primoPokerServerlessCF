@@ -114,16 +114,21 @@ export function sanitizeObject(obj: any, maxDepth: number = 10): any {
     return obj;
   }
 
-  if (typeof obj === 'string') {
-    return sanitizeString(obj);
-  }
-
   if (typeof obj === 'number') {
     return sanitizeNumber(obj);
   }
 
   if (typeof obj === 'boolean') {
     return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Try to parse as number first
+    const asNumber = sanitizeNumber(obj);
+    if (asNumber !== null) {
+      return asNumber;
+    }
+    return sanitizeString(obj);
   }
 
   if (Array.isArray(obj)) {
@@ -168,8 +173,10 @@ export function createSanitizedValidator<T>(schema: z.ZodSchema<T>) {
       return { success: true, data: result };
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const messages = error.errors.map(e => e.message).join(', ');
-        return { success: false, error: messages };
+        // ZodError has 'issues' property (runtime) though TypeScript types say 'errors'
+        const issues = (error as any).issues || error.errors || [];
+        const messages = issues.map((e: any) => e.message).join(', ');
+        return { success: false, error: messages || 'Validation failed' };
       }
       if (error instanceof Error) {
         return { success: false, error: error.message };

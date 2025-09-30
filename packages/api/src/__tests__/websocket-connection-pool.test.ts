@@ -2,6 +2,7 @@ import { describe, expect, it, jest, beforeEach, afterEach } from '@jest/globals
 import { ConnectionPoolManager, PoolConfig } from '../websocket-connection-pool';
 import { createWebSocketMessage } from '@primo-poker/shared';
 import { MockWebSocket } from './websocket-test-utils';
+import { BatchingWebSocketManager } from '../websocket-batched';
 
 // Mock authentication
 jest.mock('@primo-poker/security', () => ({
@@ -15,6 +16,11 @@ jest.mock('@primo-poker/security', () => ({
     }),
   })),
 }));
+
+// Mock parent class handleConnection to avoid timeout
+jest.spyOn(BatchingWebSocketManager.prototype, 'handleConnection').mockImplementation(async () => {
+  // No-op for tests
+});
 
 describe('WebSocket Connection Pool', () => {
   let poolManager: ConnectionPoolManager;

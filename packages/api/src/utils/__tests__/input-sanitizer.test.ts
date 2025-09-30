@@ -222,7 +222,7 @@ describe('Input Sanitizer', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toContain('Number must be greater than 0');
+        expect(result.error).toContain('expected number to be >0');
       }
     });
   });

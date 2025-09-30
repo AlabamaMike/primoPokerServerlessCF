@@ -41,5 +41,6 @@ export {
   POKER_CONSTANTS,
 } from './utils';
 
-// Auto-generated types and utilities
-export * from './generated';
+// Note: Auto-generated types temporarily disabled due to import path issues
+// TODO: Fix generated/types.ts to use @primo-poker/* imports instead of relative paths
+// export * from './generated';

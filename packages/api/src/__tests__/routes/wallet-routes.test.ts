@@ -4,121 +4,148 @@ import { AuthUser } from '../../middleware/auth'
 
 describe('Wallet Routes - Admin Endpoints RBAC', () => {
   let walletRoutes: WalletRoutes
-  let mockRequest: any
   let mockEnv: any
 
   beforeEach(() => {
     walletRoutes = new WalletRoutes()
     mockEnv = {
       JWT_SECRET: 'test-secret',
-      KV: {
-        get: jest.fn(),
-        put: jest.fn(),
-        delete: jest.fn()
+      DB: {
+        prepare: jest.fn().mockReturnValue({
+          bind: jest.fn().mockReturnThis(),
+          first: jest.fn().mockResolvedValue(null),
+          all: jest.fn().mockResolvedValue({ results: [] }),
+          run: jest.fn().mockResolvedValue({ success: true })
+        })
+      },
+      WALLET_DO: {
+        idFromName: jest.fn().mockReturnValue('test-do-id'),
+        get: jest.fn().mockReturnValue({
+          fetch: jest.fn().mockResolvedValue(
+            new Response(JSON.stringify({ balance: 1000 }), { status: 200 })
+          )
+        })
       }
     }
   })
 
   describe('GET /stats endpoint', () => {
     it('should deny access to non-admin users', async () => {
-      mockRequest = {
+      const mockRequest = new Request('http://localhost/api/wallet/stats', {
+        method: 'GET'
+      })
+
+      // Add user context with non-admin role
+      Object.assign(mockRequest, {
         user: {
           userId: 'user1',
           username: 'testuser',
           roles: ['user']
-        },
-        env: mockEnv,
-        url: 'http://localhost/api/wallet/stats'
-      }
+        } as AuthUser,
+        env: mockEnv
+      })
 
-      // The requireAdmin middleware should block the request before it reaches the handler
-      // In a real test environment with the full Hono app, this would return a 403
-      // For now, we're testing that the middleware is applied to the route
       const router = walletRoutes.getRouter()
-      const routes = router.routes
-      
-      // Find the /stats route
-      const statsRoute = routes.find((r: any) => r.path === '/stats' && r.method === 'GET')
-      expect(statsRoute).toBeDefined()
-      
-      // Verify middleware is applied (requireAdmin should be in the handlers chain)
-      expect(statsRoute.handlers.length).toBeGreaterThan(1)
+      const response = await router.handle(mockRequest)
+
+      // Should return 403 Forbidden for non-admin
+      expect(response.status).toBe(403)
     })
 
     it('should allow access to admin users', async () => {
-      mockRequest = {
+      const mockRequest = new Request('http://localhost/api/wallet/stats', {
+        method: 'GET'
+      })
+
+      // Add user context with admin role
+      Object.assign(mockRequest, {
         user: {
           userId: 'admin1',
           username: 'adminuser',
           roles: ['admin']
-        },
-        env: mockEnv,
-        url: 'http://localhost/api/wallet/stats'
-      }
+        } as AuthUser,
+        env: mockEnv
+      })
 
-      // In a full integration test, this would call the endpoint and verify success
       const router = walletRoutes.getRouter()
-      const routes = router.routes
-      const statsRoute = routes.find((r: any) => r.path === '/stats' && r.method === 'GET')
-      expect(statsRoute).toBeDefined()
+      const response = await router.handle(mockRequest)
+
+      // Should return success for admin (even if stats are empty)
+      expect(response.status).toBeLessThan(400)
     })
   })
 
   describe('POST /warm-cache endpoint', () => {
     it('should deny access to non-admin users', async () => {
-      mockRequest = {
+      const mockRequest = new Request('http://localhost/api/wallet/warm-cache', {
+        method: 'POST',
+        body: JSON.stringify({ playerIds: ['player1', 'player2'] }),
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      // Add user context with non-admin role
+      Object.assign(mockRequest, {
         user: {
           userId: 'user1',
           username: 'testuser',
           roles: ['user']
-        },
-        env: mockEnv,
-        url: 'http://localhost/api/wallet/warm-cache',
-        json: async () => ({ playerIds: ['player1', 'player2'] })
-      }
+        } as AuthUser,
+        env: mockEnv
+      })
 
       const router = walletRoutes.getRouter()
-      const routes = router.routes
-      
-      // Find the /warm-cache route
-      const warmCacheRoute = routes.find((r: any) => r.path === '/warm-cache' && r.method === 'POST')
-      expect(warmCacheRoute).toBeDefined()
-      
-      // Verify middleware is applied
-      expect(warmCacheRoute.handlers.length).toBeGreaterThan(1)
+      const response = await router.handle(mockRequest)
+
+      // Should return 403 Forbidden for non-admin
+      expect(response.status).toBe(403)
     })
 
     it('should allow access to superadmin users', async () => {
-      mockRequest = {
+      const mockRequest = new Request('http://localhost/api/wallet/warm-cache', {
+        method: 'POST',
+        body: JSON.stringify({ playerIds: ['player1', 'player2'] }),
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      // Add user context with superadmin role
+      Object.assign(mockRequest, {
         user: {
           userId: 'admin1',
           username: 'superadmin',
           roles: ['superadmin']
-        },
-        env: mockEnv,
-        url: 'http://localhost/api/wallet/warm-cache',
-        json: async () => ({ playerIds: ['player1', 'player2'] })
-      }
+        } as AuthUser,
+        env: mockEnv
+      })
 
       const router = walletRoutes.getRouter()
-      const routes = router.routes
-      const warmCacheRoute = routes.find((r: any) => r.path === '/warm-cache' && r.method === 'POST')
-      expect(warmCacheRoute).toBeDefined()
+      const response = await router.handle(mockRequest)
+
+      // Should return success for superadmin
+      expect(response.status).toBeLessThan(400)
     })
   })
 
   describe('Non-admin endpoints', () => {
-    it('should not have admin middleware on regular endpoints', () => {
+    it('should allow regular users to access /balance endpoint', async () => {
+      const mockRequest = new Request('http://localhost/api/wallet/balance', {
+        method: 'GET'
+      })
+
+      // Add user context with regular user role
+      Object.assign(mockRequest, {
+        user: {
+          userId: 'user1',
+          username: 'testuser',
+          roles: ['user']
+        } as AuthUser,
+        env: mockEnv
+      })
+
       const router = walletRoutes.getRouter()
-      const routes = router.routes
-      
-      // Check that regular endpoints don't have admin middleware
-      const balanceRoute = routes.find((r: any) => r.path === '/balance' && r.method === 'GET')
-      expect(balanceRoute).toBeDefined()
-      
-      // Regular endpoints should have fewer handlers (no admin middleware)
-      const statsRoute = routes.find((r: any) => r.path === '/stats' && r.method === 'GET')
-      expect(statsRoute.handlers.length).toBeGreaterThan(balanceRoute.handlers.length)
+      const response = await router.handle(mockRequest)
+
+      // Should allow regular users to check their own balance
+      expect(response.status).toBeLessThan(400)
     })
   })
 })

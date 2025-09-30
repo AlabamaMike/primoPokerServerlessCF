@@ -31,8 +31,25 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        shell: pwsh
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_OUTPUT
+        id: pnpm-cache
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -45,9 +62,8 @@ jobs:
       - name: Install dependencies
         run: |
           cd ../..
-          npm ci
+          pnpm install --no-frozen-lockfile
           cd apps/poker-desktop
-          npm ci
 
       - name: Update version
         if: github.event.inputs.release_version != ''
@@ -68,7 +84,7 @@ jobs:
           $tauriConf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
 
       - name: Build Tauri app
-        run: npm run tauri build
+        run: pnpm run tauri build
 
       - name: Import Windows certificate
         if: github.event.inputs.sign_release == 'true'

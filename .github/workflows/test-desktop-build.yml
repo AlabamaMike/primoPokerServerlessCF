@@ -27,8 +27,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Get pnpm store directory (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_OUTPUT
+        id: pnpm-cache-win
+
+      - name: Get pnpm store directory (Unix)
+        if: matrix.platform != 'windows-latest'
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+        id: pnpm-cache-unix
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache-win.outputs.STORE_PATH || steps.pnpm-cache-unix.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -42,23 +67,22 @@ jobs:
       - name: Install dependencies
         run: |
           cd ../..
-          npm ci
+          pnpm install --no-frozen-lockfile
           cd apps/poker-desktop
-          npm ci
 
       - name: Lint code
-        run: npm run lint
+        run: pnpm run lint
         continue-on-error: true
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
         continue-on-error: true
 
       - name: Build frontend only
-        run: npm run build:vite
+        run: pnpm run build:vite
 
       - name: Build Tauri app
-        run: npm run tauri build
+        run: pnpm run tauri build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

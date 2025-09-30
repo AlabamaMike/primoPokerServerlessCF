@@ -24,19 +24,23 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 8
+
     - name: Install dependencies
-      run: npm ci
-    
+      run: pnpm install --no-frozen-lockfile
+
     - name: Run linter
-      run: npm run lint
-      
+      run: pnpm run lint
+
     - name: Run type check
-      run: npm run type-check
-    
+      run: pnpm run type-check
+
     - name: Run tests with coverage
-      run: npm run test:ci
+      run: pnpm run test:ci
       
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
@@ -50,47 +54,55 @@ jobs:
   security-tests:
     runs-on: ubuntu-latest
     needs: test
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20.x'
-        cache: 'npm'
-    
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 8
+
     - name: Install dependencies
-      run: npm ci
-    
+      run: pnpm install --no-frozen-lockfile
+
     - name: Run security package tests
-      run: npm test -w @primo-poker/security -- --coverage
-      
+      run: pnpm test -w @primo-poker/security -- --coverage
+
     - name: Check coverage thresholds
       run: |
         echo "Checking if security tests meet coverage thresholds..."
-        npm test -w @primo-poker/security -- --coverage --coverageReporters=text-summary
+        pnpm test -w @primo-poker/security -- --coverage --coverageReporters=text-summary
 
   persistence-tests:
     runs-on: ubuntu-latest
     needs: test
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20.x'
-        cache: 'npm'
-    
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 8
+
     - name: Install dependencies
-      run: npm ci
-    
+      run: pnpm install --no-frozen-lockfile
+
     - name: Run persistence package tests
-      run: npm test -w @primo-poker/persistence -- --coverage
-      
+      run: pnpm test -w @primo-poker/persistence -- --coverage
+
     - name: Check coverage thresholds
       run: |
         echo "Checking if persistence tests meet coverage thresholds..."
-        npm test -w @primo-poker/persistence -- --coverage --coverageReporters=text-summary
+        pnpm test -w @primo-poker/persistence -- --coverage --coverageReporters=text-summary

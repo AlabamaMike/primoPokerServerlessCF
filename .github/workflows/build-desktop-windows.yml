@@ -51,10 +51,8 @@ jobs:
           workspaces: './apps/poker-desktop/src-tauri -> target'
 
       - name: Install dependencies
-        run: |
-          # Install from root to handle monorepo correctly
-          cd ../..
-          npm ci --legacy-peer-deps
+        working-directory: .
+        run: npm ci --legacy-peer-deps
 
       - name: Run tests
         run: npm run test:ci

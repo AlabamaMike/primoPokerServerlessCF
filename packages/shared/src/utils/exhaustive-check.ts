@@ -1,5 +1,13 @@
 // Import assertNever from types package to avoid duplication
-import { assertNever } from '@primo-poker/types';
+import { assertNever as assertNeverBase } from '@primo-poker/types';
+
+// Local wrapper that supports custom error messages
+function assertNever(value: never, message?: string): never {
+  if (message) {
+    throw new Error(message);
+  }
+  return assertNeverBase(value);
+}
 
 /**
  * Type guard for exhaustive checks that returns a boolean

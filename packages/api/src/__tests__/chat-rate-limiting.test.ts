@@ -540,4 +540,267 @@ describe('Chat Rate Limiting', () => {
       expect(errors).toHaveLength(0)
     })
   })
+
+  describe('Enhanced Rate Limiting Metadata', () => {
+    it('should return detailed rate limit information', async () => {
+      const mockEnvWithMetadata = {
+        ...createMockEnv(),
+        CHAT_MODERATOR: {
+          idFromName: (name: string) => ({ toString: () => name }),
+          get: (id: any) => ({
+            fetch: async (request: Request) => {
+              const url = new URL(request.url)
+              const body = await request.json().catch(() => ({})) as any
+              const playerId = request.headers.get('X-Player-ID')
+              const rateLimitKey = `${playerId}:${body.channelId}`
+              
+              if (!mockRateLimits.has(rateLimitKey)) {
+                mockRateLimits.set(rateLimitKey, [])
+              }
+              
+              const timestamps = mockRateLimits.get(rateLimitKey)!
+              const now = Date.now()
+              const windowMs = 60000
+              const limit = 10
+              const recentTimestamps = timestamps.filter(t => now - t < windowMs)
+              
+              if (recentTimestamps.length >= limit) {
+                const oldestTimestamp = recentTimestamps[0]
+                const resetAt = oldestTimestamp + windowMs
+                const retryAfter = Math.ceil((resetAt - now) / 1000)
+                
+                return new Response(JSON.stringify({
+                  success: false,
+                  error: 'Rate limit exceeded',
+                  rateLimitInfo: {
+                    remaining: 0,
+                    limit: limit,
+                    resetAt: resetAt,
+                    retryAfter: retryAfter
+                  }
+                }), { status: 429, headers: { 'Content-Type': 'application/json' } })
+              }
+              
+              recentTimestamps.push(now)
+              mockRateLimits.set(rateLimitKey, recentTimestamps)
+              
+              return new Response(JSON.stringify({
+                success: true,
+                data: {
+                  messageId: `msg-${Date.now()}`,
+                  timestamp: now
+                }
+              }), { headers: { 'Content-Type': 'application/json' } })
+            }
+          })
+        }
+      }
+
+      const enhancedManager = new ChatEnhancedWebSocketManager(mockEnvWithMetadata as any)
+      
+      const token = await authManager.generateAccessToken({
+        userId: 'metadata-player',
+        username: 'MetadataPlayer',
+        email: 'metadata@example.com'
+      })
+
+      const { client, server } = createMockWebSocketPair()
+      await enhancedManager.handleConnection(server, new MockRequest(`ws://localhost?token=${token}&tableId=table-1`))
+
+      // Send messages up to limit
+      for (let i = 0; i < 10; i++) {
+        const chatMessage: ChatMessage = createWebSocketMessage('chat', {
+          playerId: 'metadata-player',
+          username: 'MetadataPlayer',
+          message: `Message ${i}`,
+          isSystem: false
+        }) as ChatMessage
+
+        await server.simulateMessage(JSON.stringify(chatMessage))
+      }
+
+      // Send one more to trigger rate limit with metadata
+      const overLimitMessage: ChatMessage = createWebSocketMessage('chat', {
+        playerId: 'metadata-player',
+        username: 'MetadataPlayer',
+        message: 'Over limit',
+        isSystem: false
+      }) as ChatMessage
+
+      await server.simulateMessage(JSON.stringify(overLimitMessage))
+
+      const messages = client.getMessages()
+      const errorMessage = messages.find(m => {
+        const parsed = JSON.parse(m)
+        return parsed.type === 'error' && parsed.payload.rateLimitInfo
+      })
+
+      expect(errorMessage).toBeDefined()
+      const parsed = JSON.parse(errorMessage!)
+      expect(parsed.payload.rateLimitInfo).toBeDefined()
+      expect(parsed.payload.rateLimitInfo.remaining).toBe(0)
+      expect(parsed.payload.rateLimitInfo.limit).toBe(10)
+      expect(parsed.payload.rateLimitInfo.resetAt).toBeGreaterThan(Date.now())
+      expect(parsed.payload.rateLimitInfo.retryAfter).toBeGreaterThan(0)
+    })
+
+    it('should allow moderators to bypass rate limits with role check', async () => {
+      const mockEnvWithRoles = {
+        ...createMockEnv(),
+        CHAT_MODERATOR: {
+          idFromName: (name: string) => ({ toString: () => name }),
+          get: (id: any) => ({
+            fetch: async (request: Request) => {
+              const body = await request.json().catch(() => ({})) as any
+              const roles = body.roles || []
+              
+              // Check for moderator or admin role
+              if (roles.includes('moderator') || roles.includes('admin')) {
+                return new Response(JSON.stringify({
+                  success: true,
+                  data: {
+                    messageId: `msg-${Date.now()}`,
+                    timestamp: Date.now()
+                  }
+                }), { headers: { 'Content-Type': 'application/json' } })
+              }
+              
+              // Regular rate limit logic
+              return createMockEnv().CHAT_MODERATOR.get(id).fetch(request)
+            }
+          })
+        }
+      }
+
+      const roleManager = new ChatEnhancedWebSocketManager(mockEnvWithRoles as any)
+      
+      const token = await authManager.generateAccessToken({
+        userId: 'mod-123',
+        username: 'Moderator',
+        email: 'mod@example.com'
+      })
+
+      const { client, server } = createMockWebSocketPair()
+      await roleManager.handleConnection(server, new MockRequest(`ws://localhost?token=${token}&tableId=table-1`))
+
+      // Moderator should be able to send unlimited messages
+      for (let i = 0; i < 20; i++) {
+        const chatMessage: ChatMessage = createWebSocketMessage('chat', {
+          playerId: 'mod-123',
+          username: 'Moderator',
+          message: `Moderator message ${i}`,
+          isSystem: false,
+          roles: ['moderator']
+        }) as ChatMessage
+
+        await server.simulateMessage(JSON.stringify(chatMessage))
+      }
+
+      const messages = client.getMessages()
+      const errors = messages.filter(m => {
+        const parsed = JSON.parse(m)
+        return parsed.type === 'error'
+      })
+
+      expect(errors).toHaveLength(0)
+    })
+  })
+
+  describe('Environment Variable Configuration', () => {
+    it('should respect custom rate limit configuration', async () => {
+      const mockEnvWithConfig = {
+        ...createMockEnv(),
+        CHAT_RATE_LIMIT_MESSAGES: '5',
+        CHAT_RATE_LIMIT_WINDOW: '30000', // 30 seconds
+        CHAT_MODERATOR: {
+          idFromName: (name: string) => ({ toString: () => name }),
+          get: (id: any) => ({
+            fetch: async (request: Request) => {
+              const url = new URL(request.url)
+              const body = await request.json().catch(() => ({})) as any
+              const playerId = request.headers.get('X-Player-ID')
+              const rateLimitKey = `${playerId}:${body.channelId}`
+              
+              if (!mockRateLimits.has(rateLimitKey)) {
+                mockRateLimits.set(rateLimitKey, [])
+              }
+              
+              const timestamps = mockRateLimits.get(rateLimitKey)!
+              const now = Date.now()
+              const windowMs = 30000 // Custom window
+              const limit = 5 // Custom limit
+              const recentTimestamps = timestamps.filter(t => now - t < windowMs)
+              
+              if (recentTimestamps.length >= limit) {
+                return new Response(JSON.stringify({
+                  success: false,
+                  error: 'Rate limit exceeded',
+                  rateLimitInfo: {
+                    remaining: 0,
+                    limit: limit,
+                    resetAt: recentTimestamps[0] + windowMs,
+                    retryAfter: Math.ceil((recentTimestamps[0] + windowMs - now) / 1000)
+                  }
+                }), { status: 429, headers: { 'Content-Type': 'application/json' } })
+              }
+              
+              recentTimestamps.push(now)
+              mockRateLimits.set(rateLimitKey, recentTimestamps)
+              
+              return new Response(JSON.stringify({
+                success: true,
+                data: {
+                  messageId: `msg-${Date.now()}`,
+                  timestamp: now
+                }
+              }), { headers: { 'Content-Type': 'application/json' } })
+            }
+          })
+        }
+      }
+
+      const configManager = new ChatEnhancedWebSocketManager(mockEnvWithConfig as any)
+      
+      const token = await authManager.generateAccessToken({
+        userId: 'config-player',
+        username: 'ConfigPlayer',
+        email: 'config@example.com'
+      })
+
+      const { client, server } = createMockWebSocketPair()
+      await configManager.handleConnection(server, new MockRequest(`ws://localhost?token=${token}&tableId=table-1`))
+
+      // Send exactly the custom limit
+      for (let i = 0; i < 5; i++) {
+        const chatMessage: ChatMessage = createWebSocketMessage('chat', {
+          playerId: 'config-player',
+          username: 'ConfigPlayer',
+          message: `Message ${i}`,
+          isSystem: false
+        }) as ChatMessage
+
+        await server.simulateMessage(JSON.stringify(chatMessage))
+      }
+
+      // 6th message should be rate limited
+      const overLimitMessage: ChatMessage = createWebSocketMessage('chat', {
+        playerId: 'config-player',
+        username: 'ConfigPlayer',
+        message: 'Over custom limit',
+        isSystem: false
+      }) as ChatMessage
+
+      await server.simulateMessage(JSON.stringify(overLimitMessage))
+
+      const messages = client.getMessages()
+      const errorMessage = messages.find(m => {
+        const parsed = JSON.parse(m)
+        return parsed.type === 'error' && parsed.payload.rateLimitInfo
+      })
+
+      expect(errorMessage).toBeDefined()
+      const parsed = JSON.parse(errorMessage!)
+      expect(parsed.payload.rateLimitInfo.limit).toBe(5)
+    })
+  })
 })

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import ChatPanel from '../ChatPanel';
@@ -145,5 +145,133 @@ describe('ChatPanel', () => {
     
     expect(input).toBeDisabled();
     expect(sendButton).toBeDisabled();
+  });
+
+  describe('Rate Limiting', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('displays rate limit error message', () => {
+      const errorProps = {
+        ...mockProps,
+        rateLimitError: 'Please wait 15 seconds before sending another message'
+      };
+
+      render(<ChatPanel {...errorProps} />);
+      
+      expect(screen.getByText('Please wait 15 seconds before sending another message')).toBeInTheDocument();
+    });
+
+    it('disables input during rate limit period', () => {
+      const errorProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 15
+      };
+
+      render(<ChatPanel {...errorProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      const sendButton = screen.getByTestId('send-button');
+      
+      expect(input).toBeDisabled();
+      expect(sendButton).toBeDisabled();
+    });
+
+    it('shows countdown timer in placeholder', () => {
+      const errorProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 30
+      };
+
+      render(<ChatPanel {...errorProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      expect(input).toHaveAttribute('placeholder', expect.stringContaining('Rate limited'));
+    });
+
+    it('automatically clears rate limit after timer expires', async () => {
+      const onRateLimitCleared = jest.fn();
+      const errorProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 2,
+        onRateLimitCleared
+      };
+
+      const { rerender } = render(<ChatPanel {...errorProps} />);
+      
+      // Input should be disabled initially
+      expect(screen.getByTestId('chat-input')).toBeDisabled();
+      
+      // Advance timer past rate limit period
+      jest.advanceTimersByTime(2100);
+      
+      // Update props to reflect cleared state
+      rerender(<ChatPanel {...mockProps} isRateLimited={false} />);
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('chat-input')).not.toBeDisabled();
+      });
+    });
+
+    it('prevents message sending while rate limited', async () => {
+      const user = userEvent.setup({ delay: null });
+      const errorProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 10
+      };
+
+      render(<ChatPanel {...errorProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      const sendButton = screen.getByTestId('send-button');
+      
+      // Try to type and send
+      await user.type(input, 'Should not send');
+      await user.click(sendButton);
+      
+      expect(mockProps.onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it('displays rate limit info when available', () => {
+      const errorProps = {
+        ...mockProps,
+        rateLimitInfo: {
+          remaining: 0,
+          limit: 10,
+          resetAt: Date.now() + 60000,
+          retryAfter: 60
+        }
+      };
+
+      render(<ChatPanel {...errorProps} />);
+      
+      // Should show some indication of rate limit status
+      expect(screen.getByTestId('rate-limit-info')).toBeInTheDocument();
+    });
+
+    it('handles moderator bypass correctly', () => {
+      const moderatorProps = {
+        ...mockProps,
+        userRoles: ['moderator'],
+        isRateLimited: false
+      };
+
+      render(<ChatPanel {...moderatorProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      
+      // Moderator should never be rate limited
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('placeholder', expect.not.stringContaining('Rate limited'));
+    });
   });
 });

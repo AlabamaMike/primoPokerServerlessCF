@@ -627,4 +627,266 @@ describe('ChatModeratorDurableObject', () => {
       expect(result.error).toBe('User not muted')
     })
   })
+
+  describe('Enhanced Rate Limiting', () => {
+    beforeEach(() => {
+      // Set custom rate limit environment variables for testing
+      mockEnv.CHAT_RATE_LIMIT_MESSAGES = '5'
+      mockEnv.CHAT_RATE_LIMIT_WINDOW = '30000' // 30 seconds
+      durableObject = new ChatModeratorDurableObject(mockState as any, mockEnv)
+    })
+
+    it('should return rate limit metadata in response', async () => {
+      // Send messages up to limit
+      for (let i = 0; i < 5; i++) {
+        await durableObject.fetch(new Request('http://localhost/chat/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'player-123',
+            username: 'TestPlayer',
+            message: `Message ${i}`
+          })
+        }))
+      }
+
+      // Send one more to trigger rate limit
+      const request = new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'player-123',
+          username: 'TestPlayer',
+          message: 'Over limit'
+        })
+      })
+
+      const response = await durableObject.fetch(request)
+      const result = await response.json() as any
+
+      expect(response.status).toBe(429)
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Rate limit exceeded')
+      expect(result.rateLimitInfo).toBeDefined()
+      expect(result.rateLimitInfo.remaining).toBe(0)
+      expect(result.rateLimitInfo.limit).toBe(5)
+      expect(result.rateLimitInfo.resetAt).toBeGreaterThan(Date.now())
+      expect(result.rateLimitInfo.retryAfter).toBeGreaterThan(0)
+      expect(result.rateLimitInfo.retryAfter).toBeLessThanOrEqual(30)
+    })
+
+    it('should bypass rate limit for moderators', async () => {
+      // Send more than rate limit allows as moderator
+      for (let i = 0; i < 10; i++) {
+        const request = new Request('http://localhost/chat/send', {
+          method: 'POST',
+          headers: {
+            'X-Roles': 'moderator'
+          },
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'mod-123',
+            username: 'Moderator',
+            message: `Moderator message ${i}`,
+            roles: ['moderator']
+          })
+        })
+
+        const response = await durableObject.fetch(request)
+        const result = await response.json() as any
+
+        expect(response.status).toBe(200)
+        expect(result.success).toBe(true)
+      }
+    })
+
+    it('should bypass rate limit for admins', async () => {
+      // Send more than rate limit allows as admin
+      for (let i = 0; i < 10; i++) {
+        const request = new Request('http://localhost/chat/send', {
+          method: 'POST',
+          headers: {
+            'X-Roles': 'admin'
+          },
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'admin-123',
+            username: 'Admin',
+            message: `Admin message ${i}`,
+            roles: ['admin']
+          })
+        })
+
+        const response = await durableObject.fetch(request)
+        const result = await response.json() as any
+
+        expect(response.status).toBe(200)
+        expect(result.success).toBe(true)
+      }
+    })
+
+    it('should respect configured rate limits from environment', async () => {
+      // Environment vars set to 5 messages per 30 seconds
+      // Send 4 messages - should be fine
+      for (let i = 0; i < 4; i++) {
+        const response = await durableObject.fetch(new Request('http://localhost/chat/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'player-456',
+            username: 'TestPlayer2',
+            message: `Message ${i}`
+          })
+        }))
+        expect(response.status).toBe(200)
+      }
+
+      // 5th message should be fine
+      const fifthResponse = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'player-456',
+          username: 'TestPlayer2',
+          message: 'Message 5'
+        })
+      }))
+      expect(fifthResponse.status).toBe(200)
+
+      // 6th message should be rate limited
+      const sixthResponse = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'player-456',
+          username: 'TestPlayer2',
+          message: 'Message 6'
+        })
+      }))
+      const result = await sixthResponse.json() as any
+      expect(sixthResponse.status).toBe(429)
+      expect(result.rateLimitInfo.limit).toBe(5)
+    })
+
+    it('should track rate limits per player', async () => {
+      // Player 1 sends to limit
+      for (let i = 0; i < 5; i++) {
+        await durableObject.fetch(new Request('http://localhost/chat/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'player-1',
+            username: 'Player1',
+            message: `P1 Message ${i}`
+          })
+        }))
+      }
+
+      // Player 1 is rate limited
+      const p1Response = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'player-1',
+          username: 'Player1',
+          message: 'P1 Over limit'
+        })
+      }))
+      expect(p1Response.status).toBe(429)
+
+      // But Player 2 can still send
+      const p2Response = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'player-2',
+          username: 'Player2',
+          message: 'P2 first message'
+        })
+      }))
+      expect(p2Response.status).toBe(200)
+    })
+
+    it('should calculate correct retry after time', async () => {
+      jest.useFakeTimers()
+      const startTime = Date.now()
+      jest.setSystemTime(startTime)
+
+      // Send messages to hit rate limit
+      for (let i = 0; i < 5; i++) {
+        await durableObject.fetch(new Request('http://localhost/chat/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'timer-player',
+            username: 'TimerPlayer',
+            message: `Message ${i}`
+          })
+        }))
+      }
+
+      // Try to send over limit
+      const response = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'timer-player',
+          username: 'TimerPlayer',
+          message: 'Over limit'
+        })
+      }))
+      const result = await response.json() as any
+
+      expect(result.rateLimitInfo.retryAfter).toBe(30) // Should match window (30 seconds)
+      expect(result.rateLimitInfo.resetAt).toBe(startTime + 30000)
+
+      jest.useRealTimers()
+    })
+
+    it('should allow messages after rate limit window expires', async () => {
+      jest.useFakeTimers()
+
+      // Fill rate limit
+      for (let i = 0; i < 5; i++) {
+        await durableObject.fetch(new Request('http://localhost/chat/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            channelId: 'channel-1',
+            playerId: 'window-player',
+            username: 'WindowPlayer',
+            message: `Message ${i}`
+          })
+        }))
+      }
+
+      // Should be rate limited
+      const limitedResponse = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'window-player',
+          username: 'WindowPlayer',
+          message: 'Over limit'
+        })
+      }))
+      expect(limitedResponse.status).toBe(429)
+
+      // Advance time past window
+      jest.advanceTimersByTime(31000) // 31 seconds
+
+      // Should be able to send again
+      const newResponse = await durableObject.fetch(new Request('http://localhost/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          channelId: 'channel-1',
+          playerId: 'window-player',
+          username: 'WindowPlayer',
+          message: 'After window'
+        })
+      }))
+      expect(newResponse.status).toBe(200)
+
+      jest.useRealTimers()
+    })
+  })
 })

@@ -189,4 +189,95 @@ describe('MessageInput', () => {
     // Should have selected a command
     expect(input.value).toMatch(/^\/\w+ $/);
   });
+
+  describe('Rate Limiting', () => {
+    it('disables input when rate limited', () => {
+      const rateLimitedProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 15
+      };
+
+      render(<MessageInput {...rateLimitedProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      const sendButton = screen.getByTestId('send-button');
+      
+      expect(input).toBeDisabled();
+      expect(sendButton).toBeDisabled();
+    });
+
+    it('shows rate limit message in placeholder', () => {
+      const rateLimitedProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 30
+      };
+
+      render(<MessageInput {...rateLimitedProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      expect(input).toHaveAttribute('placeholder', expect.stringContaining('Rate limited - try again in'));
+    });
+
+    it('disables emoji button when rate limited', () => {
+      const rateLimitedProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 10
+      };
+
+      render(<MessageInput {...rateLimitedProps} />);
+      
+      const emojiButton = screen.getByTestId('emoji-button');
+      expect(emojiButton).toBeDisabled();
+    });
+
+    it('shows correct placeholder when both disconnected and rate limited', () => {
+      const bothLimitedProps = {
+        ...mockProps,
+        isConnected: false,
+        isRateLimited: true,
+        rateLimitRetryAfter: 5
+      };
+
+      render(<MessageInput {...bothLimitedProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      // Rate limit takes priority over disconnected message
+      expect(input).toHaveAttribute('placeholder', expect.stringContaining('Rate limited'));
+    });
+
+    it('prevents message submission when rate limited', async () => {
+      const user = userEvent.setup();
+      const rateLimitedProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 20
+      };
+
+      render(<MessageInput {...rateLimitedProps} />);
+      
+      const input = screen.getByTestId('chat-input');
+      const sendButton = screen.getByTestId('send-button');
+      
+      // Try to type and send (input is disabled, but test the handler)
+      await user.click(sendButton);
+      
+      expect(mockProps.onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not show character count when rate limited', () => {
+      const rateLimitedProps = {
+        ...mockProps,
+        isRateLimited: true,
+        rateLimitRetryAfter: 15,
+        maxLength: 100
+      };
+
+      render(<MessageInput {...rateLimitedProps} />);
+      
+      expect(screen.queryByTestId('char-count')).not.toBeInTheDocument();
+    });
+  });
 });
